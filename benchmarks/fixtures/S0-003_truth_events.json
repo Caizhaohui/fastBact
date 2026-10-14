@@ -1,0 +1,11 @@
+{
+  "dataset": "S0-003",
+  "replicons": [
+    {
+      "name": "chr",
+      "length": 8000,
+      "circular": false
+    }
+  ],
+  "snp": 4000
+}

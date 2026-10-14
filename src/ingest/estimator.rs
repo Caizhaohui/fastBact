@@ -156,6 +156,8 @@ pub fn estimate_genome<P: AsRef<Path>>(
                     }
                 }
             }
+            (Some(Err(e)), _) => anyhow::bail!("Corrupted record in R1 FASTQ: {}", e),
+            (_, Some(Err(e))) => anyhow::bail!("Corrupted record in R2 FASTQ: {}", e),
             _ => break,
         }
     }

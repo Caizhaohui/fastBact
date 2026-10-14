@@ -1,0 +1,37 @@
+{
+  "fastBact": {
+    "path": "/hpcfs/fhome/caizhh/Desktop/03_Tool_Development/01_fastBact/target/release/fastBact",
+    "version": "0.1.0",
+    "status": "AVAILABLE"
+  },
+  "spades": {
+    "path": "/hpcfs/fhome/caizhh/.conda/envs/LineaBact/bin/spades.py",
+    "version": "4.2.0",
+    "status": "AVAILABLE"
+  },
+  "shovill": {
+    "path": "/hpcfs/fhome/caizhh/.conda/envs/LineaBact/bin/shovill",
+    "version": "1.1.0",
+    "status": "AVAILABLE"
+  },
+  "skesa": {
+    "path": "/hpcfs/fhome/caizhh/.conda/envs/LineaBact/bin/skesa",
+    "version": "2.5.1",
+    "status": "AVAILABLE"
+  },
+  "quast": {
+    "path": "/hpcfs/fhome/caizhh/.local/bin/quast.py",
+    "version": "5.2.0",
+    "status": "AVAILABLE"
+  },
+  "seqtk": {
+    "path": "/hpcfs/fhome/caizhh/.conda/envs/LineaBact/bin/seqtk",
+    "version": "1.5-r133",
+    "status": "AVAILABLE"
+  },
+  "python3": {
+    "path": "/hpcfs/fhome/caizhh/.conda/envs/LineaBact/bin/python3",
+    "version": "3.12.13",
+    "status": "AVAILABLE"
+  }
+}

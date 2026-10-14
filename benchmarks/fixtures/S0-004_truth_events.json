@@ -1,0 +1,10 @@
+{
+  "dataset": "S0-004",
+  "replicons": [
+    {
+      "name": "chr",
+      "length": 5120,
+      "circular": false
+    }
+  ]
+}

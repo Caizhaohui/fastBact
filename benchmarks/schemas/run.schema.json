@@ -1,0 +1,42 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "BenchmarkRunMetadata",
+  "type": "object",
+  "required": [
+    "campaign_id",
+    "dataset_id",
+    "track",
+    "tool",
+    "tool_version",
+    "threads",
+    "exit_code",
+    "status"
+  ],
+  "properties": {
+    "campaign_id": { "type": "string" },
+    "dataset_id": { "type": "string" },
+    "track": { "type": "string", "enum": ["E2E", "CORE", "NEG", "MICRO"] },
+    "tool": { "type": "string" },
+    "tool_version": { "type": "string" },
+    "git_commit": { "type": "string" },
+    "git_dirty": { "type": "boolean" },
+    "threads": { "type": "integer", "minimum": 1 },
+    "memory_limit_gib": { "type": "number" },
+    "node_class": { "type": "string" },
+    "slurm_job_id": { "type": "string" },
+    "repetition": { "type": "integer" },
+    "seed": { "type": "integer" },
+    "command": { "type": "string" },
+    "exit_code": { "type": "integer" },
+    "status": { "type": "string", "enum": ["PASS", "FAIL", "TIMEOUT", "OOM", "REJECTED"] },
+    "wall_s": { "type": ["number", "null"] },
+    "cpu_user_s": { "type": ["number", "null"] },
+    "cpu_system_s": { "type": ["number", "null"] },
+    "peak_rss_kib": { "type": ["number", "null"] },
+    "scratch_peak_bytes": { "type": ["integer", "null"] },
+    "reference_confidence": { "type": "string" },
+    "assembly_sha256": { "type": ["string", "null"] },
+    "quast_metrics_file": { "type": ["string", "null"] },
+    "evaluation_version": { "type": ["string", "null"] }
+  }
+}

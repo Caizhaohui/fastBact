@@ -1,0 +1,29 @@
+{
+  "S0": [
+    { "id": "S0-001", "name": "linear_5kb", "len": 5000, "cov": 50, "circ": false, "repeats": [] },
+    { "id": "S0-002", "name": "circular_plasmid_4kb", "len": 4000, "cov": 80, "circ": true, "repeats": [] },
+    { "id": "S0-003", "name": "bubble_8kb", "len": 8000, "cov": 60, "circ": false, "bubble": true },
+    { "id": "S0-004", "name": "palindrome_6kb", "len": 6000, "cov": 60, "circ": false, "palindrome": true }
+  ],
+  "N": [
+    { "id": "N-001", "name": "corrupt_gzip", "type": "corrupt_gz" },
+    { "id": "N-002", "name": "unpaired_mates", "type": "unequal_reads" },
+    { "id": "N-003", "name": "all_n_low_phred", "type": "all_n" }
+  ],
+  "S1": [
+    { "id": "S1-REP-001", "name": "multi_k_repeats_35_65_120", "len": 150000, "cov": 60, "circ": false },
+    { "id": "S1-REP-002", "name": "exspander_repeat_350", "len": 150000, "cov": 60, "circ": false },
+    { "id": "S1-REP-003", "name": "conservative_repeats_800_1500", "len": 150000, "cov": 60, "circ": false },
+    { "id": "S1-PLAS-001", "name": "three_plasmids", "chr_len": 200000, "cov": 60 },
+    { "id": "S1-PLAS-002", "name": "shared_is_element", "chr_len": 200000, "plas_len": 8000, "is_len": 1000 },
+    { "id": "S1-COV-001", "name": "low_depth_15x", "len": 200000, "cov": 15 },
+    { "id": "S1-COV-002", "name": "std_depth_60x", "len": 200000, "cov": 60 },
+    { "id": "S1-COV-003", "name": "high_depth_300x", "len": 200000, "cov": 300 },
+    { "id": "S1-GC-001", "name": "gc_low_30pct", "len": 200000, "cov": 60, "gc": 0.30 },
+    { "id": "S1-GC-002", "name": "gc_high_70pct", "len": 200000, "cov": 60, "gc": 0.70 },
+    { "id": "S1-EDIT-001", "name": "structural_variant_truth", "len": 200000, "cov": 60 }
+  ],
+  "S2": [
+    { "id": "S2-REAL-001", "name": "ecoli_scale_4.6mb", "chr_len": 4600000, "plas_len": 15000, "cov": 100 }
+  ]
+}

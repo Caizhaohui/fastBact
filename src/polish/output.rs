@@ -28,7 +28,7 @@ pub fn curate_contigs(
     min_len: usize,
     min_cov: f32,
 ) -> Vec<AssembledContig> {
-    let k = graph.k;
+    let _k = graph.k;
     let mut contigs = Vec::new();
 
     for id in 0..graph.nodes.len() as u32 {
@@ -40,16 +40,24 @@ pub fn curate_contigs(
         let mut seq = graph.get_unitig_seq(id);
 
         // 1. Terminal overlap trimming for circular contigs
-        let is_circular = node.is_circular;
-        if is_circular && seq.len() > k {
-            if seq[seq.len() - k..] == seq[..k] {
-                seq.truncate(seq.len() - k);
-            } else {
-                let ov = k - 1;
-                if seq.len() > ov && seq[seq.len() - ov..] == seq[..ov] {
-                    seq.truncate(seq.len() - ov);
+        let mut is_circular = node.is_circular;
+        let mut best_ov = 0;
+
+        if seq.len() >= 500 {
+            for ov in (25..=130.min(seq.len() / 2)).rev() {
+                let p = &seq[..ov];
+                let s = &seq[seq.len() - ov..];
+                let mismatches = p.iter().zip(s.iter()).filter(|(a, b)| !a.eq_ignore_ascii_case(b)).count();
+                if mismatches <= 2 && (mismatches as f32 / ov as f32) <= 0.10 {
+                    is_circular = true;
+                    best_ov = ov;
+                    break;
                 }
             }
+        }
+
+        if is_circular && best_ov > 0 {
+            seq.truncate(seq.len() - best_ov);
         }
 
         let len = seq.len();

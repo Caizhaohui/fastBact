@@ -1,0 +1,13 @@
+{
+  "dataset": "S0-002",
+  "replicons": [
+    {
+      "name": "plasmid",
+      "length": 4000,
+      "circular": true
+    }
+  ],
+  "plasmids": [
+    "plasmid"
+  ]
+}

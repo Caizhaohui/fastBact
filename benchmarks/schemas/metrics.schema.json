@@ -1,0 +1,33 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "BenchmarkAssemblyMetrics",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "extensive_misassemblies",
+    "local_misassemblies",
+    "genome_fraction_pct"
+  ],
+  "properties": {
+    "schema_version": { "type": "string" },
+    "extensive_misassemblies": { "type": ["integer", "null"] },
+    "local_misassemblies": { "type": ["integer", "null"] },
+    "genome_fraction_pct": { "type": ["number", "null"] },
+    "nga50": { "type": ["integer", "null"] },
+    "ng50": { "type": ["integer", "null"] },
+    "n50": { "type": ["integer", "null"] },
+    "largest_contig": { "type": ["integer", "null"] },
+    "total_length": { "type": ["integer", "null"] },
+    "contig_count_500bp": { "type": ["integer", "null"] },
+    "contig_count_200bp": { "type": ["integer", "null"] },
+    "duplication_ratio": { "type": ["number", "null"] },
+    "unaligned_length": { "type": ["integer", "null"] },
+    "mismatches_per_100kbp": { "type": ["number", "null"] },
+    "indels_per_100kbp": { "type": ["number", "null"] },
+    "junction_precision": { "type": ["number", "null"] },
+    "junction_recall": { "type": ["number", "null"] },
+    "plasmid_recovery_pct": { "type": ["number", "null"] },
+    "plasmid_circularity_correct": { "type": ["boolean", "null"] },
+    "plasmid_chimera_count": { "type": ["integer", "null"] }
+  }
+}

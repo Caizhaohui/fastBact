@@ -321,8 +321,19 @@ pub fn ingest_reads<P: AsRef<Path>>(
                     }
                 }
             }
-            _ => break,
+            (Some(Err(e)), _) => anyhow::bail!("Corrupted record in R1 FASTQ: {}", e),
+            (_, Some(Err(e))) => anyhow::bail!("Corrupted record in R2 FASTQ: {}", e),
+            (Some(Ok(_)), None) | (None, Some(Ok(_))) => anyhow::bail!("Mismatched paired-end FASTQ mate counts between R1 and R2"),
+            (None, None) => break,
         }
+    }
+
+    if r1_reader.next().is_some() || r2_reader.next().is_some() {
+        anyhow::bail!("Mismatched paired-end FASTQ mate counts between R1 and R2");
+    }
+
+    if bank.total_reads() == 0 {
+        anyhow::bail!("No valid reads survived trimming and quality filtering (check input FASTQ files)");
     }
 
     Ok(bank)
