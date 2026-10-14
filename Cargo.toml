@@ -1,0 +1,40 @@
+[package]
+name = "fastBact"
+version = "0.1.0"
+edition = "2021"
+description = "Ultra-fast Rust bacterial short-read genome assembler fusing Shovill and SPAdes"
+
+[[bin]]
+name = "fastBact"
+path = "src/main.rs"
+
+[[bin]]
+name = "generate_benchmark"
+path = "src/bin/generate_benchmark.rs"
+
+[lib]
+name = "fastbact"
+path = "src/lib.rs"
+
+[dependencies]
+clap = { version = "4.5", features = ["derive"] }
+needletail = { version = "0.5", default-features = false, features = ["flate2"] }
+flate2 = { version = "1.0", default-features = false, features = ["rust_backend"] }
+rayon = "1.10"
+crossbeam-channel = "0.5"
+hashbrown = { version = "0.14", features = ["rayon"] }
+rustc-hash = "2.0"
+smallvec = { version = "1.13", features = ["union", "const_generics"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+anyhow = "1.0"
+
+[dev-dependencies]
+rand = "0.8"
+tempfile = "3.10"
+
+[profile.release]
+opt-level = 3
+lto = "fat"
+codegen-units = 1
+panic = "abort"
