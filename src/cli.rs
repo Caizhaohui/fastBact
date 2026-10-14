@@ -42,4 +42,40 @@ pub struct Cli {
     /// Comma-separated list of k-mers (e.g. "31,55,79"), or "auto"
     #[arg(short = 'k', long = "kmers", default_value = "auto")]
     pub kmers: String,
+
+    /// Bypass adapter & sliding-window quality trimming
+    #[arg(long, hide = true)]
+    pub no_trim: bool,
+
+    /// Bypass FLASH-style PE overlap merging (keep all reads as unmerged PE)
+    #[arg(long, hide = true)]
+    pub no_merge: bool,
+
+    /// Bypass coverage subsampling (keep 100% of reads)
+    #[arg(long, hide = true)]
+    pub no_subsample: bool,
+
+    /// Bypass tip clipping in simplify_graph
+    #[arg(long, hide = true)]
+    pub no_tip_clip: bool,
+
+    /// Bypass bubble popping in simplify_graph
+    #[arg(long, hide = true)]
+    pub no_bubble_pop: bool,
+
+    /// Bypass local_multik upgrades (run only initial k1)
+    #[arg(long, hide = true)]
+    pub no_multik: bool,
+
+    /// Bypass exSPAnder PE repeat resolution
+    #[arg(long, hide = true)]
+    pub no_exspander: bool,
+
+    /// Bypass consensus pileup polishing
+    #[arg(long, hide = true)]
+    pub no_polish: bool,
+
+    /// Directory to dump intermediate stage FASTAs & telemetry JSON
+    #[arg(long, hide = true)]
+    pub dump_stages: Option<PathBuf>,
 }

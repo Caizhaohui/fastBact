@@ -69,8 +69,30 @@ pub fn edit_distance(s1: &[u8], s2: &[u8]) -> usize {
 /// Simplifies the cDBG graph using iterative passes of:
 /// 1. Tip clipping: dead-end paths shorter than 2*k with significantly higher alternative coverage.
 /// 2. Bubble popping: alternative paths between branching points with >= 90% sequence similarity.
+/// Statistics collected during graph simplification.
+#[derive(Default, Debug, Clone)]
+pub struct SimplifyStats {
+    pub deleted_tips_count: usize,
+    pub deleted_tips_bp: usize,
+    pub popped_bubbles_count: usize,
+    pub popped_bubbles_bp: usize,
+}
+
+/// Simplifies the cDBG graph using iterative passes of:
+/// 1. Tip clipping: dead-end paths shorter than 2*k with significantly higher alternative coverage.
+/// 2. Bubble popping: alternative paths between branching points with >= 90% sequence similarity.
 /// 3. Re-compacting unbranched 1-in, 1-out paths.
 pub fn simplify_graph(graph: &mut CdbgGraph) {
+    simplify_graph_custom(graph, true, true);
+}
+
+/// Configurable graph simplification with optional tip clipping and bubble popping.
+pub fn simplify_graph_custom(
+    graph: &mut CdbgGraph,
+    enable_tip_clip: bool,
+    enable_bubble_pop: bool,
+) -> SimplifyStats {
+    let mut stats = SimplifyStats::default();
     let mut changed = true;
     let mut iterations = 0;
 
@@ -79,13 +101,23 @@ pub fn simplify_graph(graph: &mut CdbgGraph) {
         iterations += 1;
 
         // 1. Tip clipping
-        if clip_tips(graph) {
-            changed = true;
+        if enable_tip_clip {
+            let (tips, bp) = clip_tips_tracked(graph);
+            if tips > 0 {
+                stats.deleted_tips_count += tips;
+                stats.deleted_tips_bp += bp;
+                changed = true;
+            }
         }
 
         // 2. Bubble popping
-        if pop_bubbles(graph) {
-            changed = true;
+        if enable_bubble_pop {
+            let (bubbles, bp) = pop_bubbles_tracked(graph);
+            if bubbles > 0 {
+                stats.popped_bubbles_count += bubbles;
+                stats.popped_bubbles_bp += bp;
+                changed = true;
+            }
         }
 
         // 3. Re-compact unbranched chains
@@ -93,10 +125,16 @@ pub fn simplify_graph(graph: &mut CdbgGraph) {
             changed = true;
         }
     }
+    stats
 }
 
 /// Removes dead-end tips (length < 2*k, out-degree 0) if alternative paths exist with coverage >= 4*cov(tip).
 pub fn clip_tips(graph: &mut CdbgGraph) -> bool {
+    clip_tips_tracked(graph).0 > 0
+}
+
+/// Tracked version of clip_tips returning (removed_count, removed_bp).
+pub fn clip_tips_tracked(graph: &mut CdbgGraph) -> (usize, usize) {
     let k = graph.k;
     let n = graph.nodes.len();
     let mut tips_to_remove = Vec::new();
@@ -120,7 +158,7 @@ pub fn clip_tips(graph: &mut CdbgGraph) -> bool {
     }
 
     if tips_to_remove.is_empty() {
-        return false;
+        return (0, 0);
     }
 
     // Build incoming predecessor lookup map to avoid O(N^2) search
@@ -137,7 +175,8 @@ pub fn clip_tips(graph: &mut CdbgGraph) -> bool {
         }
     }
 
-    let mut removed = false;
+    let mut removed_count = 0usize;
+    let mut removed_bp = 0usize;
     for tip_id in tips_to_remove {
         let tip_cov = graph.nodes[tip_id as usize].kmer_cov;
 
@@ -153,6 +192,7 @@ pub fn clip_tips(graph: &mut CdbgGraph) -> bool {
         }
 
         if has_strong_alternative {
+            let seq_len = graph.nodes[tip_id as usize].seq_len as usize;
             graph.nodes[tip_id as usize].is_deleted = true;
             for &pred_id in &predecessors[tip_id as usize] {
                 let other = &mut graph.nodes[pred_id as usize];
@@ -161,11 +201,12 @@ pub fn clip_tips(graph: &mut CdbgGraph) -> bool {
                     other.edges_rev.retain(|e| e.target.id() != tip_id);
                 }
             }
-            removed = true;
+            removed_count += 1;
+            removed_bp += seq_len;
         }
     }
 
-    removed
+    (removed_count, removed_bp)
 }
 
 /// Identifies and pops bubbles (alternative paths with >= 90% identity).
@@ -173,6 +214,11 @@ pub fn clip_tips(graph: &mut CdbgGraph) -> bool {
 /// Bounded to maximum bubble path length <= 1,000 bp to prevent catastrophic O(M*N)
 /// DP on large genomic unitigs.
 pub fn pop_bubbles(graph: &mut CdbgGraph) -> bool {
+    pop_bubbles_tracked(graph).0 > 0
+}
+
+/// Tracked version of pop_bubbles returning (popped_count, popped_bp).
+pub fn pop_bubbles_tracked(graph: &mut CdbgGraph) -> (usize, usize) {
     let mut bubbles_to_pop = Vec::new();
     let n = graph.nodes.len() as u32;
     let max_bubble_len = (3 * graph.k).clamp(500, 1000);
@@ -248,15 +294,17 @@ pub fn pop_bubbles(graph: &mut CdbgGraph) -> bool {
     }
 
     if bubbles_to_pop.is_empty() {
-        return false;
+        return (0, 0);
     }
 
-    let mut popped = false;
+    let mut popped_count = 0usize;
+    let mut popped_bp = 0usize;
     for (keep_target, del_target) in bubbles_to_pop {
         if graph.nodes[del_target.id() as usize].is_deleted {
             continue;
         }
 
+        let seq_len = graph.nodes[del_target.id() as usize].seq_len as usize;
         graph.nodes[del_target.id() as usize].is_deleted = true;
         let added_cov = graph.nodes[del_target.id() as usize].kmer_cov;
         graph.nodes[keep_target.id() as usize].kmer_cov += added_cov;
@@ -265,10 +313,11 @@ pub fn pop_bubbles(graph: &mut CdbgGraph) -> bool {
             other.edges_fwd.retain(|e| e.target.id() != del_target.id());
             other.edges_rev.retain(|e| e.target.id() != del_target.id());
         }
-        popped = true;
+        popped_count += 1;
+        popped_bp += seq_len;
     }
 
-    popped
+    (popped_count, popped_bp)
 }
 
 /// Re-compacts unbranched 1-in, 1-out paths in the graph.

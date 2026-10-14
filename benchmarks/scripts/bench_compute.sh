@@ -82,13 +82,13 @@ else
       EXEC_CMD="/hpcfs/fhome/caizhh/Desktop/03_Tool_Development/01_fastBact/target/release/fastBact -1 ${R1} -2 ${R2} -o ${TOOL_DIR} -t ${THREADS}"
       ;;
     spades)
-      EXEC_CMD="/hpcfs/fhome/caizhh/.conda/envs/LineaBact/bin/spades.py --isolate -1 ${R1} -2 ${R2} -o ${TOOL_DIR} -t ${THREADS} -m 32"
+      EXEC_CMD="/hpcfs/fhome/caizhh/.conda/envs/LineaBact/bin/spades.py --isolate -1 ${R1} -2 ${R2} -o ${TOOL_DIR} -t ${THREADS} -m 12"
       ;;
     shovill)
       EXEC_CMD="/hpcfs/fhome/caizhh/.conda/envs/LineaBact/bin/shovill --R1 ${R1} --R2 ${R2} --outdir ${TOOL_DIR} --cpus ${THREADS} --ram 12 --force"
       ;;
     skesa)
-      EXEC_CMD="bash -c '/hpcfs/fhome/caizhh/.conda/envs/LineaBact/bin/skesa --reads ${R1},${R2} --cores ${THREADS} --memory 32 > ${TOOL_DIR}/contigs.fa'"
+      EXEC_CMD="bash -c '/hpcfs/fhome/caizhh/.conda/envs/LineaBact/bin/skesa --reads ${R1},${R2} --cores ${THREADS} --memory 12 > ${TOOL_DIR}/contigs.fa'"
       ;;
     *)
       echo "Unknown tool: $TOOL"; exit 1 ;;

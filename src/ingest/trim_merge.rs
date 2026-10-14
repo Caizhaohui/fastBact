@@ -257,6 +257,18 @@ pub fn open_fastx<P: AsRef<Path>>(path: P) -> Result<Box<dyn needletail::FastxRe
     }
 }
 
+/// Ingest statistics collected during read preprocessing.
+#[derive(Default, Clone, Debug)]
+pub struct IngestStats {
+    pub input_read_pairs: usize,
+    pub retained_read_pairs: usize,
+    pub bases_before_trim: usize,
+    pub bases_after_trim: usize,
+    pub merged_pairs_count: usize,
+    pub merged_bases: usize,
+    pub unmerged_pairs_count: usize,
+}
+
 /// Streams paired-end FASTQ files, applies adapter & quality trimming,
 /// subsampling, and overlap merging, storing all retained reads directly in `ReadBank`.
 pub fn ingest_reads<P: AsRef<Path>>(
@@ -266,11 +278,25 @@ pub fn ingest_reads<P: AsRef<Path>>(
     min_len: usize,
     min_qual: u8,
 ) -> Result<ReadBank> {
+    ingest_reads_ext(r1_path, r2_path, subsample_factor, min_len, min_qual, true, true).map(|(bank, _)| bank)
+}
+
+/// Configurable read ingest with optional trimming, merging, and detailed statistics tracking.
+pub fn ingest_reads_ext<P: AsRef<Path>>(
+    r1_path: P,
+    r2_path: P,
+    subsample_factor: f64,
+    min_len: usize,
+    min_qual: u8,
+    enable_trim: bool,
+    enable_merge: bool,
+) -> Result<(ReadBank, IngestStats)> {
     let mut r1_reader = open_fastx(&r1_path)?;
     let mut r2_reader = open_fastx(&r2_path)?;
 
     let mut bank = ReadBank::with_capacity(500_000, 150);
     let mut pair_idx: u64 = 0;
+    let mut stats = IngestStats::default();
 
     let should_subsample = subsample_factor < 0.999;
     let keep_threshold = (subsample_factor * (u64::MAX as f64)) as u64;
@@ -282,6 +308,14 @@ pub fn ingest_reads<P: AsRef<Path>>(
         match (rec1_opt, rec2_opt) {
             (Some(Ok(rec1)), Some(Ok(rec2))) => {
                 pair_idx += 1;
+                stats.input_read_pairs += 1;
+
+                let s1 = rec1.seq();
+                let q1 = rec1.qual().unwrap_or(&[]);
+                let s2 = rec2.seq();
+                let q2 = rec2.qual().unwrap_or(&[]);
+
+                stats.bases_before_trim += s1.len() + s2.len();
 
                 if should_subsample {
                     let rand_val = splitmix64(pair_idx);
@@ -290,34 +324,54 @@ pub fn ingest_reads<P: AsRef<Path>>(
                     }
                 }
 
-                let s1 = rec1.seq();
-                let q1 = rec1.qual().unwrap_or(&[]);
-                let s2 = rec2.seq();
-                let q2 = rec2.qual().unwrap_or(&[]);
+                let (t1_seq, t1_q, t2_seq, t2_q) = if enable_trim {
+                    // 1. 3' Adapter Trimming
+                    let (s1_ad, q1_ad) = trim_adapter(&s1, q1);
+                    let (s2_ad, q2_ad) = trim_adapter(&s2, q2);
 
-                // 1. 3' Adapter Trimming
-                let (s1_ad, q1_ad) = trim_adapter(&s1, q1);
-                let (s2_ad, q2_ad) = trim_adapter(&s2, q2);
+                    // 2. Sliding window quality trimming
+                    let trimmed1 = trim_quality(s1_ad, q1_ad, min_qual, min_len);
+                    let trimmed2 = trim_quality(s2_ad, q2_ad, min_qual, min_len);
 
-                // 2. Sliding window quality trimming
-                let trimmed1 = trim_quality(s1_ad, q1_ad, min_qual, min_len);
-                let trimmed2 = trim_quality(s2_ad, q2_ad, min_qual, min_len);
+                    match (trimmed1, trimmed2) {
+                        (Some((a, b)), Some((c, d))) => (Some(a), Some(b), Some(c), Some(d)),
+                        _ => (None, None, None, None),
+                    }
+                } else {
+                    if s1.len() >= min_len && s2.len() >= min_len {
+                        (Some(&s1[..]), Some(q1), Some(&s2[..]), Some(q2))
+                    } else {
+                        (None, None, None, None)
+                    }
+                };
 
-                match (trimmed1, trimmed2) {
-                    (Some((t1_seq, t1_q)), Some((t2_seq, t2_q))) => {
-                        // 3. FLASH overlap merge attempt
-                        match merge_read_pair(t1_seq, t1_q, t2_seq, t2_q, 15, 0.10) {
-                            MergeResult::Merged { seq, .. } => {
-                                bank.merged_reads.push_seq(&seq);
+                match (t1_seq, t1_q, t2_seq, t2_q) {
+                    (Some(t1_s), Some(t1_q_val), Some(t2_s), Some(t2_q_val)) => {
+                        stats.retained_read_pairs += 1;
+                        stats.bases_after_trim += t1_s.len() + t2_s.len();
+
+                        if enable_merge {
+                            // 3. FLASH overlap merge attempt
+                            match merge_read_pair(t1_s, t1_q_val, t2_s, t2_q_val, 15, 0.10) {
+                                MergeResult::Merged { seq, .. } => {
+                                    stats.merged_pairs_count += 1;
+                                    stats.merged_bases += seq.len();
+                                    bank.merged_reads.push_seq(&seq);
+                                }
+                                MergeResult::Unmerged => {
+                                    stats.unmerged_pairs_count += 1;
+                                    bank.pe_forward.push_seq(t1_s);
+                                    bank.pe_reverse.push_seq(t2_s);
+                                }
                             }
-                            MergeResult::Unmerged => {
-                                bank.pe_forward.push_seq(t1_seq);
-                                bank.pe_reverse.push_seq(t2_seq);
-                            }
+                        } else {
+                            stats.unmerged_pairs_count += 1;
+                            bank.pe_forward.push_seq(t1_s);
+                            bank.pe_reverse.push_seq(t2_s);
                         }
                     }
                     _ => {
-                        // If either read drops below min_len after trimming, discard pair
+                        // Discard pair if below min_len
                     }
                 }
             }
@@ -336,7 +390,7 @@ pub fn ingest_reads<P: AsRef<Path>>(
         anyhow::bail!("No valid reads survived trimming and quality filtering (check input FASTQ files)");
     }
 
-    Ok(bank)
+    Ok((bank, stats))
 }
 
 #[cfg(test)]

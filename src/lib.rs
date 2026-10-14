@@ -3,6 +3,7 @@
 
 pub mod cli;
 pub mod common;
+pub mod diag;
 pub mod graph;
 pub mod ingest;
 pub mod polish;
