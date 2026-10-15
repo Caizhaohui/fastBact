@@ -1,0 +1,3 @@
+commit_sha	git_tag	parent_sha	commit_date	commit_author	scope_and_purpose	s2_real_001_contigs_sha256	invariance_status
+4259fe3ffe077f67946700e8092ccf46fbbb9bc6	v0.1.0-baseline	f328d07	2026-10-14	caizhh	Frozen baseline commit: FB-BENCH-001 automated benchmark suite	0cdcad9edfb90ab7325b9cc27d38806b6706b899788439e1a2dd869f1c32738e	BASELINE_FROZEN
+552ff547781dae9dd2a0468d6f0ae812eeb8053d	(none)	4259fe3	2026-10-14	caizhh	B1 root cause forensics and audit suite: hidden ablation flags and telemetry	0cdcad9edfb90ab7325b9cc27d38806b6706b899788439e1a2dd869f1c32738e	BIT_FOR_BIT_IDENTICAL
