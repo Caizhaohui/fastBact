@@ -51,9 +51,9 @@ Summary of empirical results from `benchmarks/B2_reports/B2_C1b3B_VAR1_AB.tsv`:
 ## 4. Formal Recording of Audit Errata
 
 As detailed in `benchmarks/B2_reports/B2_AUDIT_ERRATA.md`, three technical items from preliminary audit scripts were reviewed and recorded:
-1. **Deduplication in Folding Hash Tests:** In `S2-REAL-001`, the reported 38,937 folding value duplicates were caused by un-deduplicated sliding windows traversing biological repeats (identical 127-mers repeating across the 7 ribosomal operons). When testing unique distinct k-mers, true folding collisions are zero, confirming birthday paradox bounds.
-2. **Metric Scope for `final_contig_accuracy_pct`:** The percentage reported in `B2_CMS_GRAPH_FATE.tsv` measured intermediate graph unitig reference concordance, not the final polished contigs (`contigs.fa`), which achieve 0 misassemblies and 100.0% identity.
-3. **S2-REAL-001 Empirical Baseline Ground Truth:** Corrected the baseline N50 to `4,082,514 bp` (3 contigs, bounded by 5kb `rrn` ribosomal repeats), eliminating theoretical single-contig 4.65 Mb assumptions.
+1. **Deduplication in Folding Hash Tests & Verification Boundary:** In `S2-REAL-001`, the reported 38,937 folding value duplicates were caused by un-deduplicated sliding windows traversing biological repeats (identical 127-mers repeating across the 7 ribosomal operons). True distinct k-mer folding collision evaluation requires independent tests comparing distinct 256-bit canonical k-mers against 64-bit folded keys.
+2. **Metric Scope for `final_contig_accuracy_pct` & QUAST Identity:** The percentage reported in `B2_CMS_GRAPH_FATE.tsv` measured intermediate graph unitig reference concordance, not the final polished contigs (`contigs.fa`). Furthermore, 0 QUAST misassemblies does not equal 100% nucleotide identity (small indels, SNVs, or unaligned regions may exist).
+3. **S2-REAL-001 Official Measured Baseline:** Clarified that the official archived baseline measured on `S2-REAL-001` (v0.1.0-baseline / `dac6a57` / C1b-1) is **28 contigs, N50 = 285,687 bp, NGA50 = 285,687 bp, 1 misassembly**. Unverified figures (e.g. 4.08 Mb) must not be used as `baseline_measured`.
 
 ---
 
