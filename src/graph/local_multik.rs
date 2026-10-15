@@ -2,22 +2,59 @@
 
 use crate::common::bitseq::ReadBank;
 use crate::common::kmer::KmerInt;
-use crate::graph::build::build_cdbg_with_contigs;
+use crate::common::sketch::CountMinSketch;
+use crate::diag::inspect_graph;
+use crate::graph::build::build_cdbg_with_contigs_ext;
 use crate::graph::cdbg::{CdbgGraph, DirUnitigId, GraphEdge, UnitigNode};
 use crate::graph::simplify::simplify_graph;
 
+/// Detailed telemetry result for a local multi-k upgrade attempt.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct MultiKUpgradeResult {
+    pub executed: bool,
+    pub early_stop_reason: Option<&'static str>,
+    pub genome_size_source: &'static str,
+    pub genome_size_used: u64,
+    pub cms_width: usize,
+    pub cms_allocated_bytes: usize,
+    pub active_unitigs_before: usize,
+    pub active_edges_before: usize,
+    pub active_unitigs_after: usize,
+    pub active_edges_after: usize,
+}
+
 /// Upgrades an existing cDBG graph from k1 to k2 (where k2 > k1, e.g. 31 -> 79).
 ///
-/// Repeats of length < k2 (such as a 65 bp repeat at k=79) that branched at k1
-/// become unbranched at k2. Long linear regions and isolated circular plasmids
-/// are preserved.
+/// Uses documented fallback if no explicit genome size is passed.
 pub fn upgrade_multik<K2: KmerInt>(
     prev_graph: &mut CdbgGraph,
     bank: &ReadBank,
     k2: usize,
 ) {
+    upgrade_multik_ext::<K2>(prev_graph, bank, k2, None);
+}
+
+/// Upgrades an existing cDBG graph from k1 to k2 with explicit genome size propagation.
+pub fn upgrade_multik_ext<K2: KmerInt>(
+    prev_graph: &mut CdbgGraph,
+    bank: &ReadBank,
+    k2: usize,
+    genome_size: Option<u64>,
+) -> MultiKUpgradeResult {
+    let (u_before, e_before, _, _) = inspect_graph(prev_graph);
     if k2 <= prev_graph.k {
-        return;
+        return MultiKUpgradeResult {
+            executed: false,
+            early_stop_reason: Some("K2_LE_PREV_K"),
+            genome_size_source: "SKIPPED",
+            genome_size_used: 0,
+            cms_width: 0,
+            cms_allocated_bytes: 0,
+            active_unitigs_before: u_before,
+            active_edges_before: e_before,
+            active_unitigs_after: u_before,
+            active_edges_after: e_before,
+        };
     }
 
     // 1. Identify branching nodes in prev_graph
@@ -32,7 +69,18 @@ pub fn upgrade_multik<K2: KmerInt>(
     }
 
     if !has_branching {
-        return;
+        return MultiKUpgradeResult {
+            executed: false,
+            early_stop_reason: Some("NO_BRANCHING_REGIONS"),
+            genome_size_source: "SKIPPED",
+            genome_size_used: 0,
+            cms_width: 0,
+            cms_allocated_bytes: 0,
+            active_unitigs_before: u_before,
+            active_edges_before: e_before,
+            active_unitigs_after: u_before,
+            active_edges_after: e_before,
+        };
     }
 
     // Freeze long linear regions: collect all active NON-CIRCULAR unitig sequences from prev_graph
@@ -47,10 +95,18 @@ pub fn upgrade_multik<K2: KmerInt>(
     let active_bank = filter_active_reads(bank, prev_graph);
 
     // 3. Build cDBG at k2, incorporating prior contigs with active boundary reads
-    let mut new_graph = build_cdbg_with_contigs::<K2>(&active_bank, &prior_contigs, k2, Some(4));
+    let (est_g, source) = if let Some(g) = genome_size {
+        (g.max(50_000), "EXPLICIT_PASSED")
+    } else {
+        ((bank.total_bases() as u64 / 60).max(50_000), "FALLBACK_READ_BASES_DIV_60")
+    };
+    let cms_width = CountMinSketch::width_for_genome_size(est_g);
+    let cms_allocated_bytes = CountMinSketch::allocated_bytes_for_genome_size(est_g);
+
+    let mut new_graph = build_cdbg_with_contigs_ext::<K2>(&active_bank, &prior_contigs, k2, Some(4), Some(est_g));
     simplify_graph(&mut new_graph);
 
-    // 3. Preserve isolated circular plasmids from prev_graph if not present in new_graph
+    // 4. Preserve isolated circular plasmids from prev_graph if not present in new_graph
     for old_node in &prev_graph.nodes {
         if !old_node.is_deleted && old_node.is_circular {
             let old_seq = prev_graph.get_unitig_seq(old_node.id);
@@ -73,7 +129,126 @@ pub fn upgrade_multik<K2: KmerInt>(
     }
 
     simplify_graph(&mut new_graph);
+    let (u_after, e_after, _, _) = inspect_graph(&new_graph);
     *prev_graph = new_graph;
+
+    MultiKUpgradeResult {
+        executed: true,
+        early_stop_reason: None,
+        genome_size_source: source,
+        genome_size_used: est_g,
+        cms_width,
+        cms_allocated_bytes,
+        active_unitigs_before: u_before,
+        active_edges_before: e_before,
+        active_unitigs_after: u_after,
+        active_edges_after: e_after,
+    }
+}
+
+/// Upgrades an existing cDBG graph from k1 to k2 using the legacy Var 1 capacity sizing (prior contigs length sum).
+pub fn upgrade_multik_legacy<K2: KmerInt>(
+    prev_graph: &mut CdbgGraph,
+    bank: &ReadBank,
+    k2: usize,
+) -> MultiKUpgradeResult {
+    let (u_before, e_before, _, _) = inspect_graph(prev_graph);
+    if k2 <= prev_graph.k {
+        return MultiKUpgradeResult {
+            executed: false,
+            early_stop_reason: Some("K2_LE_PREV_K"),
+            genome_size_source: "SKIPPED",
+            genome_size_used: 0,
+            cms_width: 0,
+            cms_allocated_bytes: 0,
+            active_unitigs_before: u_before,
+            active_edges_before: e_before,
+            active_unitigs_after: u_before,
+            active_edges_after: e_before,
+        };
+    }
+
+    let mut has_branching = false;
+    for node in &prev_graph.nodes {
+        if !node.is_deleted && !node.is_circular {
+            if node.edges_fwd.len() > 1 || node.edges_rev.len() > 1 {
+                has_branching = true;
+                break;
+            }
+        }
+    }
+
+    if !has_branching {
+        return MultiKUpgradeResult {
+            executed: false,
+            early_stop_reason: Some("NO_BRANCHING_REGIONS"),
+            genome_size_source: "SKIPPED",
+            genome_size_used: 0,
+            cms_width: 0,
+            cms_allocated_bytes: 0,
+            active_unitigs_before: u_before,
+            active_edges_before: e_before,
+            active_unitigs_after: u_before,
+            active_edges_after: e_before,
+        };
+    }
+
+    let prior_contigs: Vec<Vec<u8>> = prev_graph
+        .nodes
+        .iter()
+        .filter(|n| !n.is_deleted && !n.is_circular)
+        .map(|n| prev_graph.get_unitig_seq(n.id))
+        .collect();
+
+    let active_bank = filter_active_reads(bank, prev_graph);
+
+    // Legacy formula from Var 1 / dac6a57: sum of prior contigs lengths
+    let legacy_est_g = if !prior_contigs.is_empty() {
+        prior_contigs.iter().map(|c| c.len() as u64).sum::<u64>().max(50_000)
+    } else {
+        (bank.total_bases() as u64 / 60).max(50_000)
+    };
+    let cms_width = CountMinSketch::width_for_genome_size(legacy_est_g);
+    let cms_allocated_bytes = CountMinSketch::allocated_bytes_for_genome_size(legacy_est_g);
+
+    let mut new_graph = build_cdbg_with_contigs_ext::<K2>(&active_bank, &prior_contigs, k2, Some(4), Some(legacy_est_g));
+    simplify_graph(&mut new_graph);
+
+    for old_node in &prev_graph.nodes {
+        if !old_node.is_deleted && old_node.is_circular {
+            let old_seq = prev_graph.get_unitig_seq(old_node.id);
+            let exists_in_new = new_graph.nodes.iter().any(|n| {
+                !n.is_deleted && n.is_circular && ((n.seq_len as i64 - old_seq.len() as i64).abs() <= (k2 as i64 + 10))
+            });
+
+            if !exists_in_new {
+                let seq_id = new_graph.arena.push_seq(&old_seq);
+                let node_id = new_graph.nodes.len() as u32;
+                let mut node = UnitigNode::new(node_id, seq_id, old_seq.len() as u32, old_node.kmer_cov);
+                node.is_circular = true;
+                let self_dir = DirUnitigId::new(node_id, false);
+                node.add_edge(false, GraphEdge::new(self_dir, (k2 - 1) as u8, 10));
+                new_graph.nodes.push(node);
+            }
+        }
+    }
+
+    simplify_graph(&mut new_graph);
+    let (u_after, e_after, _, _) = inspect_graph(&new_graph);
+    *prev_graph = new_graph;
+
+    MultiKUpgradeResult {
+        executed: true,
+        early_stop_reason: None,
+        genome_size_source: "LEGACY_PRIOR_CONTIGS_SUM",
+        genome_size_used: legacy_est_g,
+        cms_width,
+        cms_allocated_bytes,
+        active_unitigs_before: u_before,
+        active_edges_before: e_before,
+        active_unitigs_after: u_after,
+        active_edges_after: e_after,
+    }
 }
 
 /// Filters active reads for multi-k upgrades.

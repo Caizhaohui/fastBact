@@ -22,6 +22,12 @@ pub struct StageGraphTelemetry {
     pub popped_bubbles_count: usize,
     pub popped_bubbles_bp: usize,
     pub total_graph_bp: usize,
+    pub genome_size_source: String,
+    pub genome_size_used: u64,
+    pub cms_width: usize,
+    pub cms_allocated_bytes: usize,
+    pub upgrade_executed: bool,
+    pub early_stop_reason: String,
 }
 
 /// Ingest statistics.
@@ -294,7 +300,13 @@ pub fn write_stage_telemetry_json<P: AsRef<Path>>(
         writeln!(writer, "      \"deleted_tips_bp\": {},", st.deleted_tips_bp)?;
         writeln!(writer, "      \"popped_bubbles_count\": {},", st.popped_bubbles_count)?;
         writeln!(writer, "      \"popped_bubbles_bp\": {},", st.popped_bubbles_bp)?;
-        writeln!(writer, "      \"total_graph_bp\": {}", st.total_graph_bp)?;
+        writeln!(writer, "      \"total_graph_bp\": {},", st.total_graph_bp)?;
+        writeln!(writer, "      \"genome_size_source\": \"{}\",", st.genome_size_source)?;
+        writeln!(writer, "      \"genome_size_used\": {},", st.genome_size_used)?;
+        writeln!(writer, "      \"cms_width\": {},", st.cms_width)?;
+        writeln!(writer, "      \"cms_allocated_bytes\": {},", st.cms_allocated_bytes)?;
+        writeln!(writer, "      \"upgrade_executed\": {},", st.upgrade_executed)?;
+        writeln!(writer, "      \"early_stop_reason\": \"{}\"", st.early_stop_reason)?;
         writeln!(writer, "    }}{}", comma)?;
     }
     writeln!(writer, "  ]")?;

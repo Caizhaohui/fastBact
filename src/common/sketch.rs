@@ -161,11 +161,27 @@ impl CountMinSketch {
         Self::new(1 << 22) // 4M counters per row -> 8MB total
     }
 
+    /// Computes the CMS row width (in counters) for a given genome size in bp.
+    pub fn width_for_genome_size(est_genome_size: u64) -> usize {
+        let target = (est_genome_size * 16).next_power_of_two() as usize;
+        target.clamp(1 << 21, 1 << 27)
+    }
+
+    /// Computes the total CMS table size in bytes for a given genome size in bp.
+    pub fn allocated_bytes_for_genome_size(est_genome_size: u64) -> usize {
+        let width = Self::width_for_genome_size(est_genome_size);
+        (CMS_ROWS * width) / 2
+    }
+
+    /// Returns the total allocated table size in bytes for this sketch.
+    pub fn allocated_bytes(&self) -> usize {
+        (CMS_ROWS * self.width) / 2
+    }
+
     /// Dynamically sizes CountMinSketch according to estimated genome size in bp.
     /// Allocates between 4 MB (width 1<<21) for small/test genomes and 256 MB (width 1<<27) for full genomes.
     pub fn for_genome_size(est_genome_size: u64) -> Self {
-        let target = (est_genome_size * 16).next_power_of_two() as usize;
-        let width = target.clamp(1 << 21, 1 << 27);
+        let width = Self::width_for_genome_size(est_genome_size);
         Self::new(width)
     }
 

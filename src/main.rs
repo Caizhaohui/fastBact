@@ -5,7 +5,7 @@ use anyhow::Result;
 use clap::Parser;
 use fastbact::cli::Cli;
 use fastbact::graph::build::build_cdbg_ext;
-use fastbact::graph::local_multik::upgrade_multik;
+use fastbact::graph::local_multik::{upgrade_multik_ext, upgrade_multik_legacy};
 use fastbact::ingest::estimator::{estimate_genome, EstimatorConfidence};
 use fastbact::ingest::trim_merge::ingest_reads_ext;
 use fastbact::polish::consensus::polish_contigs;
@@ -236,9 +236,16 @@ fn main() -> Result<()> {
 
     // Stage 3: Initial cDBG Build
     let effective_g = args.genome_size.filter(|&g| g > 0).unwrap_or(estimate.genome_size);
+    let g_source = if args.genome_size.filter(|&g| g > 0).is_some() {
+        "CLI_USER_SPECIFIED"
+    } else {
+        "ESTIMATOR_HLL"
+    };
+    let k1_cms_width = fastbact::common::sketch::CountMinSketch::width_for_genome_size(effective_g);
+    let k1_cms_bytes = fastbact::common::sketch::CountMinSketch::allocated_bytes_for_genome_size(effective_g);
     info!(
-        "[Stage 3/6] Building compacted De Bruijn graph at k={} (genome sketch size: {} bp)...",
-        k1, effective_g
+        "[Stage 3/6] Building compacted De Bruijn graph at k={} (genome sketch size: {} bp, source: {}, CMS width={}, bytes={} MB)...",
+        k1, effective_g, g_source, k1_cms_width, k1_cms_bytes / (1024 * 1024)
     );
     let t_s3 = Instant::now();
     let mut graph = build_cdbg_ext::<u64>(&bank, k1, None, Some(effective_g));
@@ -253,6 +260,12 @@ fn main() -> Result<()> {
             active_edges: e,
             isolated_cycles: c,
             total_graph_bp: bp,
+            genome_size_source: g_source.to_string(),
+            genome_size_used: effective_g,
+            cms_width: k1_cms_width,
+            cms_allocated_bytes: k1_cms_bytes,
+            upgrade_executed: true,
+            early_stop_reason: "NONE_INITIAL_BUILD".to_string(),
             ..Default::default()
         });
 
@@ -304,6 +317,7 @@ fn main() -> Result<()> {
             popped_bubbles_count: sim_stats.popped_bubbles_count,
             popped_bubbles_bp: sim_stats.popped_bubbles_bp,
             total_graph_bp: bp3,
+            ..Default::default()
         });
     } else {
         fastbact::graph::simplify::simplify_graph_custom(&mut graph, !args.no_tip_clip, !args.no_bubble_pop);
@@ -320,12 +334,36 @@ fn main() -> Result<()> {
         info!("[Stage 4/6] Iterative local multi-k repeat bridging...");
         let t_s4 = Instant::now();
         for &next_k in &kmers[1..] {
-            info!("Upgrading graph to k={}...", next_k);
-            if next_k <= 63 {
-                upgrade_multik::<u128>(&mut graph, &bank, next_k);
+            let upgrade_res = if args.legacy_multik_cms {
+                info!("Upgrading graph to k={} (LEGACY Var 1 capacity path)...", next_k);
+                if next_k <= 63 {
+                    upgrade_multik_legacy::<u128>(&mut graph, &bank, next_k)
+                } else {
+                    upgrade_multik_legacy::<[u64; 4]>(&mut graph, &bank, next_k)
+                }
             } else {
-                upgrade_multik::<[u64; 4]>(&mut graph, &bank, next_k);
-            }
+                info!(
+                    "Upgrading graph to k={} with explicit genome size {} bp (Var 2 propagation)...",
+                    next_k, effective_g
+                );
+                if next_k <= 63 {
+                    upgrade_multik_ext::<u128>(&mut graph, &bank, next_k, Some(effective_g))
+                } else {
+                    upgrade_multik_ext::<[u64; 4]>(&mut graph, &bank, next_k, Some(effective_g))
+                }
+            };
+            info!(
+                "[MULTI-K TELEMETRY] k={}: executed={}, early_stop={:?}, CMS source={}, size_used={} bp, width={}, bytes={} MB, unitigs: {} -> {}",
+                next_k,
+                upgrade_res.executed,
+                upgrade_res.early_stop_reason,
+                upgrade_res.genome_size_source,
+                upgrade_res.genome_size_used,
+                upgrade_res.cms_width,
+                upgrade_res.cms_allocated_bytes / (1024 * 1024),
+                upgrade_res.active_unitigs_before,
+                upgrade_res.active_unitigs_after
+            );
             if let Some(ref dump_dir) = args.dump_stages {
                 fastbact::diag::dump_graph_fasta(&graph, dump_dir.join(format!("stage_04_multik_{}_raw.fa", next_k)))?;
                 let (u, e, c, bp) = fastbact::diag::inspect_graph(&graph);
@@ -336,6 +374,12 @@ fn main() -> Result<()> {
                     active_edges: e,
                     isolated_cycles: c,
                     total_graph_bp: bp,
+                    genome_size_source: upgrade_res.genome_size_source.to_string(),
+                    genome_size_used: upgrade_res.genome_size_used,
+                    cms_width: upgrade_res.cms_width,
+                    cms_allocated_bytes: upgrade_res.cms_allocated_bytes,
+                    upgrade_executed: upgrade_res.executed,
+                    early_stop_reason: upgrade_res.early_stop_reason.unwrap_or("NONE").to_string(),
                     ..Default::default()
                 });
             }
@@ -354,6 +398,7 @@ fn main() -> Result<()> {
                     popped_bubbles_count: sim_stats.popped_bubbles_count,
                     popped_bubbles_bp: sim_stats.popped_bubbles_bp,
                     total_graph_bp: bp,
+                    ..Default::default()
                 });
             }
         }
@@ -397,6 +442,7 @@ fn main() -> Result<()> {
                 popped_bubbles_count: sim_stats.popped_bubbles_count,
                 popped_bubbles_bp: sim_stats.popped_bubbles_bp,
                 total_graph_bp: bp,
+                ..Default::default()
             });
         }
     }

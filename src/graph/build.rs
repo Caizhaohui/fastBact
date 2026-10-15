@@ -71,14 +71,21 @@ pub fn build_cdbg_with_contigs_ext<K: KmerInt>(
     target_solid_cov: Option<u8>,
     genome_size: Option<u64>,
 ) -> CdbgGraph {
-    let est_g = if let Some(g) = genome_size {
-        g.max(50_000)
-    } else if !contigs.is_empty() {
-        contigs.iter().map(|c| c.len() as u64).sum::<u64>().max(50_000)
+    let (est_g, source) = if let Some(g) = genome_size {
+        (g.max(50_000), "EXPLICIT_PASSED")
     } else {
-        (bank.total_bases() as u64 / 60).max(50_000)
+        let fallback_g = (bank.total_bases() as u64 / 60).max(50_000);
+        tracing::warn!(
+            "[CMS_FALLBACK] No reliable genome size provided for k={}. Using documented read bases / 60 fallback ({} bp). Prior contigs length sum is NOT assumed to equal genome size.",
+            k, fallback_g
+        );
+        (fallback_g, "FALLBACK_READ_BASES_DIV_60")
     };
     let cms = CountMinSketch::for_genome_size(est_g);
+    tracing::debug!(
+        "[BUILD_CDBG] k={}: CMS sized for {} bp (source: {}, width={}, bytes={} MB)",
+        k, est_g, source, cms.width, cms.allocated_bytes() / (1024 * 1024)
+    );
 
     let arenas = [&bank.merged_reads, &bank.pe_forward, &bank.pe_reverse];
 

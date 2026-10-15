@@ -75,6 +75,10 @@ pub struct Cli {
     #[arg(long, hide = true)]
     pub no_multik: bool,
 
+    /// Legacy Var 1 multi-k CMS sizing (prior contigs sum fallback) for A/B benchmarking
+    #[arg(long, hide = true)]
+    pub legacy_multik_cms: bool,
+
     /// Bypass exSPAnder PE repeat resolution
     #[arg(long, hide = true)]
     pub no_exspander: bool,

@@ -49,6 +49,7 @@ fn compute_n50<P: AsRef<Path>>(path: P) -> Result<(usize, usize, usize)> {
     Ok((lens.len(), n50, total))
 }
 
+#[allow(dead_code)]
 struct TestSpec {
     id: &'static str,
     description: &'static str,
