@@ -63,15 +63,55 @@ fn main() -> Result<()> {
     info!("[Stage 1/6] Estimating genome size and coverage from reads...");
     let t_s1 = Instant::now();
     let estimate = estimate_genome(&args.r1, &args.r2, 250_000, args.depth)?;
-    info!(
-        "Estimated genome size: {} bp, coverage: {:.1}x (subsample factor: {:.4})",
-        estimate.genome_size, estimate.estimated_cov, estimate.subsample_factor
-    );
-    let subsample_factor = if args.no_subsample {
-        1.0
+
+    // C1a Safe Subsampling Policy:
+    // By default, heuristic auto-subsampling is DISABLED to prevent data loss from uncalibrated estimates.
+    let (subsample_factor, subsampling_enabled, subsampling_reason) = if args.no_subsample {
+        (1.0, false, "EXPLICIT_NO_SUBSAMPLE_FLAG".to_string())
+    } else if let Some(explicit_g) = args.genome_size {
+        if explicit_g == 0 {
+            (1.0, false, "EXPLICIT_GENOME_SIZE_ZERO_INVALID".to_string())
+        } else {
+            // Compute projected library coverage against explicit user-provided genome size
+            let projected_total_bases = estimate.estimated_cov * (estimate.genome_size as f64);
+            let explicit_cov = projected_total_bases / (explicit_g as f64);
+            if args.depth > 0.0 && explicit_cov > 1.1 * args.depth {
+                let factor = (args.depth / explicit_cov).clamp(0.01, 1.0);
+                (
+                    factor,
+                    true,
+                    format!("EXPLICIT_GENOME_SIZE_CAP (cov={:.1}x > target={:.1}x)", explicit_cov, args.depth),
+                )
+            } else {
+                (
+                    1.0,
+                    false,
+                    format!("EXPLICIT_GENOME_SIZE_WITHIN_TARGET (cov={:.1}x <= target={:.1}x)", explicit_cov, args.depth),
+                )
+            }
+        }
+    } else if args.enable_auto_subsample {
+        let factor = estimate.subsample_factor;
+        let enabled = factor < 0.999;
+        let reason = if enabled {
+            format!("AUTO_ESTIMATE_CAP_USER_REQUESTED (factor={:.4})", factor)
+        } else {
+            "AUTO_ESTIMATE_WITHIN_TARGET".to_string()
+        };
+        (factor, enabled, reason)
     } else {
-        estimate.subsample_factor
+        // C1a Safe Default: Subsampling is completely disabled
+        (1.0, false, "DISABLED_BY_DEFAULT_C1A_SAFE_FALLBACK".to_string())
     };
+
+    info!("--- Subsampling Policy (C1a Safe Fallback) ---");
+    info!("  subsampling_enabled: {}", subsampling_enabled);
+    info!("  subsampling_reason: {}", subsampling_reason);
+    info!("  subsample_factor: {:.4}", subsample_factor);
+    info!("  estimated_genome_size: {} bp (UNTOUCHED_V0.1.0_ESTIMATOR)", estimate.genome_size);
+    info!("  estimated_coverage: {:.1}x (UNTOUCHED_V0.1.0_ESTIMATOR)", estimate.estimated_cov);
+    info!("----------------------------------------------");
+
     let kmers = if args.kmers == "auto" {
         estimate.kmers
     } else {
@@ -105,6 +145,10 @@ fn main() -> Result<()> {
         bank.pe_forward.len(),
         t_s2.elapsed()
     );
+    info!("--- Actual Ingestion Counts ---");
+    info!("  actual_input_pairs: {}", ingest_stats.input_read_pairs);
+    info!("  actual_retained_pairs: {}", ingest_stats.retained_read_pairs);
+    info!("-------------------------------");
 
     let mut stage_telemetries = Vec::new();
     let k1 = kmers[0];
@@ -321,6 +365,13 @@ fn main() -> Result<()> {
             merged_bases: ingest_stats.merged_bases,
             unmerged_pairs_count: ingest_stats.unmerged_pairs_count,
             effective_coverage: effective_cov,
+            subsampling_enabled,
+            subsampling_reason: subsampling_reason.clone(),
+            estimated_genome_size: estimate.genome_size,
+            estimated_genome_size_note: "UNTOUCHED_V0.1.0_ESTIMATOR".into(),
+            estimated_coverage: estimate.estimated_cov,
+            actual_input_pairs: ingest_stats.input_read_pairs,
+            actual_retained_pairs: ingest_stats.retained_read_pairs,
         };
 
         fastbact::diag::write_stage_telemetry_json(
@@ -361,6 +412,10 @@ fn main() -> Result<()> {
     info!("  Longest Contig: {} bp", max_len);
     info!("  N50: {} bp", n50);
     info!("  Circular Plasmids: {}", circular_count);
+    info!("  Subsampling Enabled: {}", subsampling_enabled);
+    info!("  Subsampling Reason: {}", subsampling_reason);
+    info!("  Actual Input Pairs: {}", ingest_stats.input_read_pairs);
+    info!("  Actual Retained Pairs: {}", ingest_stats.retained_read_pairs);
     info!("  Peak Memory (RSS): {:.1} MB", read_peak_rss_mb());
     info!("  Total Wall Time: {:.2?}", t_start.elapsed());
     info!("============================================================");

@@ -35,6 +35,13 @@ pub struct IngestTelemetry {
     pub merged_bases: usize,
     pub unmerged_pairs_count: usize,
     pub effective_coverage: f64,
+    pub subsampling_enabled: bool,
+    pub subsampling_reason: String,
+    pub estimated_genome_size: u64,
+    pub estimated_genome_size_note: String,
+    pub estimated_coverage: f64,
+    pub actual_input_pairs: usize,
+    pub actual_retained_pairs: usize,
 }
 
 /// K-mer histogram and Count-Min Sketch agreement metrics.
@@ -242,6 +249,13 @@ pub fn write_stage_telemetry_json<P: AsRef<Path>>(
     writeln!(writer, "  \"merged_bases\": {},", ingest.merged_bases)?;
     writeln!(writer, "  \"unmerged_pairs_count\": {},", ingest.unmerged_pairs_count)?;
     writeln!(writer, "  \"effective_coverage\": {:.2},", ingest.effective_coverage)?;
+    writeln!(writer, "  \"subsampling_enabled\": {},", ingest.subsampling_enabled)?;
+    writeln!(writer, "  \"subsampling_reason\": \"{}\",", ingest.subsampling_reason)?;
+    writeln!(writer, "  \"estimated_genome_size\": {},", ingest.estimated_genome_size)?;
+    writeln!(writer, "  \"estimated_genome_size_note\": \"{}\",", ingest.estimated_genome_size_note)?;
+    writeln!(writer, "  \"estimated_coverage\": {:.2},", ingest.estimated_coverage)?;
+    writeln!(writer, "  \"actual_input_pairs\": {},", ingest.actual_input_pairs)?;
+    writeln!(writer, "  \"actual_retained_pairs\": {},", ingest.actual_retained_pairs)?;
 
     // kmer_histogram_summary
     writeln!(writer, "  \"kmer_histogram_summary\": {{")?;

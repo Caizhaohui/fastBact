@@ -51,8 +51,16 @@ pub struct Cli {
     #[arg(long, hide = true)]
     pub no_merge: bool,
 
+    /// Explicit expected genome size in base pairs (e.g. 4640000). When provided with --depth, enables calibrated subsampling.
+    #[arg(long)]
+    pub genome_size: Option<u64>,
+
+    /// Enable automatic depth subsampling based on heuristic coverage estimation (default: false in C1a safe fallback)
+    #[arg(long, default_value_t = false)]
+    pub enable_auto_subsample: bool,
+
     /// Bypass coverage subsampling (keep 100% of reads)
-    #[arg(long, hide = true)]
+    #[arg(long, default_value_t = false)]
     pub no_subsample: bool,
 
     /// Bypass tip clipping in simplify_graph
