@@ -55,7 +55,7 @@ pub struct Cli {
     #[arg(long)]
     pub genome_size: Option<u64>,
 
-    /// Enable automatic depth subsampling based on heuristic coverage estimation (default: false in C1a safe fallback)
+    /// Enable automatic depth subsampling based on calibrated genome size & coverage estimation
     #[arg(long, default_value_t = false)]
     pub enable_auto_subsample: bool,
 

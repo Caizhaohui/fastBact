@@ -4,9 +4,9 @@
 use anyhow::Result;
 use clap::Parser;
 use fastbact::cli::Cli;
-use fastbact::graph::build::build_cdbg;
+use fastbact::graph::build::build_cdbg_ext;
 use fastbact::graph::local_multik::upgrade_multik;
-use fastbact::ingest::estimator::estimate_genome;
+use fastbact::ingest::estimator::{estimate_genome, EstimatorConfidence};
 use fastbact::ingest::trim_merge::ingest_reads_ext;
 use fastbact::polish::consensus::polish_contigs;
 use fastbact::polish::output::{curate_contigs, write_outputs};
@@ -64,8 +64,12 @@ fn main() -> Result<()> {
     let t_s1 = Instant::now();
     let estimate = estimate_genome(&args.r1, &args.r2, 250_000, args.depth)?;
 
-    // C1a Safe Subsampling Policy:
-    // By default, heuristic auto-subsampling is DISABLED to prevent data loss from uncalibrated estimates.
+    // C1b-3 Safe Subsampling Policy:
+    // Subsampling is executed when:
+    // 1) Explicit --genome-size is provided (user-guided cap)
+    // 2) --enable-auto-subsample is set AND estimator confidence is HIGH
+    // If estimator confidence is LOW_COVERAGE_WARNING or UNRELIABLE, auto-subsampling
+    // is safely intercepted and downgraded to 100% data retention.
     let (subsample_factor, subsampling_enabled, subsampling_reason) = if args.no_subsample {
         (1.0, false, "EXPLICIT_NO_SUBSAMPLE_FLAG".to_string())
     } else if let Some(explicit_g) = args.genome_size {
@@ -79,7 +83,7 @@ fn main() -> Result<()> {
                 (
                     factor,
                     true,
-                    format!("EXPLICIT_GENOME_SIZE_CAP (cov={:.1}x > target={:.1}x)", explicit_cov, args.depth),
+                    format!("EXPLICIT_GENOME_SIZE_CAP (cov={:.1}x > target={:.1}x, factor={:.4})", explicit_cov, args.depth, factor),
                 )
             } else {
                 (
@@ -90,20 +94,67 @@ fn main() -> Result<()> {
             }
         }
     } else if args.enable_auto_subsample {
-        warn!(
-            "[SAFETY_GUARD] --enable-auto-subsample requested, but automatic genome size & coverage calibration is pending completion in Phase C1b-2/C1b-3. To prevent severe over-downsampling from uncalibrated estimators (e.g., HLL 32-bit truncation), auto-subsampling is SAFELY DOWNGRADED/DISABLED. To downsample safely, please specify explicit --genome-size (e.g., --genome-size 4.6M)."
-        );
-        (
-            1.0,
-            false,
-            "AUTO_SUBSAMPLE_DOWNGRADED_PENDING_C1B2_CALIBRATION".to_string(),
-        )
+        match estimate.confidence {
+            EstimatorConfidence::High => {
+                let est_cov = estimate.estimated_cov;
+                if args.depth > 0.0 && est_cov > 1.1 * args.depth {
+                    let factor = (args.depth / est_cov).clamp(0.01, 1.0);
+                    info!(
+                        "[AUTO_SUBSAMPLE] High estimator confidence (est_cov={:.1}x > target={:.1}x). Auto-subsampling factor={:.4}",
+                        est_cov, args.depth, factor
+                    );
+                    (
+                        factor,
+                        true,
+                        format!(
+                            "AUTO_SUBSAMPLE_HIGH_CONFIDENCE (est_cov={:.1}x > target={:.1}x, factor={:.4})",
+                            est_cov, args.depth, factor
+                        ),
+                    )
+                } else {
+                    info!(
+                        "[AUTO_SUBSAMPLE] High estimator confidence, but library coverage ({:.1}x) is within target ({:.1}x). Subsampling bypassed.",
+                        est_cov, args.depth
+                    );
+                    (
+                        1.0,
+                        false,
+                        format!(
+                            "AUTO_SUBSAMPLE_HIGH_CONFIDENCE_WITHIN_TARGET (est_cov={:.1}x <= target={:.1}x)",
+                            est_cov, args.depth
+                        ),
+                    )
+                }
+            }
+            EstimatorConfidence::LowCoverageWarning => {
+                warn!(
+                    "[SAFETY_GUARD] Auto-subsampling intercepted: Estimator confidence is LOW_COVERAGE_WARNING (est_cov={:.1}x, solid_depth={:.2}x). Subsampling safely downgraded to 100% data retention.",
+                    estimate.estimated_cov, estimate.sample_kmer_depth
+                );
+                (
+                    1.0,
+                    false,
+                    "AUTO_SUBSAMPLE_INTERCEPTED_LOW_COVERAGE_WARNING".to_string(),
+                )
+            }
+            EstimatorConfidence::Unreliable => {
+                warn!(
+                    "[SAFETY_GUARD] Auto-subsampling intercepted: Estimator confidence is UNRELIABLE (est_cov={:.1}x). Subsampling safely downgraded to 100% data retention.",
+                    estimate.estimated_cov
+                );
+                (
+                    1.0,
+                    false,
+                    "AUTO_SUBSAMPLE_INTERCEPTED_UNRELIABLE".to_string(),
+                )
+            }
+        }
     } else {
-        // C1a Safe Default: Subsampling is completely disabled
-        (1.0, false, "DISABLED_BY_DEFAULT_C1A_SAFE_FALLBACK".to_string())
+        // Safe Default: Subsampling is disabled unless explicitly requested via --enable-auto-subsample or --genome-size
+        (1.0, false, "DISABLED_BY_DEFAULT_SAFE_FALLBACK".to_string())
     };
 
-    info!("--- Input Sequencing Statistics (C1b-2 Calibrated Ingest) ---");
+    info!("--- Input Sequencing Statistics (C1b-3 Calibrated Ingest) ---");
     info!("  exact_read_pairs: {}", estimate.exact_read_pairs);
     info!("  total_bases: {} bp", estimate.total_bases);
     info!("  median_read_len: {} bp", estimate.median_read_len);
@@ -113,7 +164,7 @@ fn main() -> Result<()> {
     info!("  estimator_confidence: {}", estimate.confidence);
     info!("  solid_unique_kmers_u2: {}", estimate.u_ge_2);
     info!("  sample_solid_kmer_depth: {:.2}x", estimate.sample_kmer_depth);
-    info!("--- Subsampling Policy (C1a/C1b-2 Safe Fallback) ---");
+    info!("--- Subsampling Policy (C1b-3 Calibrated Policy) ---");
     info!("  subsampling_enabled: {}", subsampling_enabled);
     info!("  subsampling_reason: {}", subsampling_reason);
     info!("  subsample_factor: {:.4}", subsample_factor);
@@ -169,9 +220,13 @@ fn main() -> Result<()> {
     };
 
     // Stage 3: Initial cDBG Build
-    info!("[Stage 3/6] Building compacted De Bruijn graph at k={}...", k1);
+    let effective_g = args.genome_size.filter(|&g| g > 0).unwrap_or(estimate.genome_size);
+    info!(
+        "[Stage 3/6] Building compacted De Bruijn graph at k={} (genome sketch size: {} bp)...",
+        k1, effective_g
+    );
     let t_s3 = Instant::now();
-    let mut graph = build_cdbg::<u64>(&bank, k1, None);
+    let mut graph = build_cdbg_ext::<u64>(&bank, k1, None, Some(effective_g));
 
     if let Some(ref dump_dir) = args.dump_stages {
         fastbact::diag::dump_graph_fasta(&graph, dump_dir.join("stage_01_raw_k1_cdbg.fa"))?;

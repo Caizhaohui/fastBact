@@ -39,7 +39,17 @@ pub fn build_cdbg<K: KmerInt>(
     k: usize,
     target_solid_cov: Option<u8>,
 ) -> CdbgGraph {
-    build_cdbg_with_contigs::<K>(bank, &[], k, target_solid_cov)
+    build_cdbg_with_contigs_ext::<K>(bank, &[], k, target_solid_cov, None)
+}
+
+/// Builds a Compacted De Bruijn Graph (cDBG) from the `ReadBank` with calibrated genome size.
+pub fn build_cdbg_ext<K: KmerInt>(
+    bank: &ReadBank,
+    k: usize,
+    target_solid_cov: Option<u8>,
+    genome_size: Option<u64>,
+) -> CdbgGraph {
+    build_cdbg_with_contigs_ext::<K>(bank, &[], k, target_solid_cov, genome_size)
 }
 
 /// Builds a Compacted De Bruijn Graph (cDBG) from the `ReadBank` and optional prior contigs.
@@ -49,7 +59,21 @@ pub fn build_cdbg_with_contigs<K: KmerInt>(
     k: usize,
     target_solid_cov: Option<u8>,
 ) -> CdbgGraph {
-    let est_g = if !contigs.is_empty() {
+    build_cdbg_with_contigs_ext::<K>(bank, contigs, k, target_solid_cov, None)
+}
+
+/// Builds a Compacted De Bruijn Graph (cDBG) from the `ReadBank`, optional prior contigs,
+/// and calibrated genome size.
+pub fn build_cdbg_with_contigs_ext<K: KmerInt>(
+    bank: &ReadBank,
+    contigs: &[Vec<u8>],
+    k: usize,
+    target_solid_cov: Option<u8>,
+    genome_size: Option<u64>,
+) -> CdbgGraph {
+    let est_g = if let Some(g) = genome_size {
+        g.max(50_000)
+    } else if !contigs.is_empty() {
         contigs.iter().map(|c| c.len() as u64).sum::<u64>().max(50_000)
     } else {
         (bank.total_bases() as u64 / 60).max(50_000)
