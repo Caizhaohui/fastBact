@@ -1,18 +1,43 @@
 //! Genome size estimation, coverage calculation, and dynamic multi-k schedule.
 //!
-//! Replaces KMC/Mash by streaming the initial read pairs, populating HyperLogLog
-//! and Count-Min Sketch to estimate genome size and sequencing depth.
+//! Provides exact streaming FASTQ pair/base counting, dual-end pairing integrity checks,
+//! and initial k-mer cardinality profiling via HyperLogLog and Count-Min Sketch.
 
 use crate::common::kmer::RollingNtHash;
 use crate::common::sketch::{CountMinSketch, HyperLogLog};
 use anyhow::Result;
 use std::path::Path;
 
+/// Statistics from exact streaming FASTQ parsing.
+#[derive(Clone, Debug, PartialEq)]
+pub struct ExactCountStats {
+    /// Exact count of valid read pairs
+    pub exact_read_pairs: usize,
+    /// Total bases observed in R1
+    pub total_bases_r1: u64,
+    /// Total bases observed in R2
+    pub total_bases_r2: u64,
+    /// Exact sum of all sequenced bases (R1 + R2)
+    pub total_bases: u64,
+    /// Minimum read length observed
+    pub min_read_len: usize,
+    /// Maximum read length observed
+    pub max_read_len: usize,
+    /// Mean read length across all reads
+    pub mean_read_len: f64,
+    /// Median read length
+    pub median_read_len: usize,
+}
+
 /// Genome estimation summary statistics.
 #[derive(Clone, Debug, PartialEq)]
 pub struct GenomeEstimate {
     /// Estimated unique genome size in bp (excluding singleton error k-mers)
     pub genome_size: u64,
+    /// Exact count of read pairs
+    pub exact_read_pairs: usize,
+    /// Exact total bases in R1 and R2
+    pub total_bases: u64,
     /// Median read length observed in the sample
     pub median_read_len: usize,
     /// Maximum read length observed
@@ -23,6 +48,22 @@ pub struct GenomeEstimate {
     pub subsample_factor: f64,
     /// Dynamic odd multi-k schedule
     pub kmers: Vec<usize>,
+}
+
+/// Extracts read identifier prefix for paired-end synchronization checks.
+///
+/// Strips Casava/Illumina trailing whitespace comments and `/1` or `/2` suffixes.
+#[inline]
+pub fn extract_read_id_prefix(id: &[u8]) -> &[u8] {
+    let non_ws = match id.iter().position(|&b| b.is_ascii_whitespace()) {
+        Some(pos) => &id[..pos],
+        None => id,
+    };
+    if non_ws.ends_with(b"/1") || non_ws.ends_with(b"/2") {
+        &non_ws[..non_ws.len() - 2]
+    } else {
+        non_ws
+    }
 }
 
 /// Dynamically computes the odd multi-k schedule based on median read length and pairing.
@@ -87,24 +128,149 @@ pub fn compute_dynamic_kmers(median_len: usize, target_max_k: Option<usize>) -> 
     }
 }
 
-/// Estimates genome size and coverage by streaming up to `max_pairs` read pairs from R1 and R2.
+/// Performs exact, zero-bias streaming counting of paired-end FASTQ reads.
+///
+/// Validates pairing synchronization, checks header prefixes, computes base totals,
+/// and calculates exact length statistics in O(1) memory.
+pub fn count_fastx_exact<P: AsRef<Path>>(
+    r1_path: P,
+    r2_path: P,
+) -> Result<ExactCountStats> {
+    let mut r1_reader = crate::ingest::trim_merge::open_fastx(&r1_path)?;
+    let mut r2_reader = crate::ingest::trim_merge::open_fastx(&r2_path)?;
+
+    let mut pair_count = 0usize;
+    let mut total_bases_r1 = 0u64;
+    let mut total_bases_r2 = 0u64;
+    let mut min_read_len = usize::MAX;
+    let mut max_read_len = 0usize;
+
+    // Fixed-size frequency histogram for read lengths [0..4095] (O(1) 32 KB RAM)
+    let mut len_hist = [0usize; 4096];
+    let mut overflow_lens = Vec::new();
+
+    loop {
+        let rec1_opt = r1_reader.next();
+        let rec2_opt = r2_reader.next();
+
+        match (rec1_opt, rec2_opt) {
+            (Some(Ok(rec1)), Some(Ok(rec2))) => {
+                pair_count += 1;
+                let id1_p = extract_read_id_prefix(rec1.id());
+                let id2_p = extract_read_id_prefix(rec2.id());
+
+                if id1_p != id2_p {
+                    anyhow::bail!(
+                        "FASTQ paired-end synchronization error at pair #{}: R1 ID '{:?}' does not match R2 ID '{:?}'",
+                        pair_count,
+                        String::from_utf8_lossy(rec1.id()),
+                        String::from_utf8_lossy(rec2.id())
+                    );
+                }
+
+                let l1 = rec1.seq().len();
+                let l2 = rec2.seq().len();
+                total_bases_r1 += l1 as u64;
+                total_bases_r2 += l2 as u64;
+                min_read_len = min_read_len.min(l1).min(l2);
+                max_read_len = max_read_len.max(l1).max(l2);
+
+                if l1 < 4096 {
+                    len_hist[l1] += 1;
+                } else {
+                    overflow_lens.push(l1);
+                }
+                if l2 < 4096 {
+                    len_hist[l2] += 1;
+                } else {
+                    overflow_lens.push(l2);
+                }
+            }
+            (None, None) => break,
+            (Some(Ok(_)), None) => {
+                anyhow::bail!(
+                    "FASTQ pairing mismatch: R1 has more reads than R2 (R2 ended prematurely after {} pairs)",
+                    pair_count
+                );
+            }
+            (None, Some(Ok(_))) => {
+                anyhow::bail!(
+                    "FASTQ pairing mismatch: R2 has more reads than R1 (R1 ended prematurely after {} pairs)",
+                    pair_count
+                );
+            }
+            (Some(Err(e)), _) => anyhow::bail!(
+                "Corrupted/truncated FASTQ record in R1 at pair #{}: {}",
+                pair_count + 1,
+                e
+            ),
+            (_, Some(Err(e))) => anyhow::bail!(
+                "Corrupted/truncated FASTQ record in R2 at pair #{}: {}",
+                pair_count + 1,
+                e
+            ),
+        }
+    }
+
+    if pair_count == 0 {
+        anyhow::bail!("Input FASTQ files contain 0 valid read pairs");
+    }
+
+    let total_bases = total_bases_r1 + total_bases_r2;
+    let total_reads = pair_count * 2;
+    let mean_read_len = total_bases as f64 / total_reads as f64;
+
+    // Compute median length from frequency histogram
+    let median_target = (total_reads + 1) / 2;
+    let mut cum = 0usize;
+    let mut median_read_len = 0usize;
+
+    for (len, &count) in len_hist.iter().enumerate() {
+        cum += count;
+        if cum >= median_target {
+            median_read_len = len;
+            break;
+        }
+    }
+    if median_read_len == 0 && !overflow_lens.is_empty() {
+        overflow_lens.sort_unstable();
+        let idx = (overflow_lens.len() / 2).min(overflow_lens.len() - 1);
+        median_read_len = overflow_lens[idx];
+    }
+
+    Ok(ExactCountStats {
+        exact_read_pairs: pair_count,
+        total_bases_r1,
+        total_bases_r2,
+        total_bases,
+        min_read_len,
+        max_read_len,
+        mean_read_len,
+        median_read_len,
+    })
+}
+
+/// Estimates genome size and coverage by streaming initial read pairs and utilizing exact counting.
 pub fn estimate_genome<P: AsRef<Path>>(
     r1_path: P,
     r2_path: P,
     max_pairs: usize,
     target_cov: f64,
 ) -> Result<GenomeEstimate> {
+    // 1. Perform exact, zero-bias streaming counting of all read pairs and bases
+    let count_stats = count_fastx_exact(&r1_path, &r2_path)?;
+
+    // 2. Sample initial reads for HLL solid k-mers (C1b-1 maintains untouched HLL logic until C1b-2)
     let mut r1_reader = crate::ingest::trim_merge::open_fastx(&r1_path)?;
     let mut r2_reader = crate::ingest::trim_merge::open_fastx(&r2_path)?;
 
     let k = 21;
     let mut hll_solid = HyperLogLog::new();
-    let cms = CountMinSketch::new(1 << 20); // 1M counters per row (2MB RAM for sample)
+    let cms = CountMinSketch::new(1 << 20);
 
-    let mut read_lens = Vec::with_capacity(max_pairs.min(100_000));
+    let sample_target = max_pairs.min(50_000).min(count_stats.exact_read_pairs);
     let mut sampled_bases: u64 = 0;
     let mut pair_count = 0usize;
-    let sample_target = max_pairs.min(50_000);
 
     while pair_count < sample_target {
         let rec1_opt = r1_reader.next();
@@ -115,12 +281,7 @@ pub fn estimate_genome<P: AsRef<Path>>(
                 pair_count += 1;
                 let s1 = rec1.seq();
                 let s2 = rec2.seq();
-
                 sampled_bases += s1.len() as u64 + s2.len() as u64;
-                if read_lens.len() < 100_000 {
-                    read_lens.push(s1.len());
-                    read_lens.push(s2.len());
-                }
 
                 // Process k-mers in R1 using rolling ntHash
                 if s1.len() >= k {
@@ -156,43 +317,17 @@ pub fn estimate_genome<P: AsRef<Path>>(
                     }
                 }
             }
-            (Some(Err(e)), _) => anyhow::bail!("Corrupted record in R1 FASTQ: {}", e),
-            (_, Some(Err(e))) => anyhow::bail!("Corrupted record in R2 FASTQ: {}", e),
             _ => break,
         }
     }
 
-    if pair_count == 0 {
-        anyhow::bail!("Input FASTQ files contain 0 valid read pairs");
-    }
-
-    read_lens.sort_unstable();
-    let median_read_len = read_lens[read_lens.len() / 2];
-    let max_read_len = *read_lens.last().unwrap_or(&150);
-
-    // Estimated unique solid 21-mers
     let mut est_g = hll_solid.estimate() as u64;
     if est_g < 10_000 {
         est_g = est_g.max((sampled_bases / 30).max(50_000));
     }
 
-    // Project total bases from file size if we only sampled a subset
-    let sample_ratio = if pair_count >= sample_target {
-        if let Ok(meta) = std::fs::metadata(r1_path.as_ref()) {
-            let file_bytes = meta.len();
-            let is_gz = r1_path.as_ref().to_string_lossy().ends_with(".gz");
-            let approx_bytes_per_pair = if is_gz { 75u64 } else { (median_read_len * 4 + 40) as u64 };
-            let total_pairs_est = (file_bytes / approx_bytes_per_pair).max(pair_count as u64);
-            (total_pairs_est as f64) / (pair_count as f64)
-        } else {
-            1.0
-        }
-    } else {
-        1.0
-    };
-
-    let total_projected_bases = (sampled_bases as f64 * sample_ratio).max(1.0);
-    let estimated_cov = total_projected_bases / (est_g as f64);
+    // Zero-extrapolation: use literal exact total bases from count_stats
+    let estimated_cov = count_stats.total_bases as f64 / (est_g as f64);
 
     let subsample_factor = if target_cov > 0.0 && estimated_cov > 1.1 * target_cov {
         (target_cov / estimated_cov).clamp(0.01, 1.0)
@@ -200,13 +335,14 @@ pub fn estimate_genome<P: AsRef<Path>>(
         1.0
     };
 
-
-    let kmers = compute_dynamic_kmers(median_read_len, None);
+    let kmers = compute_dynamic_kmers(count_stats.median_read_len, None);
 
     Ok(GenomeEstimate {
         genome_size: est_g,
-        median_read_len,
-        max_read_len,
+        exact_read_pairs: count_stats.exact_read_pairs,
+        total_bases: count_stats.total_bases,
+        median_read_len: count_stats.median_read_len,
+        max_read_len: count_stats.max_read_len,
         estimated_cov,
         subsample_factor,
         kmers,
@@ -216,6 +352,88 @@ pub fn estimate_genome<P: AsRef<Path>>(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::io::Write;
+    use tempfile::NamedTempFile;
+
+    #[test]
+    fn test_extract_read_id_prefix() {
+        assert_eq!(extract_read_id_prefix(b"@read1/1"), b"@read1");
+        assert_eq!(extract_read_id_prefix(b"@read1/2"), b"@read1");
+        assert_eq!(
+            extract_read_id_prefix(b"@SRR28349173.1 1 length=150"),
+            b"@SRR28349173.1"
+        );
+        assert_eq!(
+            extract_read_id_prefix(b"@SRR28349173.1 2 length=150"),
+            b"@SRR28349173.1"
+        );
+        assert_eq!(extract_read_id_prefix(b"@read_only"), b"@read_only");
+    }
+
+    #[test]
+    fn test_count_fastx_exact_success() -> Result<()> {
+        let mut f1 = NamedTempFile::new()?;
+        let mut f2 = NamedTempFile::new()?;
+
+        for i in 1..=10 {
+            writeln!(f1, "@pair_{}/1\nACGTACGTACGT\n+\nIIIIIIIIIIII", i)?;
+            writeln!(f2, "@pair_{}/2\nTGCATGCATGCA\n+\nIIIIIIIIIIII", i)?;
+        }
+        f1.flush()?;
+        f2.flush()?;
+
+        let stats = count_fastx_exact(f1.path(), f2.path())?;
+        assert_eq!(stats.exact_read_pairs, 10);
+        assert_eq!(stats.total_bases_r1, 120);
+        assert_eq!(stats.total_bases_r2, 120);
+        assert_eq!(stats.total_bases, 240);
+        assert_eq!(stats.min_read_len, 12);
+        assert_eq!(stats.max_read_len, 12);
+        assert_eq!(stats.median_read_len, 12);
+        assert!((stats.mean_read_len - 12.0).abs() < 1e-6);
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_count_fastx_exact_mismatched_pair_count() -> Result<()> {
+        let mut f1 = NamedTempFile::new()?;
+        let mut f2 = NamedTempFile::new()?;
+
+        for i in 1..=5 {
+            writeln!(f1, "@pair_{}/1\nACGT\n+\nIIII", i)?;
+        }
+        for i in 1..=4 {
+            writeln!(f2, "@pair_{}/2\nACGT\n+\nIIII", i)?;
+        }
+        f1.flush()?;
+        f2.flush()?;
+
+        let res = count_fastx_exact(f1.path(), f2.path());
+        assert!(res.is_err());
+        let err_msg = res.unwrap_err().to_string();
+        assert!(err_msg.contains("R1 has more reads than R2"));
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_count_fastx_exact_header_desync() -> Result<()> {
+        let mut f1 = NamedTempFile::new()?;
+        let mut f2 = NamedTempFile::new()?;
+
+        writeln!(f1, "@pair_A/1\nACGT\n+\nIIII")?;
+        writeln!(f2, "@pair_B/2\nACGT\n+\nIIII")?;
+        f1.flush()?;
+        f2.flush()?;
+
+        let res = count_fastx_exact(f1.path(), f2.path());
+        assert!(res.is_err());
+        let err_msg = res.unwrap_err().to_string();
+        assert!(err_msg.contains("synchronization error"));
+
+        Ok(())
+    }
 
     #[test]
     fn test_compute_dynamic_kmers_standard_150bp() {

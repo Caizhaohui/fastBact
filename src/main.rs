@@ -13,7 +13,7 @@ use fastbact::polish::output::{curate_contigs, write_outputs};
 use fastbact::resolve::exspander::{resolve_repeats_exspander, ExspanderParams};
 use fastbact::resolve::mapper::map_paired_reads;
 use std::time::Instant;
-use tracing::info;
+use tracing::{info, warn};
 
 fn read_peak_rss_mb() -> f64 {
     #[cfg(target_os = "linux")]
@@ -72,9 +72,8 @@ fn main() -> Result<()> {
         if explicit_g == 0 {
             (1.0, false, "EXPLICIT_GENOME_SIZE_ZERO_INVALID".to_string())
         } else {
-            // Compute projected library coverage against explicit user-provided genome size
-            let projected_total_bases = estimate.estimated_cov * (estimate.genome_size as f64);
-            let explicit_cov = projected_total_bases / (explicit_g as f64);
+            // Compute library coverage against explicit user-provided genome size
+            let explicit_cov = estimate.total_bases as f64 / (explicit_g as f64);
             if args.depth > 0.0 && explicit_cov > 1.1 * args.depth {
                 let factor = (args.depth / explicit_cov).clamp(0.01, 1.0);
                 (
@@ -91,26 +90,31 @@ fn main() -> Result<()> {
             }
         }
     } else if args.enable_auto_subsample {
-        let factor = estimate.subsample_factor;
-        let enabled = factor < 0.999;
-        let reason = if enabled {
-            format!("AUTO_ESTIMATE_CAP_USER_REQUESTED (factor={:.4})", factor)
-        } else {
-            "AUTO_ESTIMATE_WITHIN_TARGET".to_string()
-        };
-        (factor, enabled, reason)
+        warn!(
+            "[SAFETY_GUARD] --enable-auto-subsample requested, but automatic genome size & coverage calibration is pending completion in Phase C1b-2/C1b-3. To prevent severe over-downsampling from uncalibrated estimators (e.g., HLL 32-bit truncation), auto-subsampling is SAFELY DOWNGRADED/DISABLED. To downsample safely, please specify explicit --genome-size (e.g., --genome-size 4.6M)."
+        );
+        (
+            1.0,
+            false,
+            "AUTO_SUBSAMPLE_DOWNGRADED_PENDING_C1B2_CALIBRATION".to_string(),
+        )
     } else {
         // C1a Safe Default: Subsampling is completely disabled
         (1.0, false, "DISABLED_BY_DEFAULT_C1A_SAFE_FALLBACK".to_string())
     };
 
-    info!("--- Subsampling Policy (C1a Safe Fallback) ---");
+    info!("--- Input Sequencing Statistics (C1b-1 Exact Count) ---");
+    info!("  exact_read_pairs: {}", estimate.exact_read_pairs);
+    info!("  total_bases: {} bp", estimate.total_bases);
+    info!("  median_read_len: {} bp", estimate.median_read_len);
+    info!("  max_read_len: {} bp", estimate.max_read_len);
+    info!("  estimated_genome_size: {} bp (HLL_UNCALIBRATED)", estimate.genome_size);
+    info!("  estimated_coverage: {:.1}x (HLL_UNCALIBRATED)", estimate.estimated_cov);
+    info!("--- Subsampling Policy (C1a/C1b-1 Safe Fallback) ---");
     info!("  subsampling_enabled: {}", subsampling_enabled);
     info!("  subsampling_reason: {}", subsampling_reason);
     info!("  subsample_factor: {:.4}", subsample_factor);
-    info!("  estimated_genome_size: {} bp (UNTOUCHED_V0.1.0_ESTIMATOR)", estimate.genome_size);
-    info!("  estimated_coverage: {:.1}x (UNTOUCHED_V0.1.0_ESTIMATOR)", estimate.estimated_cov);
-    info!("----------------------------------------------");
+    info!("-----------------------------------------------------");
 
     let kmers = if args.kmers == "auto" {
         estimate.kmers

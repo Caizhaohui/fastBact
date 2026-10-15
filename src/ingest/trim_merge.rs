@@ -246,7 +246,7 @@ pub fn open_fastx<P: AsRef<Path>>(path: P) -> Result<Box<dyn needletail::FastxRe
 
     let is_gz = path_ref.extension().map_or(false, |ext| ext == "gz");
     if is_gz {
-        let gz = flate2::read::GzDecoder::new(buf_reader);
+        let gz = flate2::read::MultiGzDecoder::new(buf_reader);
         let reader = needletail::parse_fastx_reader(gz)
             .map_err(|e| anyhow::anyhow!("Failed to parse gzip FASTX: {}", e))?;
         Ok(reader)
