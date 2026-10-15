@@ -51,7 +51,7 @@ pub struct Cli {
     #[arg(long, hide = true)]
     pub no_merge: bool,
 
-    /// Explicit expected genome size in base pairs (e.g. 4640000). When provided with --depth, enables calibrated subsampling.
+    /// Explicit expected genome size in base pairs (e.g. 4640000). Provides genome size prior for memory allocation and estimators.
     #[arg(long)]
     pub genome_size: Option<u64>,
 

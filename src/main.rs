@@ -64,93 +64,108 @@ fn main() -> Result<()> {
     let t_s1 = Instant::now();
     let estimate = estimate_genome(&args.r1, &args.r2, 250_000, args.depth)?;
 
-    // C1b-3 Safe Subsampling Policy:
-    // Subsampling is executed when:
-    // 1) Explicit --genome-size is provided (user-guided cap)
-    // 2) --enable-auto-subsample is set AND estimator confidence is HIGH
-    // If estimator confidence is LOW_COVERAGE_WARNING or UNRELIABLE, auto-subsampling
-    // is safely intercepted and downgraded to 100% data retention.
+    // B2-C1b-3B Decoupled Subsampling Policy:
+    // 1) --no-subsample has highest priority -> 100% data retention.
+    // 2) Subsampling is ONLY executed when explicitly requested via --enable-auto-subsample.
+    //    Passing --genome-size or --depth alone provides priors/configuration, but NEVER discards reads.
+    // 3) When --enable-auto-subsample is active:
+    //    - If an explicit --genome-size (> 0) is provided, coverage is calculated against explicit_g.
+    //    - Otherwise, coverage is calculated from HLL estimator.
+    //    - If estimator confidence is LOW_COVERAGE_WARNING or UNRELIABLE, auto-subsampling
+    //      is safely intercepted and downgraded to 100% data retention.
     let (subsample_factor, subsampling_enabled, subsampling_reason) = if args.no_subsample {
         (1.0, false, "EXPLICIT_NO_SUBSAMPLE_FLAG".to_string())
-    } else if let Some(explicit_g) = args.genome_size {
-        if explicit_g == 0 {
-            (1.0, false, "EXPLICIT_GENOME_SIZE_ZERO_INVALID".to_string())
-        } else {
-            // Compute library coverage against explicit user-provided genome size
-            let explicit_cov = estimate.total_bases as f64 / (explicit_g as f64);
-            if args.depth > 0.0 && explicit_cov > 1.1 * args.depth {
-                let factor = (args.depth / explicit_cov).clamp(0.01, 1.0);
-                (
-                    factor,
-                    true,
-                    format!("EXPLICIT_GENOME_SIZE_CAP (cov={:.1}x > target={:.1}x, factor={:.4})", explicit_cov, args.depth, factor),
-                )
-            } else {
-                (
-                    1.0,
-                    false,
-                    format!("EXPLICIT_GENOME_SIZE_WITHIN_TARGET (cov={:.1}x <= target={:.1}x)", explicit_cov, args.depth),
-                )
-            }
-        }
     } else if args.enable_auto_subsample {
-        match estimate.confidence {
-            EstimatorConfidence::High => {
-                let est_cov = estimate.estimated_cov;
-                if args.depth > 0.0 && est_cov > 1.1 * args.depth {
-                    let factor = (args.depth / est_cov).clamp(0.01, 1.0);
+        if let Some(explicit_g) = args.genome_size {
+            if explicit_g == 0 {
+                (1.0, false, "EXPLICIT_GENOME_SIZE_ZERO_INVALID".to_string())
+            } else {
+                let explicit_cov = estimate.total_bases as f64 / (explicit_g as f64);
+                if args.depth > 0.0 && explicit_cov > 1.1 * args.depth {
+                    let factor = (args.depth / explicit_cov).clamp(0.01, 1.0);
                     info!(
-                        "[AUTO_SUBSAMPLE] High estimator confidence (est_cov={:.1}x > target={:.1}x). Auto-subsampling factor={:.4}",
-                        est_cov, args.depth, factor
+                        "[AUTO_SUBSAMPLE] User-guided genome size cap (cov={:.1}x > target={:.1}x). Subsampling factor={:.4}",
+                        explicit_cov, args.depth, factor
                     );
                     (
                         factor,
                         true,
-                        format!(
-                            "AUTO_SUBSAMPLE_HIGH_CONFIDENCE (est_cov={:.1}x > target={:.1}x, factor={:.4})",
-                            est_cov, args.depth, factor
-                        ),
+                        format!("AUTO_SUBSAMPLE_EXPLICIT_GENOME_SIZE (cov={:.1}x > target={:.1}x, factor={:.4})", explicit_cov, args.depth, factor),
                     )
                 } else {
                     info!(
-                        "[AUTO_SUBSAMPLE] High estimator confidence, but library coverage ({:.1}x) is within target ({:.1}x). Subsampling bypassed.",
-                        est_cov, args.depth
+                        "[AUTO_SUBSAMPLE] User-guided genome size, but library coverage ({:.1}x) is within target ({:.1}x). Subsampling bypassed.",
+                        explicit_cov, args.depth
                     );
                     (
                         1.0,
                         false,
-                        format!(
-                            "AUTO_SUBSAMPLE_HIGH_CONFIDENCE_WITHIN_TARGET (est_cov={:.1}x <= target={:.1}x)",
-                            est_cov, args.depth
-                        ),
+                        format!("AUTO_SUBSAMPLE_EXPLICIT_GENOME_SIZE_WITHIN_TARGET (cov={:.1}x <= target={:.1}x)", explicit_cov, args.depth),
                     )
                 }
             }
-            EstimatorConfidence::LowCoverageWarning => {
-                warn!(
-                    "[SAFETY_GUARD] Auto-subsampling intercepted: Estimator confidence is LOW_COVERAGE_WARNING (est_cov={:.1}x, solid_depth={:.2}x). Subsampling safely downgraded to 100% data retention.",
-                    estimate.estimated_cov, estimate.sample_kmer_depth
-                );
-                (
-                    1.0,
-                    false,
-                    "AUTO_SUBSAMPLE_INTERCEPTED_LOW_COVERAGE_WARNING".to_string(),
-                )
-            }
-            EstimatorConfidence::Unreliable => {
-                warn!(
-                    "[SAFETY_GUARD] Auto-subsampling intercepted: Estimator confidence is UNRELIABLE (est_cov={:.1}x). Subsampling safely downgraded to 100% data retention.",
-                    estimate.estimated_cov
-                );
-                (
-                    1.0,
-                    false,
-                    "AUTO_SUBSAMPLE_INTERCEPTED_UNRELIABLE".to_string(),
-                )
+        } else {
+            match estimate.confidence {
+                EstimatorConfidence::High => {
+                    let est_cov = estimate.estimated_cov;
+                    if args.depth > 0.0 && est_cov > 1.1 * args.depth {
+                        let factor = (args.depth / est_cov).clamp(0.01, 1.0);
+                        info!(
+                            "[AUTO_SUBSAMPLE] High estimator confidence (est_cov={:.1}x > target={:.1}x). Auto-subsampling factor={:.4}",
+                            est_cov, args.depth, factor
+                        );
+                        (
+                            factor,
+                            true,
+                            format!(
+                                "AUTO_SUBSAMPLE_HIGH_CONFIDENCE (est_cov={:.1}x > target={:.1}x, factor={:.4})",
+                                est_cov, args.depth, factor
+                            ),
+                        )
+                    } else {
+                        info!(
+                            "[AUTO_SUBSAMPLE] High estimator confidence, but library coverage ({:.1}x) is within target ({:.1}x). Subsampling bypassed.",
+                            est_cov, args.depth
+                        );
+                        (
+                            1.0,
+                            false,
+                            format!(
+                                "AUTO_SUBSAMPLE_HIGH_CONFIDENCE_WITHIN_TARGET (est_cov={:.1}x <= target={:.1}x)",
+                                est_cov, args.depth
+                            ),
+                        )
+                    }
+                }
+                EstimatorConfidence::LowCoverageWarning => {
+                    warn!(
+                        "[SAFETY_GUARD] Auto-subsampling intercepted: Estimator confidence is LOW_COVERAGE_WARNING (est_cov={:.1}x, solid_depth={:.2}x). Subsampling safely downgraded to 100% data retention.",
+                        estimate.estimated_cov, estimate.sample_kmer_depth
+                    );
+                    (
+                        1.0,
+                        false,
+                        "AUTO_SUBSAMPLE_INTERCEPTED_LOW_COVERAGE_WARNING".to_string(),
+                    )
+                }
+                EstimatorConfidence::Unreliable => {
+                    warn!(
+                        "[SAFETY_GUARD] Auto-subsampling intercepted: Estimator confidence is UNRELIABLE (est_cov={:.1}x). Subsampling safely downgraded to 100% data retention.",
+                        estimate.estimated_cov
+                    );
+                    (
+                        1.0,
+                        false,
+                        "AUTO_SUBSAMPLE_INTERCEPTED_UNRELIABLE".to_string(),
+                    )
+                }
             }
         }
+    } else if args.genome_size.is_some() {
+        info!("[SUBSAMPLE] Prior genome size specified without --enable-auto-subsample. Retaining 100% reads for assembly.");
+        (1.0, false, "GENOME_SIZE_PRIOR_PROVIDED_SUBSAMPLING_NOT_ENABLED".to_string())
     } else {
-        // Safe Default: Subsampling is disabled unless explicitly requested via --enable-auto-subsample or --genome-size
+        // Safe Default: Subsampling is disabled unless explicitly requested via --enable-auto-subsample
         (1.0, false, "DISABLED_BY_DEFAULT_SAFE_FALLBACK".to_string())
     };
 
