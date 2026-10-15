@@ -281,7 +281,7 @@ pub fn ingest_reads<P: AsRef<Path>>(
     ingest_reads_ext(r1_path, r2_path, subsample_factor, min_len, min_qual, true, true).map(|(bank, _)| bank)
 }
 
-/// Configurable read ingest with optional trimming, merging, and detailed statistics tracking.
+/// Configurable read ingest with optional trimming, merging, and detailed statistics tracking (seed = 0).
 pub fn ingest_reads_ext<P: AsRef<Path>>(
     r1_path: P,
     r2_path: P,
@@ -290,6 +290,29 @@ pub fn ingest_reads_ext<P: AsRef<Path>>(
     min_qual: u8,
     enable_trim: bool,
     enable_merge: bool,
+) -> Result<(ReadBank, IngestStats)> {
+    ingest_reads_ext_with_seed(
+        r1_path,
+        r2_path,
+        subsample_factor,
+        min_len,
+        min_qual,
+        enable_trim,
+        enable_merge,
+        0,
+    )
+}
+
+/// Configurable read ingest with optional trimming, merging, detailed statistics tracking, and custom PRNG seed.
+pub fn ingest_reads_ext_with_seed<P: AsRef<Path>>(
+    r1_path: P,
+    r2_path: P,
+    subsample_factor: f64,
+    min_len: usize,
+    min_qual: u8,
+    enable_trim: bool,
+    enable_merge: bool,
+    seed: u64,
 ) -> Result<(ReadBank, IngestStats)> {
     let mut r1_reader = open_fastx(&r1_path)?;
     let mut r2_reader = open_fastx(&r2_path)?;
@@ -318,7 +341,7 @@ pub fn ingest_reads_ext<P: AsRef<Path>>(
                 stats.bases_before_trim += s1.len() + s2.len();
 
                 if should_subsample {
-                    let rand_val = splitmix64(pair_idx);
+                    let rand_val = splitmix64(pair_idx ^ seed);
                     if rand_val > keep_threshold {
                         continue;
                     }

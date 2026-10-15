@@ -412,7 +412,7 @@ pub fn estimate_genome<P: AsRef<Path>>(
         EstimatorConfidence::High
     };
 
-    let subsample_factor = if target_cov > 0.0 && estimated_cov > 1.1 * target_cov {
+    let subsample_factor = if target_cov > 0.0 && estimated_cov > 1.5 * target_cov {
         (target_cov / estimated_cov).clamp(0.01, 1.0)
     } else {
         1.0

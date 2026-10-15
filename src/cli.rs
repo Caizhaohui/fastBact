@@ -63,6 +63,14 @@ pub struct Cli {
     #[arg(long, default_value_t = false)]
     pub no_subsample: bool,
 
+    /// Threshold multiplier for coverage auto-subsampling trigger (default: 1.5)
+    #[arg(long, default_value_t = 1.5, hide = true)]
+    pub subsample_threshold_ratio: f64,
+
+    /// Random seed for depth subsampling (default: 0)
+    #[arg(long, default_value_t = 0)]
+    pub subsample_seed: u64,
+
     /// Bypass tip clipping in simplify_graph
     #[arg(long, hide = true)]
     pub no_tip_clip: bool,
