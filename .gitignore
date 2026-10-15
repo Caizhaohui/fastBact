@@ -6,3 +6,5 @@ shovill-master/
 logs/
 *.log
 gemini-*.md
+__pycache__/
+*.pyc
