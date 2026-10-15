@@ -10,6 +10,7 @@
 use crate::common::bitseq::{
     rev_comp_word, ASCII_TO_2BIT, COMPLEMENT_2BIT, TWO_BIT_TO_ASCII,
 };
+pub use crate::common::sketch::splitmix64;
 use std::fmt::Debug;
 use std::hash::Hash;
 
@@ -466,6 +467,12 @@ impl RollingNtHash {
     #[inline(always)]
     pub fn canonical(&self) -> u64 {
         self.h_fwd.min(self.h_rev)
+    }
+
+    /// Returns canonical hash mixed via SplitMix64 for unbiased uniform distribution.
+    #[inline(always)]
+    pub fn canonical_mixed(&self) -> u64 {
+        splitmix64(self.canonical())
     }
 }
 

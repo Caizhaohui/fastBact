@@ -103,14 +103,17 @@ fn main() -> Result<()> {
         (1.0, false, "DISABLED_BY_DEFAULT_C1A_SAFE_FALLBACK".to_string())
     };
 
-    info!("--- Input Sequencing Statistics (C1b-1 Exact Count) ---");
+    info!("--- Input Sequencing Statistics (C1b-2 Calibrated Ingest) ---");
     info!("  exact_read_pairs: {}", estimate.exact_read_pairs);
     info!("  total_bases: {} bp", estimate.total_bases);
     info!("  median_read_len: {} bp", estimate.median_read_len);
     info!("  max_read_len: {} bp", estimate.max_read_len);
-    info!("  estimated_genome_size: {} bp (HLL_UNCALIBRATED)", estimate.genome_size);
-    info!("  estimated_coverage: {:.1}x (HLL_UNCALIBRATED)", estimate.estimated_cov);
-    info!("--- Subsampling Policy (C1a/C1b-1 Safe Fallback) ---");
+    info!("  estimated_genome_size: {} bp", estimate.genome_size);
+    info!("  estimated_coverage: {:.1}x", estimate.estimated_cov);
+    info!("  estimator_confidence: {}", estimate.confidence);
+    info!("  solid_unique_kmers_u2: {}", estimate.u_ge_2);
+    info!("  sample_solid_kmer_depth: {:.2}x", estimate.sample_kmer_depth);
+    info!("--- Subsampling Policy (C1a/C1b-2 Safe Fallback) ---");
     info!("  subsampling_enabled: {}", subsampling_enabled);
     info!("  subsampling_reason: {}", subsampling_reason);
     info!("  subsample_factor: {:.4}", subsample_factor);
@@ -372,8 +375,9 @@ fn main() -> Result<()> {
             subsampling_enabled,
             subsampling_reason: subsampling_reason.clone(),
             estimated_genome_size: estimate.genome_size,
-            estimated_genome_size_note: "UNTOUCHED_V0.1.0_ESTIMATOR".into(),
+            estimated_genome_size_note: "C1B2_HLL_SPLITMIX64_POISSON_CALIBRATED".into(),
             estimated_coverage: estimate.estimated_cov,
+            estimator_confidence: estimate.confidence.to_string(),
             actual_input_pairs: ingest_stats.input_read_pairs,
             actual_retained_pairs: ingest_stats.retained_read_pairs,
         };

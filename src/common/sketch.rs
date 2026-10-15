@@ -62,6 +62,13 @@ impl HyperLogLog {
         }
     }
 
+    /// Adds a raw canonical k-mer hash into the sketch, applying SplitMix64 avalanche
+    /// mixing to eliminate min(h_fwd, h_rev) left-skew and ensure unbiased uniform distribution.
+    #[inline(always)]
+    pub fn add_canonical_hash(&mut self, canonical_hash: u64) {
+        self.add_hash(splitmix64(canonical_hash));
+    }
+
     /// Merges another HyperLogLog sketch into `self`.
     pub fn merge(&mut self, other: &Self) {
         assert_eq!(self.registers.len(), other.registers.len());
@@ -316,5 +323,70 @@ mod tests {
         }
 
         assert_eq!(cms.estimate(12345), (num_threads * iters_per_thread) as u8);
+    }
+
+    #[test]
+    fn test_hll_splitmix64_uniformity_vs_raw_min() {
+        // Controlled experiment demonstrating the min(X,Y) left-skew collapse
+        // and its complete resolution via SplitMix64 finalizer.
+        let mut hll_raw = HyperLogLog::new();
+        let mut hll_fixed = HyperLogLog::new();
+        let n = 200_000usize;
+
+        for i in 0..n {
+            // Two pseudo-random independent hash values representing h_fwd and h_rev
+            let h_fwd = splitmix64(0x1234_5678_9ABC_DEF0 ^ (i as u64));
+            let h_rev = splitmix64(0xFEDC_BA98_7654_3210 ^ (i as u64));
+            let raw_min = h_fwd.min(h_rev);
+
+            hll_raw.add_hash(raw_min);
+            hll_fixed.add_canonical_hash(raw_min);
+        }
+
+        let est_raw = hll_raw.estimate();
+        let err_raw = (est_raw - n as f64) / (n as f64);
+
+        let est_fixed = hll_fixed.estimate();
+        let err_fixed = (est_fixed - n as f64).abs() / (n as f64);
+
+        // Raw min(X, Y) causes severe left-skew underestimation (-71% theoretical)
+        assert!(
+            err_raw < -0.50,
+            "Expected raw min(X,Y) hash to collapse by >50%, got err={:.4}",
+            err_raw
+        );
+
+        // SplitMix64 restores strictly uniform distribution with error <= 2.5%
+        assert!(
+            err_fixed <= 0.025,
+            "Expected fixed HLL error <= 2.5%, got est={}, err={:.4}",
+            est_fixed,
+            err_fixed
+        );
+    }
+
+    #[test]
+    fn test_hll_multi_scale_cardinality() {
+        // Multi-scale cardinality verification (50k, 200k, 1M, 2.5M)
+        let scales = [50_000usize, 200_000usize, 1_000_000usize, 2_500_000usize];
+
+        for &n in &scales {
+            let mut hll = HyperLogLog::new();
+            for i in 0..n {
+                let h_fwd = splitmix64(0xABCD_EF01_2345_6789 ^ (i as u64));
+                let h_rev = splitmix64(0x9876_5432_10FE_DCBA ^ (i as u64));
+                let raw_min = h_fwd.min(h_rev);
+                hll.add_canonical_hash(raw_min);
+            }
+            let est = hll.estimate();
+            let err = (est - n as f64).abs() / (n as f64);
+            assert!(
+                err <= 0.025,
+                "Scale N={}: error {:.4} exceeded 2.5% tolerance (est={})",
+                n,
+                err,
+                est
+            );
+        }
     }
 }

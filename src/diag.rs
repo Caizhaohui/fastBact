@@ -40,6 +40,7 @@ pub struct IngestTelemetry {
     pub estimated_genome_size: u64,
     pub estimated_genome_size_note: String,
     pub estimated_coverage: f64,
+    pub estimator_confidence: String,
     pub actual_input_pairs: usize,
     pub actual_retained_pairs: usize,
 }
@@ -254,6 +255,7 @@ pub fn write_stage_telemetry_json<P: AsRef<Path>>(
     writeln!(writer, "  \"estimated_genome_size\": {},", ingest.estimated_genome_size)?;
     writeln!(writer, "  \"estimated_genome_size_note\": \"{}\",", ingest.estimated_genome_size_note)?;
     writeln!(writer, "  \"estimated_coverage\": {:.2},", ingest.estimated_coverage)?;
+    writeln!(writer, "  \"estimator_confidence\": \"{}\",", ingest.estimator_confidence)?;
     writeln!(writer, "  \"actual_input_pairs\": {},", ingest.actual_input_pairs)?;
     writeln!(writer, "  \"actual_retained_pairs\": {},", ingest.actual_retained_pairs)?;
 

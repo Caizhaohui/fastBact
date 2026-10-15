@@ -4,9 +4,30 @@
 //! and initial k-mer cardinality profiling via HyperLogLog and Count-Min Sketch.
 
 use crate::common::kmer::RollingNtHash;
-use crate::common::sketch::{CountMinSketch, HyperLogLog};
+use crate::common::sketch::{splitmix64, CountMinSketch, HyperLogLog};
 use anyhow::Result;
 use std::path::Path;
+
+/// Confidence state of genome size and depth estimation.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum EstimatorConfidence {
+    /// High confidence: ample solid depth (D_k >= 20x) and clean solid k-mer spectrum.
+    High,
+    /// Low coverage warning: marginal solid depth (5x <= D_k < 20x); higher Poisson truncation variance.
+    LowCoverageWarning,
+    /// Unreliable: insufficient coverage (D_k < 5x), excessive error rate, or tiny dataset.
+    Unreliable,
+}
+
+impl std::fmt::Display for EstimatorConfidence {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            EstimatorConfidence::High => write!(f, "HIGH"),
+            EstimatorConfidence::LowCoverageWarning => write!(f, "LOW_COVERAGE_WARNING"),
+            EstimatorConfidence::Unreliable => write!(f, "UNRELIABLE"),
+        }
+    }
+}
 
 /// Statistics from exact streaming FASTQ parsing.
 #[derive(Clone, Debug, PartialEq)]
@@ -48,6 +69,14 @@ pub struct GenomeEstimate {
     pub subsample_factor: f64,
     /// Dynamic odd multi-k schedule
     pub kmers: Vec<usize>,
+    /// Confidence classification of the estimation
+    pub confidence: EstimatorConfidence,
+    /// HLL cardinality of all distinct k-mers (c >= 1)
+    pub u_ge_1: u64,
+    /// HLL cardinality of solid distinct k-mers (c >= 2)
+    pub u_ge_2: u64,
+    /// Average k-mer depth across solid k-mers in the sample window
+    pub sample_kmer_depth: f64,
 }
 
 /// Extracts read identifier prefix for paired-end synchronization checks.
@@ -260,16 +289,18 @@ pub fn estimate_genome<P: AsRef<Path>>(
     // 1. Perform exact, zero-bias streaming counting of all read pairs and bases
     let count_stats = count_fastx_exact(&r1_path, &r2_path)?;
 
-    // 2. Sample initial reads for HLL solid k-mers (C1b-1 maintains untouched HLL logic until C1b-2)
+    // 2. Sample initial reads for dual HyperLogLog (total U>=1 and solid U>=2) and Count-Min Sketch
     let mut r1_reader = crate::ingest::trim_merge::open_fastx(&r1_path)?;
     let mut r2_reader = crate::ingest::trim_merge::open_fastx(&r2_path)?;
 
     let k = 21;
+    let mut hll_total = HyperLogLog::new();
     let mut hll_solid = HyperLogLog::new();
-    let cms = CountMinSketch::new(1 << 20);
+    // 1 << 23 width = 8,388,608 slots per row (16 MB RAM total), ensuring minimal collision inflation
+    let cms = CountMinSketch::new(1 << 23);
 
-    let sample_target = max_pairs.min(50_000).min(count_stats.exact_read_pairs);
-    let mut sampled_bases: u64 = 0;
+    let sample_target = max_pairs.min(150_000).min(count_stats.exact_read_pairs);
+    let mut m_sample: u64 = 0;
     let mut pair_count = 0usize;
 
     while pair_count < sample_target {
@@ -281,39 +312,62 @@ pub fn estimate_genome<P: AsRef<Path>>(
                 pair_count += 1;
                 let s1 = rec1.seq();
                 let s2 = rec2.seq();
-                sampled_bases += s1.len() as u64 + s2.len() as u64;
 
-                // Process k-mers in R1 using rolling ntHash
+                // Process k-mers in R1 using rolling ntHash with splitmix64 mixing
                 if s1.len() >= k {
+                    m_sample += (s1.len() - k + 1) as u64;
                     let mut rolling = RollingNtHash::new(&s1[..k]);
-                    let h = rolling.canonical();
-                    let c = cms.add_and_estimate(h);
-                    if c == 2 {
-                        hll_solid.add_hash(h);
+                    let raw = rolling.canonical();
+                    let c = cms.add_and_estimate(raw);
+                    let mixed = splitmix64(raw);
+                    hll_total.add_hash(mixed);
+                    if c >= 2 {
+                        hll_solid.add_hash(mixed);
                     }
                     for i in k..s1.len() {
-                        let h = rolling.roll(s1[i - k], s1[i]);
-                        let c = cms.add_and_estimate(h);
-                        if c == 2 {
-                            hll_solid.add_hash(h);
+                        let raw = rolling.roll(s1[i - k], s1[i]);
+                        let c = cms.add_and_estimate(raw);
+                        let mixed = splitmix64(raw);
+                        hll_total.add_hash(mixed);
+                        if c >= 2 {
+                            hll_solid.add_hash(mixed);
                         }
                     }
                 }
 
-                // Process k-mers in R2 using rolling ntHash
+                // Process k-mers in R2 using rolling ntHash with splitmix64 mixing
                 if s2.len() >= k {
+                    m_sample += (s2.len() - k + 1) as u64;
                     let mut rolling = RollingNtHash::new(&s2[..k]);
-                    let h = rolling.canonical();
-                    let c = cms.add_and_estimate(h);
-                    if c == 2 {
-                        hll_solid.add_hash(h);
+                    let raw = rolling.canonical();
+                    let c = cms.add_and_estimate(raw);
+                    let mixed = splitmix64(raw);
+                    hll_total.add_hash(mixed);
+                    if c >= 2 {
+                        hll_solid.add_hash(mixed);
                     }
                     for i in k..s2.len() {
-                        let h = rolling.roll(s2[i - k], s2[i]);
-                        let c = cms.add_and_estimate(h);
-                        if c == 2 {
-                            hll_solid.add_hash(h);
+                        let raw = rolling.roll(s2[i - k], s2[i]);
+                        let c = cms.add_and_estimate(raw);
+                        let mixed = splitmix64(raw);
+                        hll_total.add_hash(mixed);
+                        if c >= 2 {
+                            hll_solid.add_hash(mixed);
                         }
+                    }
+                }
+
+                // Adaptive sampling: if solid k-mer sample depth lambda_s >= 15.0,
+                // the sample has reached sufficient Poisson saturation (>99.99% of genome is solid c>=2)
+                // Stop sampling early to avoid accumulating recurrent sequencing errors into c>=2.
+                if pair_count >= 5_000 && pair_count % 2_000 == 0 {
+                    let u1 = hll_total.estimate().round() as u64;
+                    let u2 = hll_solid.estimate().round() as u64;
+                    let e1 = u1.saturating_sub(u2);
+                    let m_tr = m_sample.saturating_sub(e1);
+                    let lam = if u2 > 0 { m_tr as f64 / u2 as f64 } else { 0.0 };
+                    if lam >= 15.0 {
+                        break;
                     }
                 }
             }
@@ -321,13 +375,42 @@ pub fn estimate_genome<P: AsRef<Path>>(
         }
     }
 
-    let mut est_g = hll_solid.estimate() as u64;
-    if est_g < 10_000 {
-        est_g = est_g.max((sampled_bases / 30).max(50_000));
+    if pair_count == 0 {
+        anyhow::bail!("Input FASTQ files contain 0 valid read pairs");
     }
 
-    // Zero-extrapolation: use literal exact total bases from count_stats
+    // 3. Compute distinct cardinality and zero/one-truncated Poisson genome size
+    let u_ge_1 = hll_total.estimate().round() as u64;
+    let u_ge_2 = hll_solid.estimate().round() as u64;
+    let e_1 = u_ge_1.saturating_sub(u_ge_2);
+    let m_true = m_sample.saturating_sub(e_1);
+    let lambda_s = if u_ge_2 > 0 { m_true as f64 / u_ge_2 as f64 } else { 0.0 };
+
+    // Zero/one-truncated Poisson correction:
+    // P(X >= 2) = 1 - (1 + lambda_s) * exp(-lambda_s)
+    let p_ge_2 = 1.0 - (1.0 + lambda_s) * (-lambda_s).exp();
+    let mut est_g = if p_ge_2 > 0.05 {
+        (u_ge_2 as f64 / p_ge_2).round() as u64
+    } else {
+        u_ge_2.max(10_000)
+    };
+    if est_g < 10_000 {
+        est_g = 10_000;
+    }
+
+    // Full library estimated sequencing coverage
     let estimated_cov = count_stats.total_bases as f64 / (est_g as f64);
+    let d_k = estimated_cov * ((count_stats.mean_read_len - k as f64 + 1.0) / count_stats.mean_read_len);
+    let solid_ratio = if u_ge_1 > 0 { u_ge_2 as f64 / u_ge_1 as f64 } else { 0.0 };
+
+    // Confidence state machine
+    let confidence = if d_k < 5.0 || solid_ratio < 0.05 || u_ge_2 < 1_000 {
+        EstimatorConfidence::Unreliable
+    } else if d_k < 20.0 || solid_ratio < 0.15 {
+        EstimatorConfidence::LowCoverageWarning
+    } else {
+        EstimatorConfidence::High
+    };
 
     let subsample_factor = if target_cov > 0.0 && estimated_cov > 1.1 * target_cov {
         (target_cov / estimated_cov).clamp(0.01, 1.0)
@@ -346,6 +429,10 @@ pub fn estimate_genome<P: AsRef<Path>>(
         estimated_cov,
         subsample_factor,
         kmers,
+        confidence,
+        u_ge_1,
+        u_ge_2,
+        sample_kmer_depth: lambda_s,
     })
 }
 

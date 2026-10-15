@@ -1,0 +1,19 @@
+genome_scale	gc_target	true_len_bp	exact_distinct_kmers	raw_min_hll_est	raw_error_pct	splitmix64_hll_est	fixed_error_pct	gate_verdict
+50 kb (Plasmid/Phage)	30% GC (AT-rich)	50000	49980	29675	-40.63%	50265	0.57%	PASS
+50 kb (Plasmid/Phage)	50% GC (Balanced)	50000	49980	29553	-40.87%	50560	1.16%	PASS
+50 kb (Plasmid/Phage)	70% GC (GC-rich)	50000	49980	29547	-40.88%	50257	0.55%	PASS
+200 kb (S1 Scale)	30% GC (AT-rich)	200000	199980	97746	-51.12%	200165	0.09%	PASS
+200 kb (S1 Scale)	50% GC (Balanced)	200000	199980	96791	-51.60%	197595	-1.19%	PASS
+200 kb (S1 Scale)	70% GC (GC-rich)	200000	199979	96912	-51.54%	198324	-0.83%	PASS
+1.0 Mb (Mycoplasma)	30% GC (AT-rich)	1000000	999975	345139	-65.49%	1008248	0.83%	PASS
+1.0 Mb (Mycoplasma)	50% GC (Balanced)	1000000	999980	345935	-65.41%	1006704	0.67%	PASS
+1.0 Mb (Mycoplasma)	70% GC (GC-rich)	1000000	999975	353499	-64.65%	1002992	0.30%	PASS
+2.5 Mb (S. aureus)	30% GC (AT-rich)	2500000	2499943	768722	-69.25%	2498788	-0.05%	PASS
+2.5 Mb (S. aureus)	50% GC (Balanced)	2500000	2499974	749708	-70.01%	2500944	0.04%	PASS
+2.5 Mb (S. aureus)	70% GC (GC-rich)	2500000	2499949	719629	-71.21%	2462939	-1.48%	PASS
+4.65 Mb (E. coli)	30% GC (AT-rich)	4650000	4649841	1332771	-71.34%	4622894	-0.58%	PASS
+4.65 Mb (E. coli)	50% GC (Balanced)	4650000	4649971	1265985	-72.77%	4669470	0.42%	PASS
+4.65 Mb (E. coli)	70% GC (GC-rich)	4650000	4649871	1332637	-71.34%	4631490	-0.40%	PASS
+8.0 Mb (Streptomyces)	30% GC (AT-rich)	8000000	7999608	2022335	-74.72%	7953536	-0.58%	PASS
+8.0 Mb (Streptomyces)	50% GC (Balanced)	8000000	7999954	1996866	-75.04%	8101574	1.27%	PASS
+8.0 Mb (Streptomyces)	70% GC (GC-rich)	8000000	7999622	1979073	-75.26%	8079205	0.99%	PASS
