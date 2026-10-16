@@ -3,7 +3,7 @@
 //! Traverses across repeats longer than k_max using paired-end read insert size constraints,
 //! connecting unique flanking unitigs across repetitive regions.
 
-use crate::graph::cdbg::{CdbgGraph, DirUnitigId, UnitigNode};
+use crate::graph::cdbg::{CdbgGraph, DirUnitigId, GraphEdge, UnitigNode};
 use crate::resolve::mapper::{InsertSizeDist, PairLinkMatrix};
 use hashbrown::HashSet;
 
@@ -25,13 +25,119 @@ impl Default for ExspanderParams {
     }
 }
 
+/// Statistics tracking junction operations and correctness decisions in exSPAnder.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct JunctionStats {
+    /// Successfully spliced joins with exact k overlap
+    pub valid_k_joins: usize,
+    /// Successfully spliced joins with exact (k - 1) overlap
+    pub valid_k_minus_1_joins: usize,
+    /// Successfully spliced joins with other validated overlap
+    pub valid_other_joins: usize,
+    /// Joins rejected due to ambiguous edge selection (e.g. tied support)
+    pub rejected_ambiguous_joins: usize,
+    /// Joins rejected due to sequence mismatch or invalid overlap
+    pub rejected_invalid_joins: usize,
+}
+
+/// Internal path step preserving directed unitig identity, chosen incoming edge,
+/// validated overlap, and supporting evidence.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct PathStep {
+    /// Directed stranded unitig ID.
+    pub dir: DirUnitigId,
+    /// Edge chosen when entering this unitig from the preceding step (None for seed/start).
+    pub incoming_edge: Option<GraphEdge>,
+    /// Validated overlap length in bp between preceding unitig and this unitig.
+    pub overlap: usize,
+    /// Supporting evidence score (paired-end link support or transition count).
+    pub support: u32,
+}
+
+/// Result of evaluating edge candidates between two directed unitigs.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum EdgeResolveResult {
+    /// Exactly one unambiguous edge matches actual sequence suffix/prefix.
+    Valid(GraphEdge),
+    /// Multiple edges match sequence with tied support (insufficient evidence).
+    Ambiguous,
+    /// Edge(s) exist but sequence suffix/prefix does not match recorded overlap.
+    InvalidSequenceOverlap,
+    /// No edge exists in graph.
+    NoEdge,
+}
+
+/// Resolves the directed edge from `curr_dir` to `target_dir` with explicit, auditable criteria:
+/// 1. Finds all candidate edges from `curr_dir` to `target_dir`.
+/// 2. Verifies whether each candidate edge's recorded overlap matches the actual stranded sequence suffix and prefix.
+/// 3. If multiple edges match at sequence level (e.g. k and k-1 in homopolymers or tandem motifs):
+///    - Compares edge transition support counts.
+///    - If one edge has strictly higher support, selects it.
+///    - If top edges have equal support, rejects as Ambiguous (no arbitrary choice based on list order).
+pub fn resolve_edge_between(
+    graph: &CdbgGraph,
+    curr_dir: DirUnitigId,
+    target_dir: DirUnitigId,
+) -> EdgeResolveResult {
+    let curr_node = &graph.nodes[curr_dir.id() as usize];
+    let candidate_edges: Vec<&GraphEdge> = curr_node
+        .edges(curr_dir.is_rc())
+        .iter()
+        .filter(|e| e.target == target_dir)
+        .collect();
+
+    if candidate_edges.is_empty() {
+        return EdgeResolveResult::NoEdge;
+    }
+
+    let u_seq = graph.get_stranded_seq(curr_dir);
+    let v_seq = graph.get_stranded_seq(target_dir);
+
+    let valid_seq_edges: Vec<&GraphEdge> = candidate_edges
+        .into_iter()
+        .filter(|e| {
+            let ov = e.overlap_k as usize;
+            if ov == 0 || ov > u_seq.len() || ov > v_seq.len() {
+                false
+            } else {
+                u_seq[u_seq.len() - ov..] == v_seq[..ov]
+            }
+        })
+        .collect();
+
+    if valid_seq_edges.is_empty() {
+        return EdgeResolveResult::InvalidSequenceOverlap;
+    }
+
+    if valid_seq_edges.len() == 1 {
+        return EdgeResolveResult::Valid(*valid_seq_edges[0]);
+    }
+
+    // Multiple edges match sequence: inspect read support
+    let max_support = valid_seq_edges.iter().map(|e| e.support).max().unwrap_or(0);
+    let best_edges: Vec<&GraphEdge> = valid_seq_edges
+        .into_iter()
+        .filter(|e| e.support == max_support)
+        .collect();
+
+    if best_edges.len() == 1 {
+        EdgeResolveResult::Valid(*best_edges[0])
+    } else {
+        EdgeResolveResult::Ambiguous
+    }
+}
+
+/// Extends path from `curr_dir` in one direction using paired-end read constraints
+/// while recording the exact `PathStep` for every transition.
 fn extend_one_direction(
     mut curr_dir: DirUnitigId,
     graph: &CdbgGraph,
     matrix: &PairLinkMatrix,
     params: ExspanderParams,
     used_unique: &mut HashSet<u32>,
-) -> Vec<DirUnitigId> {
+    stats: &mut JunctionStats,
+    rejected_nodes: &mut HashSet<u32>,
+) -> Vec<PathStep> {
     let mut ext = Vec::new();
 
     loop {
@@ -42,34 +148,88 @@ fn extend_one_direction(
             break;
         }
 
-        // Case A: 1 outgoing edge
-        if outgoing.len() == 1 {
-            let target = outgoing[0].target;
+        // Collect distinct target nodes to prevent self-competition on duplicate overlap edges
+        let mut unique_targets = Vec::new();
+        for e in &outgoing {
+            if !unique_targets.contains(&e.target) {
+                unique_targets.push(e.target);
+            }
+        }
+
+        let mut valid_continuations = Vec::new();
+        for &target in &unique_targets {
+            match resolve_edge_between(graph, curr_dir, target) {
+                EdgeResolveResult::Valid(edge) => {
+                    valid_continuations.push((target, edge));
+                }
+                EdgeResolveResult::Ambiguous => {
+                    stats.rejected_ambiguous_joins += 1;
+                    rejected_nodes.insert(target.id());
+                }
+                EdgeResolveResult::InvalidSequenceOverlap => {
+                    stats.rejected_invalid_joins += 1;
+                    rejected_nodes.insert(target.id());
+                }
+                EdgeResolveResult::NoEdge => {}
+            }
+        }
+
+        if valid_continuations.is_empty() {
+            break;
+        }
+
+        // Case A: 1 valid outgoing continuation
+        if valid_continuations.len() == 1 {
+            let (target, edge_to_target) = valid_continuations[0];
             let target_node = &graph.nodes[target.id() as usize];
             if target_node.is_deleted || target_node.is_circular {
                 break;
             }
 
-            let next_edges = target_node.edges(target.is_rc()).clone();
-            if next_edges.len() > 1 {
+            let next_outgoing = target_node.edges(target.is_rc()).clone();
+            let mut next_unique_targets = Vec::new();
+            for e in &next_outgoing {
+                if !next_unique_targets.contains(&e.target) {
+                    next_unique_targets.push(e.target);
+                }
+            }
+
+            let mut next_continuations = Vec::new();
+            for &cand in &next_unique_targets {
+                match resolve_edge_between(graph, target, cand) {
+                    EdgeResolveResult::Valid(edge) => {
+                        next_continuations.push((cand, edge));
+                    }
+                    EdgeResolveResult::Ambiguous => {
+                        stats.rejected_ambiguous_joins += 1;
+                        rejected_nodes.insert(cand.id());
+                    }
+                    EdgeResolveResult::InvalidSequenceOverlap => {
+                        stats.rejected_invalid_joins += 1;
+                        rejected_nodes.insert(cand.id());
+                    }
+                    EdgeResolveResult::NoEdge => {}
+                }
+            }
+
+            if next_continuations.len() > 1 {
                 // Target is a branching repeat node! Evaluate candidates exiting the repeat
-                let mut best_cand: Option<DirUnitigId> = None;
+                let mut best_cand: Option<(DirUnitigId, GraphEdge)> = None;
                 let mut best_support = 0u32;
                 let mut second_support = 0u32;
 
-                for next_e in &next_edges {
-                    let cand = next_e.target;
+                for &(cand, edge) in &next_continuations {
                     let supp = matrix.get_support(curr_dir, cand);
                     if supp > best_support {
                         second_support = best_support;
                         best_support = supp;
-                        best_cand = Some(cand);
+                        best_cand = Some((cand, edge));
                     } else if supp > second_support {
                         second_support = supp;
                     }
                 }
 
-                if let Some(cand) = best_cand {
+                if let Some((cand, edge_target_to_cand)) = best_cand {
                     let ratio = if second_support > 0 {
                         (best_support as f64) / (second_support as f64)
                     } else {
@@ -79,15 +239,30 @@ fn extend_one_direction(
                     if best_support >= params.min_support && ratio >= params.decision_threshold {
                         if !used_unique.contains(&cand.id()) && !graph.nodes[cand.id() as usize].is_deleted {
                             used_unique.insert(cand.id());
-                            ext.push(target);
-                            ext.push(cand);
+                            ext.push(PathStep {
+                                dir: target,
+                                incoming_edge: Some(edge_to_target),
+                                overlap: edge_to_target.overlap_k as usize,
+                                support: edge_to_target.support as u32,
+                            });
+                            ext.push(PathStep {
+                                dir: cand,
+                                incoming_edge: Some(edge_target_to_cand),
+                                overlap: edge_target_to_cand.overlap_k as usize,
+                                support: best_support,
+                            });
                             curr_dir = cand;
                             continue;
                         }
                     }
                 }
+                // Exit repeat decision failed: protect target and candidate exit nodes
+                rejected_nodes.insert(target.id());
+                for &(cand, _) in &next_continuations {
+                    rejected_nodes.insert(cand.id());
+                }
                 break;
-            } else if next_edges.len() == 1 {
+            } else if next_continuations.len() == 1 {
                 // Unbranched continuation
                 if target_node.seq_len >= 500 {
                     if used_unique.contains(&target.id()) {
@@ -95,34 +270,43 @@ fn extend_one_direction(
                     }
                     used_unique.insert(target.id());
                 }
-                ext.push(target);
+                ext.push(PathStep {
+                    dir: target,
+                    incoming_edge: Some(edge_to_target),
+                    overlap: edge_to_target.overlap_k as usize,
+                    support: edge_to_target.support as u32,
+                });
                 curr_dir = target;
                 continue;
             } else {
                 // Dead end at target
-                ext.push(target);
+                ext.push(PathStep {
+                    dir: target,
+                    incoming_edge: Some(edge_to_target),
+                    overlap: edge_to_target.overlap_k as usize,
+                    support: edge_to_target.support as u32,
+                });
                 break;
             }
         }
 
         // Case B: multiple outgoing edges directly from curr_dir
-        let mut best_cand: Option<DirUnitigId> = None;
+        let mut best_cand: Option<(DirUnitigId, GraphEdge)> = None;
         let mut best_support = 0u32;
         let mut second_support = 0u32;
 
-        for e in &outgoing {
-            let cand = e.target;
+        for &(cand, edge) in &valid_continuations {
             let supp = matrix.get_support(curr_dir, cand);
             if supp > best_support {
                 second_support = best_support;
                 best_support = supp;
-                best_cand = Some(cand);
+                best_cand = Some((cand, edge));
             } else if supp > second_support {
                 second_support = supp;
             }
         }
 
-        if let Some(cand) = best_cand {
+        if let Some((cand, edge_to_cand)) = best_cand {
             let ratio = if second_support > 0 {
                 (best_support as f64) / (second_support as f64)
             } else {
@@ -134,28 +318,84 @@ fn extend_one_direction(
                     if graph.nodes[cand.id() as usize].seq_len >= 500 {
                         used_unique.insert(cand.id());
                     }
-                    ext.push(cand);
+                    ext.push(PathStep {
+                        dir: cand,
+                        incoming_edge: Some(edge_to_cand),
+                        overlap: edge_to_cand.overlap_k as usize,
+                        support: best_support,
+                    });
                     curr_dir = cand;
                     continue;
                 }
             }
         }
 
+        // Branching decision failed: protect candidate targets
+        for &(cand, _) in &valid_continuations {
+            rejected_nodes.insert(cand.id());
+        }
         break;
     }
 
     ext
 }
 
-/// Resolves repeats in `graph` using paired-end link constraints from `PairLinkMatrix`.
-pub fn resolve_repeats_exspander(
+/// Verifies path validity, node survival, edge orientations, and actual sequence overlaps,
+/// returning the fully spliced DNA sequence without mutating the graph.
+pub fn validate_and_splice_path(
+    graph: &CdbgGraph,
+    full_path: &[PathStep],
+) -> Result<Vec<u8>, &'static str> {
+    if full_path.len() <= 1 {
+        return Err("Path too short to splice");
+    }
+
+    // 1. Verify all constituent nodes are non-deleted and within bounds
+    for step in full_path {
+        let node_id = step.dir.id() as usize;
+        if node_id >= graph.nodes.len() {
+            return Err("Node ID out of bounds");
+        }
+        let node = &graph.nodes[node_id];
+        if node.is_deleted {
+            return Err("Path contains deleted node");
+        }
+    }
+
+    // 2. Validate orientations and base-by-base sequence overlaps
+    let mut assembled_seq = Vec::new();
+    for (idx, step) in full_path.iter().enumerate() {
+        let u_seq = graph.get_stranded_seq(step.dir);
+        if idx == 0 {
+            assembled_seq.extend_from_slice(&u_seq);
+        } else {
+            let ov = step.overlap;
+            if ov == 0 || ov > u_seq.len() || ov > assembled_seq.len() {
+                return Err("Invalid overlap length");
+            }
+            let assembled_suffix = &assembled_seq[assembled_seq.len() - ov..];
+            let next_prefix = &u_seq[..ov];
+            if assembled_suffix != next_prefix {
+                return Err("Sequence overlap mismatch at junction");
+            }
+            assembled_seq.extend_from_slice(&u_seq[ov..]);
+        }
+    }
+
+    Ok(assembled_seq)
+}
+
+/// Resolves repeats in `graph` using paired-end link constraints from `PairLinkMatrix`,
+/// returning comprehensive junction statistics.
+pub fn resolve_repeats_exspander_with_stats(
     graph: &mut CdbgGraph,
     matrix: &PairLinkMatrix,
     _dist: &InsertSizeDist,
     params: ExspanderParams,
-) {
+) -> JunctionStats {
     let k = graph.k;
     let n = graph.nodes.len() as u32;
+    let mut stats = JunctionStats::default();
 
     // 1. Identify long unique seed unitigs (length >= 500 bp, non-deleted, non-circular)
     let mut seeds: Vec<u32> = (0..n)
@@ -169,61 +409,143 @@ pub fn resolve_repeats_exspander(
     seeds.sort_by_key(|&id| std::cmp::Reverse(graph.nodes[id as usize].seq_len));
 
     let mut used_in_path: HashSet<u32> = HashSet::new();
+    let mut rejected_nodes: HashSet<u32> = HashSet::new();
 
     for seed_id in seeds {
         if used_in_path.contains(&seed_id) || graph.nodes[seed_id as usize].is_deleted {
             continue;
         }
 
-        used_in_path.insert(seed_id);
         let seed_fwd = DirUnitigId::new(seed_id, false);
 
+        // Exploration phase: use isolated local copy of used set
+        let mut local_used = used_in_path.clone();
+        local_used.insert(seed_id);
+
         // 1. Extend forward from 3' end
-        let fwd_ext = extend_one_direction(seed_fwd, graph, matrix, params, &mut used_in_path);
+        let fwd_ext = extend_one_direction(seed_fwd, graph, matrix, params, &mut local_used, &mut stats, &mut rejected_nodes);
 
-        // 2. Extend backward from 5' end (which is forward from seed.twin())
-        let bwd_ext = extend_one_direction(seed_fwd.twin(), graph, matrix, params, &mut used_in_path);
+        // 2. Extend backward from 5' end (forward from seed.twin())
+        let bwd_ext = extend_one_direction(seed_fwd.twin(), graph, matrix, params, &mut local_used, &mut stats, &mut rejected_nodes);
 
-        // Stitch path together:
-        // backward extension reversed & twinned + seed + forward extension
-        let mut full_path: Vec<DirUnitigId> = Vec::new();
-        for &d in bwd_ext.iter().rev() {
-            full_path.push(d.twin());
-        }
-        full_path.push(seed_fwd);
-        full_path.extend_from_slice(&fwd_ext);
+        // Construct full path with explicit PathSteps:
+        // bwd_ext is reversed and twinned
+        let mut full_path: Vec<PathStep> = Vec::new();
+        let m = bwd_ext.len();
+        if m > 0 {
+            // First node in reversed path: bwd_ext[m-1].dir.twin() (start node, no incoming edge)
+            full_path.push(PathStep {
+                dir: bwd_ext[m - 1].dir.twin(),
+                incoming_edge: None,
+                overlap: 0,
+                support: 0,
+            });
 
-        // Merge full_path if length > 1
-        if full_path.len() > 1 {
-            let mut assembled_seq = Vec::new();
-            for (idx, &dir) in full_path.iter().enumerate() {
-                let u_seq = graph.get_stranded_seq(dir);
-                if idx == 0 {
-                    assembled_seq.extend_from_slice(&u_seq);
-                } else {
-                    let overlap = (k - 1).min(u_seq.len());
-                    assembled_seq.extend_from_slice(&u_seq[overlap..]);
-                }
-                // Mark all non-circular nodes incorporated into the path as deleted
-                if !graph.nodes[dir.id() as usize].is_circular {
-                    graph.nodes[dir.id() as usize].is_deleted = true;
-                }
+            // Intermediate nodes from bwd_ext
+            for i in 1..m {
+                let step_idx = m - i;
+                let step = &bwd_ext[step_idx];
+                let target_dir = bwd_ext[step_idx - 1].dir.twin();
+                let edge = step.incoming_edge.map(|e| GraphEdge::new(target_dir, e.overlap_k, e.support));
+                full_path.push(PathStep {
+                    dir: target_dir,
+                    incoming_edge: edge,
+                    overlap: step.overlap,
+                    support: step.support,
+                });
             }
 
-            let new_seq_id = graph.arena.push_seq(&assembled_seq);
-            let new_node_id = graph.nodes.len() as u32;
-            let new_len = assembled_seq.len() as u32;
-            let node = UnitigNode::new(new_node_id, new_seq_id, new_len, 20.0);
-            graph.nodes.push(node);
+            // Transition from bwd_ext[0] to seed_fwd
+            let step0 = &bwd_ext[0];
+            let edge = step0.incoming_edge.map(|e| GraphEdge::new(seed_fwd, e.overlap_k, e.support));
+            full_path.push(PathStep {
+                dir: seed_fwd,
+                incoming_edge: edge,
+                overlap: step0.overlap,
+                support: step0.support,
+            });
+        } else {
+            full_path.push(PathStep {
+                dir: seed_fwd,
+                incoming_edge: None,
+                overlap: 0,
+                support: 0,
+            });
+        }
+
+        // Append forward extension steps
+        full_path.extend(fwd_ext);
+
+        // Splicing & Atomic Commit Phase
+        if full_path.len() > 1 {
+            match validate_and_splice_path(graph, &full_path) {
+                Ok(assembled_seq) => {
+                    // Record successful join metrics
+                    for step in &full_path[1..] {
+                        if step.overlap == k {
+                            stats.valid_k_joins += 1;
+                        } else if step.overlap == k.saturating_sub(1) {
+                            stats.valid_k_minus_1_joins += 1;
+                        } else {
+                            stats.valid_other_joins += 1;
+                        }
+                    }
+
+                    // Commit: mark non-circular constituent nodes as deleted
+                    for step in &full_path {
+                        let nid = step.dir.id() as usize;
+                        if !graph.nodes[nid].is_circular {
+                            graph.nodes[nid].is_deleted = true;
+                        }
+                    }
+
+                    // Push assembled contig
+                    let new_seq_id = graph.arena.push_seq(&assembled_seq);
+                    let new_node_id = graph.nodes.len() as u32;
+                    let new_len = assembled_seq.len() as u32;
+                    let node = UnitigNode::new(new_node_id, new_seq_id, new_len, 20.0);
+                    graph.nodes.push(node);
+
+                    // Commit used nodes
+                    used_in_path.extend(local_used);
+                }
+                Err(err) => {
+                    stats.rejected_invalid_joins += 1;
+                    tracing::debug!("[exSPAnder] Path rejected for seed {}: {}", seed_id, err);
+                    for step in &full_path {
+                        rejected_nodes.insert(step.dir.id());
+                    }
+                    // Do NOT commit: used_in_path, node deletions, and graph stay untouched
+                }
+            }
         }
     }
 
-    // Clean up any residual small non-circular unitigs
+    // Clean up residual small non-circular unitigs, protecting any nodes from rejected paths
     for node in graph.nodes.iter_mut() {
-        if !node.is_circular && node.seq_len < 500 {
+        if !node.is_circular && node.seq_len < 500 && !rejected_nodes.contains(&node.id) {
             node.is_deleted = true;
         }
     }
+
+    stats
+}
+
+/// Resolves repeats in `graph` using paired-end link constraints from `PairLinkMatrix`.
+pub fn resolve_repeats_exspander(
+    graph: &mut CdbgGraph,
+    matrix: &PairLinkMatrix,
+    dist: &InsertSizeDist,
+    params: ExspanderParams,
+) {
+    let stats = resolve_repeats_exspander_with_stats(graph, matrix, dist, params);
+    tracing::info!(
+        "[exSPAnder] Junction stats: valid k joins = {}, valid k-1 joins = {}, ambiguous rejected = {}, invalid rejected = {}",
+        stats.valid_k_joins,
+        stats.valid_k_minus_1_joins,
+        stats.rejected_ambiguous_joins,
+        stats.rejected_invalid_joins
+    );
 }
 
 #[cfg(test)]

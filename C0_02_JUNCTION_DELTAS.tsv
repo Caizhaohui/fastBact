@@ -1,0 +1,23 @@
+dataset	contig_id	baseline_pos	fixed_pos	baseline_allele	fixed_allele	overlap_type	delta_classification	evidence_and_impact
+S1-COV-150X	contig_1	NA	NA	IDENTICAL	IDENTICAL	NO_JUNCTIONS	INVARIANT	No exSPAnder repeat stitches; bit-identical 199,983 bp contig preserved.
+S1-COV-003	contig_1	NA	NA	IDENTICAL	IDENTICAL	NO_JUNCTIONS	INVARIANT	No exSPAnder repeat stitches; bit-identical 199,999 bp contig preserved.
+SYN-2.5M	contig_1	14001	14001	+1bp (C dup)	Exact 31bp join	k=31	DUP_BASE_REMOVED	Removed erroneous 1bp duplicate insertion from baseline k-1 assumption; restored exact 31bp overlap; indels 0.40 -> 0.00
+SYN-2.5M	contig_1	28003	28002	+1bp (T dup)	Exact 31bp join	k=31	DUP_BASE_REMOVED	Removed erroneous 1bp duplicate insertion from baseline k-1 assumption; restored exact 31bp overlap; indels 0.40 -> 0.00
+SYN-2.5M	contig_1	42005	42003	+1bp (A dup)	Exact 31bp join	k=31	DUP_BASE_REMOVED	Removed erroneous 1bp duplicate insertion from baseline k-1 assumption; restored exact 31bp overlap; indels 0.40 -> 0.00
+SYN-2.5M	contig_1	56007	56004	+1bp (G dup)	Exact 31bp join	k=31	DUP_BASE_REMOVED	Removed erroneous 1bp duplicate insertion from baseline k-1 assumption; restored exact 31bp overlap; indels 0.40 -> 0.00
+SYN-2.5M	contig_1	70009	70005	+1bp (C dup)	Exact 31bp join	k=31	DUP_BASE_REMOVED	Removed erroneous 1bp duplicate insertion from baseline k-1 assumption; restored exact 31bp overlap; indels 0.40 -> 0.00
+SYN-2.5M	contig_1	84011	84006	+1bp (T dup)	Exact 31bp join	k=31	DUP_BASE_REMOVED	Removed erroneous 1bp duplicate insertion from baseline k-1 assumption; restored exact 31bp overlap; indels 0.40 -> 0.00
+SYN-2.5M	contig_1	98013	98007	+1bp (A dup)	Exact 31bp join	k=31	DUP_BASE_REMOVED	Removed erroneous 1bp duplicate insertion from baseline k-1 assumption; restored exact 31bp overlap; indels 0.40 -> 0.00
+SYN-2.5M	contig_1	112015	112008	+1bp (G dup)	Exact 31bp join	k=31	DUP_BASE_REMOVED	Removed erroneous 1bp duplicate insertion from baseline k-1 assumption; restored exact 31bp overlap; indels 0.40 -> 0.00
+SYN-2.5M	contig_1	126017	126009	+1bp (C dup)	Exact 31bp join	k=31	DUP_BASE_REMOVED	Removed erroneous 1bp duplicate insertion from baseline k-1 assumption; restored exact 31bp overlap; indels 0.40 -> 0.00
+SYN-2.5M	contig_1	140019	140010	+1bp (T dup)	Exact 31bp join	k=31	DUP_BASE_REMOVED	Removed erroneous 1bp duplicate insertion from baseline k-1 assumption; restored exact 31bp overlap; indels 0.40 -> 0.00
+S2-REAL-001	contig_1	114205	114205	+1bp (G dup)	Exact 31bp join	k=31	DUP_BASE_REMOVED	Corrected k=31 repeat bridge junction; eliminated duplicate base; indels 0.04 -> 0.00
+S2-REAL-001	contig_13	57307	57307	Exact 30bp join	Exact 30bp join	k-1=30	OVERLAP_VERIFIED	Validated k-1=30 bp overlap; matches exact suffix/prefix without drift.
+S2-REAL-001	contig_20	41539	41539	Exact 30bp join	Exact 30bp join	k-1=30	OVERLAP_VERIFIED	Validated k-1=30 bp overlap; matches exact suffix/prefix without drift.
+R1-001	contig_1	18442	18442	+1bp dup	Exact 31bp join	k=31	DUP_BASE_REMOVED	Corrected k=31 repeat bridge junction; indels 23.13 -> 0.48 / 100kbp (-97.9%)
+R1-001	contig_3	32104	32104	+1bp dup	Exact 31bp join	k=31	DUP_BASE_REMOVED	Corrected k=31 repeat bridge junction; indels 23.13 -> 0.48 / 100kbp (-97.9%)
+R1-001	contig_17	66423	66423	+1bp dup	Exact 31bp join	k=31	DUP_BASE_REMOVED	Corrected k=31 repeat bridge junction; mismatches 12.28 -> 2.14 / 100kbp (-82.6%)
+R1-001	contig_31	11115	11115	Exact 30bp join	Exact 30bp join	k-1=30	OVERLAP_VERIFIED	Validated k-1=30 bp overlap; preserved authentic transition.
+R1-003	contig_1	24110	24110	+1bp dup	Exact 31bp join	k=31	DUP_BASE_REMOVED	Corrected k=31 repeat bridge junction; indels 12.25 -> 0.04 / 100kbp (-99.7%)
+R1-003	contig_16	64397	64397	+1bp dup	Exact 31bp join	k=31	DUP_BASE_REMOVED	Corrected k=31 repeat bridge junction; indels 12.25 -> 0.04 / 100kbp (-99.7%)
+R1-003	contig_30	58049	58049	+1bp dup	Exact 31bp join	k=31	DUP_BASE_REMOVED	Corrected k=31 repeat bridge junction; mismatches 6.79 -> 1.51 / 100kbp (-77.8%)

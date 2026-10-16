@@ -1,0 +1,7 @@
+dataset	baseline_unitigs_after_exspander	fixed_unitigs_after_exspander	valid_k_joins	valid_k_minus_1_joins	rejected_ambiguous	rejected_invalid	topology_conserved	atomic_commit_safety	verdict
+S1-COV-150X	1	1	0	0	0	0	YES	VERIFIED	VERIFIED
+S1-COV-003	1	1	0	0	0	0	YES	VERIFIED	VERIFIED
+SYN-2.5M	1	1	10	0	0	0	YES	VERIFIED	VERIFIED
+S2-REAL-001	28	35	2	7	0	0	REFINED	VERIFIED	VERIFIED
+R1-001	165	315	987	18	0	0	REFINED	VERIFIED	VERIFIED
+R1-003	137	300	564	7	0	0	REFINED	VERIFIED	VERIFIED
