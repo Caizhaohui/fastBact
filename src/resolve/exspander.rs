@@ -342,6 +342,17 @@ fn extend_one_direction(
 
 /// Verifies path validity, node survival, edge orientations, and actual sequence overlaps,
 /// returning the fully spliced DNA sequence without mutating the graph.
+///
+/// Strict verification contract:
+/// 1. First step: must conform to seed/path-start contract (incoming_edge = None, overlap = 0).
+/// 2. For every step: node must be non-deleted, within bounds, and no unauthorized duplicate reuse.
+/// 3. For every non-initial step (idx >= 1):
+///    - incoming_edge must be Some(edge).
+///    - edge.target must equal step.dir.
+///    - edge.overlap_k as usize must equal step.overlap.
+///    - Edge must truly exist in predecessor's outgoing edges for the correct strand.
+///    - Edge support field must exactly match the authentic graph edge (no forged metadata).
+///    - Suffix/prefix base-by-base real sequence must match.
 pub fn validate_and_splice_path(
     graph: &CdbgGraph,
     full_path: &[PathStep],
@@ -350,7 +361,17 @@ pub fn validate_and_splice_path(
         return Err("Path too short to splice");
     }
 
-    // 1. Verify all constituent nodes are non-deleted and within bounds
+    // Seed/path-start contract for first step
+    let first = &full_path[0];
+    if first.incoming_edge.is_some() {
+        return Err("First step must not have incoming edge");
+    }
+    if first.overlap != 0 {
+        return Err("First step overlap must be 0");
+    }
+
+    // 1. Verify all constituent nodes are non-deleted, within bounds, and not duplicated
+    let mut seen_nodes = hashbrown::HashSet::with_capacity(full_path.len());
     for step in full_path {
         let node_id = step.dir.id() as usize;
         if node_id >= graph.nodes.len() {
@@ -360,25 +381,73 @@ pub fn validate_and_splice_path(
         if node.is_deleted {
             return Err("Path contains deleted node");
         }
+        if !seen_nodes.insert(step.dir.id()) {
+            return Err("Unauthorized duplicate node reuse in path");
+        }
     }
 
-    // 2. Validate orientations and base-by-base sequence overlaps
+    // 2. Validate edge existence, orientation, support, and base-by-base sequence overlaps
     let mut assembled_seq = Vec::new();
     for (idx, step) in full_path.iter().enumerate() {
-        let u_seq = graph.get_stranded_seq(step.dir);
+        let curr_seq = graph.get_stranded_seq(step.dir);
         if idx == 0 {
-            assembled_seq.extend_from_slice(&u_seq);
+            assembled_seq.extend_from_slice(&curr_seq);
         } else {
+            let prev = &full_path[idx - 1];
+            let prev_node = &graph.nodes[prev.dir.id() as usize];
+            let outgoing = prev_node.edges(prev.dir.is_rc());
+
+            // 1. incoming_edge exists
+            let edge = step
+                .incoming_edge
+                .as_ref()
+                .ok_or("Non-initial step missing incoming edge")?;
+
+            // 3. incoming_edge.target equals current step.dir
+            if edge.target != step.dir {
+                return Err("Incoming edge target does not match step dir");
+            }
+
+            // 4. incoming_edge.overlap_k equals step.overlap
+            if edge.overlap_k as usize != step.overlap {
+                return Err("Incoming edge overlap_k does not match step overlap");
+            }
+
+            // 2. Edge truly exists in predecessor outgoing edges
+            let candidate_edges: Vec<&GraphEdge> = outgoing
+                .iter()
+                .filter(|e| e.target == step.dir)
+                .collect();
+            if candidate_edges.is_empty() {
+                return Err("Incoming edge does not exist in predecessor outgoing edges");
+            }
+
+            let matching_edge = candidate_edges
+                .iter()
+                .find(|e| e.overlap_k as usize == step.overlap)
+                .ok_or("Incoming edge overlap_k does not exist in predecessor outgoing edges")?;
+
+            // 5. Support field matches graph edge
+            if edge.support != matching_edge.support {
+                return Err("Incoming edge support does not match graph edge support");
+            }
+
+            // 7. Real sequence base-by-base match
             let ov = step.overlap;
-            if ov == 0 || ov > u_seq.len() || ov > assembled_seq.len() {
+            let prev_seq = graph.get_stranded_seq(prev.dir);
+            if ov == 0 || ov > prev_seq.len() || ov > curr_seq.len() {
                 return Err("Invalid overlap length");
             }
-            let assembled_suffix = &assembled_seq[assembled_seq.len() - ov..];
-            let next_prefix = &u_seq[..ov];
-            if assembled_suffix != next_prefix {
+            if prev_seq[prev_seq.len() - ov..] != curr_seq[..ov] {
                 return Err("Sequence overlap mismatch at junction");
             }
-            assembled_seq.extend_from_slice(&u_seq[ov..]);
+            if assembled_seq.len() < ov
+                || assembled_seq[assembled_seq.len() - ov..] != curr_seq[..ov]
+            {
+                return Err("Sequence overlap mismatch at junction");
+            }
+
+            assembled_seq.extend_from_slice(&curr_seq[ov..]);
         }
     }
 
@@ -441,29 +510,71 @@ pub fn resolve_repeats_exspander_with_stats(
                 support: 0,
             });
 
-            // Intermediate nodes from bwd_ext
+            // Intermediate nodes from bwd_ext: look up authentic reciprocal edges in graph
+            let mut bwd_failed = false;
             for i in 1..m {
                 let step_idx = m - i;
                 let step = &bwd_ext[step_idx];
+                let source_dir = bwd_ext[step_idx].dir.twin();
                 let target_dir = bwd_ext[step_idx - 1].dir.twin();
-                let edge = step.incoming_edge.map(|e| GraphEdge::new(target_dir, e.overlap_k, e.support));
-                full_path.push(PathStep {
-                    dir: target_dir,
-                    incoming_edge: edge,
-                    overlap: step.overlap,
-                    support: step.support,
-                });
+
+                let source_node = &graph.nodes[source_dir.id() as usize];
+                let reciprocal = source_node.find_edge(source_dir.is_rc(), target_dir, step.overlap as u8);
+
+                if let Some(&edge) = reciprocal {
+                    full_path.push(PathStep {
+                        dir: target_dir,
+                        incoming_edge: Some(edge),
+                        overlap: step.overlap,
+                        support: edge.support as u32,
+                    });
+                } else {
+                    tracing::debug!(
+                        "[exSPAnder] Missing reciprocal edge from {:?} to {:?} (expected ov={}): rejecting backward path",
+                        source_dir, target_dir, step.overlap
+                    );
+                    bwd_failed = true;
+                    break;
+                }
             }
 
-            // Transition from bwd_ext[0] to seed_fwd
-            let step0 = &bwd_ext[0];
-            let edge = step0.incoming_edge.map(|e| GraphEdge::new(seed_fwd, e.overlap_k, e.support));
-            full_path.push(PathStep {
-                dir: seed_fwd,
-                incoming_edge: edge,
-                overlap: step0.overlap,
-                support: step0.support,
-            });
+            if !bwd_failed {
+                // Transition from bwd_ext[0] to seed_fwd: look up reciprocal edge in graph
+                let step0 = &bwd_ext[0];
+                let source_dir = step0.dir.twin();
+                let target_dir = seed_fwd;
+
+                let source_node = &graph.nodes[source_dir.id() as usize];
+                let reciprocal = source_node.find_edge(source_dir.is_rc(), target_dir, step0.overlap as u8);
+
+                if let Some(&edge) = reciprocal {
+                    full_path.push(PathStep {
+                        dir: target_dir,
+                        incoming_edge: Some(edge),
+                        overlap: step0.overlap,
+                        support: edge.support as u32,
+                    });
+                } else {
+                    tracing::debug!(
+                        "[exSPAnder] Missing reciprocal edge from {:?} to seed {:?} (expected ov={}): rejecting backward path",
+                        source_dir, target_dir, step0.overlap
+                    );
+                    bwd_failed = true;
+                }
+            }
+
+            if bwd_failed {
+                // Conservatively reject candidate path when reciprocal edge is missing
+                stats.rejected_invalid_joins += 1;
+                rejected_nodes.insert(seed_id);
+                for step in &bwd_ext {
+                    rejected_nodes.insert(step.dir.id());
+                }
+                for step in &fwd_ext {
+                    rejected_nodes.insert(step.dir.id());
+                }
+                continue;
+            }
         } else {
             full_path.push(PathStep {
                 dir: seed_fwd,

@@ -105,6 +105,11 @@ impl UnitigNode {
     }
 
     #[inline(always)]
+    pub fn find_edge(&self, is_rc: bool, target: DirUnitigId, overlap_k: u8) -> Option<&GraphEdge> {
+        self.edges(is_rc).iter().find(|e| e.target == target && e.overlap_k == overlap_k)
+    }
+
+    #[inline(always)]
     pub fn add_edge(&mut self, is_rc: bool, edge: GraphEdge) {
         let edge_list = self.edges_mut(is_rc);
         for existing in edge_list.iter_mut() {
