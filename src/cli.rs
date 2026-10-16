@@ -64,7 +64,7 @@ pub struct Cli {
     pub no_subsample: bool,
 
     /// Threshold multiplier for coverage auto-subsampling trigger (default: 1.5)
-    #[arg(long, default_value_t = 1.5, hide = true)]
+    #[arg(long, default_value_t = 1.5, hide = true, allow_hyphen_values = true)]
     pub subsample_threshold_ratio: f64,
 
     /// Random seed for depth subsampling (default: 0)

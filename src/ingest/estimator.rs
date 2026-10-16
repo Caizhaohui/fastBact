@@ -65,7 +65,10 @@ pub struct GenomeEstimate {
     pub max_read_len: usize,
     /// Estimated sequencing depth
     pub estimated_cov: f64,
-    /// Subsampling keep probability in (0.0, 1.0]
+    /// Default subsampling keep probability in (0.0, 1.0] calculated using the canonical
+    /// conservative 1.5x trigger threshold. Note: the fastBact CLI binary computes the
+    /// operational subsampling factor dynamically in main.rs based on CLI arguments (such as
+    /// `--subsample-threshold-ratio`).
     pub subsample_factor: f64,
     /// Dynamic odd multi-k schedule
     pub kmers: Vec<usize>,

@@ -73,11 +73,13 @@ fn main() -> Result<()> {
     //    - Otherwise, coverage is calculated from HLL estimator.
     //    - If estimator confidence is LOW_COVERAGE_WARNING or UNRELIABLE, auto-subsampling
     //      is safely intercepted and downgraded to 100% data retention.
-    let trigger_mult = if args.subsample_threshold_ratio > 0.0 {
-        args.subsample_threshold_ratio
-    } else {
-        1.5
-    };
+    if !args.subsample_threshold_ratio.is_finite() || args.subsample_threshold_ratio < 1.0 {
+        anyhow::bail!(
+            "Invalid --subsample-threshold-ratio: must be a finite float >= 1.0 (got {})",
+            args.subsample_threshold_ratio
+        );
+    }
+    let trigger_mult = args.subsample_threshold_ratio;
 
     let (subsample_factor, subsampling_enabled, subsampling_reason) = if args.no_subsample {
         (1.0, false, "EXPLICIT_NO_SUBSAMPLE_FLAG".to_string())
