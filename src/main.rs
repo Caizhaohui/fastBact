@@ -466,7 +466,11 @@ fn main() -> Result<()> {
         let read_iter = (0..bank.merged_reads.len())
             .map(|i| bank.merged_reads.extract_ascii(i as u32))
             .chain((0..bank.pe_forward.len()).map(|i| bank.pe_forward.extract_ascii(i as u32)));
-        polish_contigs(&mut graph, read_iter);
+        let stats = polish_contigs(&mut graph, read_iter);
+        info!(
+            "Consensus polishing completed: {} bases modified (fwd reads: {}, rev reads: {}, rejected anchors: {})",
+            stats.bases_modified, stats.fwd_mapped_reads, stats.rev_mapped_reads, stats.rejected_anchors
+        );
     }
 
     let contigs = curate_contigs(&graph, args.min_len, args.min_cov);

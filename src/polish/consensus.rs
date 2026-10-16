@@ -12,14 +12,55 @@ use std::hash::BuildHasherDefault;
 
 type FxHashMap<K, V> = HashMap<K, V, BuildHasherDefault<FxHasher>>;
 
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+enum AnchorOrientation {
+    Forward,
+    Reverse,
+}
+
+#[inline]
+fn is_reverse_complement_exact(anchor: &[u8], read_kmer: &[u8]) -> bool {
+    if anchor.len() != read_kmer.len() {
+        return false;
+    }
+    let k = anchor.len();
+    for j in 0..k {
+        let b_anc = anchor[j];
+        let b_read = read_kmer[k - 1 - j];
+        let comp = match b_read {
+            b'A' | b'a' => b'T',
+            b'T' | b't' => b'A',
+            b'C' | b'c' => b'G',
+            b'G' | b'g' => b'C',
+            _ => return false,
+        };
+        if !b_anc.eq_ignore_ascii_case(&comp) {
+            return false;
+        }
+    }
+    true
+}
+
+/// Statistics collected during consensus polishing.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct PolishStats {
+    pub bases_modified: usize,
+    pub fwd_mapped_reads: usize,
+    pub rev_mapped_reads: usize,
+    pub fwd_pileup_bases: usize,
+    pub rev_pileup_bases: usize,
+    pub rejected_anchors: usize,
+}
+
 /// Anchors reads from the read pool onto assembled contigs and performs fast in-memory
 /// pileup error correction.
 pub fn polish_contigs(
     graph: &mut CdbgGraph,
     reads: impl Iterator<Item = Vec<u8>>,
-) {
+) -> PolishStats {
     let k = 31;
     let n = graph.nodes.len();
+    let mut stats = PolishStats::default();
 
     let total_active_len: usize = graph.nodes.iter().filter(|n| !n.is_deleted).map(|n| n.seq_len as usize).sum();
     let est_seeds = (total_active_len / 25).max(1024);
@@ -72,43 +113,72 @@ pub fn polish_contigs(
         }
 
         // Look for anchor seed in read
-        let mut best_anchor: Option<(u32, usize, usize)> = None; // (contig_id, contig_pos, read_pos)
+        let mut best_anchor: Option<(u32, usize, usize, AnchorOrientation)> = None; // (contig_id, contig_pos, read_pos, orientation)
+        let mut had_hash_hit = false;
 
         let mut r_pos = 0;
         while r_pos + k <= read.len() {
             let h = nthash_canonical(&read[r_pos..r_pos + k]);
             if let Some(&(contig_id, contig_pos)) = seed_index.get(&h) {
-                best_anchor = Some((contig_id, contig_pos, r_pos));
-                break;
+                had_hash_hit = true;
+                let c_seq = &contig_seqs[contig_id as usize];
+                let anchor_kmer = &c_seq[contig_pos..contig_pos + k];
+                let read_kmer = &read[r_pos..r_pos + k];
+
+                if anchor_kmer.eq_ignore_ascii_case(read_kmer) {
+                    best_anchor = Some((contig_id, contig_pos, r_pos, AnchorOrientation::Forward));
+                    break;
+                } else if is_reverse_complement_exact(anchor_kmer, read_kmer) {
+                    best_anchor = Some((contig_id, contig_pos, r_pos, AnchorOrientation::Reverse));
+                    break;
+                }
             }
             r_pos += 30;
         }
 
-        if let Some((contig_id, c_pos, r_pos)) = best_anchor {
-            let c_seq = &contig_seqs[contig_id as usize];
+        if best_anchor.is_none() && had_hash_hit {
+            stats.rejected_anchors += 1;
+        }
+
+        if let Some((contig_id, c_pos, r_pos, orientation)) = best_anchor {
             let pileup = &mut pileups[contig_id as usize];
 
-            let read_start_in_contig = (c_pos as i64) - (r_pos as i64);
-            let anchor_kmer = &c_seq[c_pos..c_pos + k];
-            let read_kmer = &read[r_pos..r_pos + k];
-            let is_fwd = anchor_kmer.eq_ignore_ascii_case(read_kmer);
-
-            let r_len = read.len();
-            for (idx, &b) in read.iter().enumerate() {
-                let target_pos = if is_fwd {
-                    read_start_in_contig + idx as i64
-                } else {
-                    read_start_in_contig + (r_len - 1 - idx) as i64
-                };
-
-                if target_pos >= 0 && (target_pos as usize) < pileup.len() {
-                    let code = if is_fwd {
-                        ASCII_TO_2BIT[b as usize] as usize
-                    } else {
-                        crate::common::bitseq::COMPLEMENT_2BIT[ASCII_TO_2BIT[b as usize] as usize] as usize
-                    };
-                    pileup[target_pos as usize][code] =
-                        pileup[target_pos as usize][code].saturating_add(1);
+            match orientation {
+                AnchorOrientation::Forward => {
+                    let mut voted = false;
+                    let read_start_in_contig = (c_pos as i64) - (r_pos as i64);
+                    for (idx, &b) in read.iter().enumerate() {
+                        let target_pos = read_start_in_contig + idx as i64;
+                        if target_pos >= 0 && (target_pos as usize) < pileup.len() {
+                            let code = ASCII_TO_2BIT[b as usize] as usize;
+                            pileup[target_pos as usize][code] =
+                                pileup[target_pos as usize][code].saturating_add(1);
+                            stats.fwd_pileup_bases += 1;
+                            voted = true;
+                        }
+                    }
+                    if voted {
+                        stats.fwd_mapped_reads += 1;
+                    }
+                }
+                AnchorOrientation::Reverse => {
+                    let mut voted = false;
+                    // Formula: p(i) = c + k - 1 + r - i
+                    let base_coord = (c_pos as i64) + (k as i64) - 1 + (r_pos as i64);
+                    for (idx, &b) in read.iter().enumerate() {
+                        let target_pos = base_coord - idx as i64;
+                        if target_pos >= 0 && (target_pos as usize) < pileup.len() {
+                            let raw_code = ASCII_TO_2BIT[b as usize] as usize;
+                            let code = crate::common::bitseq::COMPLEMENT_2BIT[raw_code] as usize;
+                            pileup[target_pos as usize][code] =
+                                pileup[target_pos as usize][code].saturating_add(1);
+                            stats.rev_pileup_bases += 1;
+                            voted = true;
+                        }
+                    }
+                    if voted {
+                        stats.rev_mapped_reads += 1;
+                    }
                 }
             }
         }
@@ -145,6 +215,7 @@ pub fn polish_contigs(
                     if !base.eq_ignore_ascii_case(&polished_base) {
                         *base = polished_base;
                         modified = true;
+                        stats.bases_modified += 1;
                     }
                 }
             }
@@ -154,5 +225,50 @@ pub fn polish_contigs(
             let new_arena_id = graph.arena.push_seq(&seq);
             graph.nodes[id as usize].seq_id = new_arena_id;
         }
+    }
+
+    stats
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_is_reverse_complement_exact() {
+        let a = b"ATGCATGCATGCATGCATGCATGCATGCATG";
+        let rc_a = crate::common::bitseq::reverse_complement_ascii(a);
+        assert!(is_reverse_complement_exact(a, &rc_a));
+        assert!(!is_reverse_complement_exact(a, a)); // Forward is not reverse complement (asymmetric)
+
+        // Mutate one base
+        let mut mutated = rc_a.clone();
+        mutated[0] = if mutated[0] == b'A' { b'T' } else { b'A' };
+        assert!(!is_reverse_complement_exact(a, &mutated));
+
+        // Ambiguous base N must be rejected
+        let mut with_n = rc_a.clone();
+        with_n[5] = b'N';
+        assert!(!is_reverse_complement_exact(a, &with_n));
+    }
+
+    #[test]
+    fn test_reverse_coordinate_formula() {
+        // c = 100, k = 31, r = 30
+        let c = 100i64;
+        let k = 31i64;
+        let r = 30i64;
+        let base_coord = c + k - 1 + r; // 100 + 31 - 1 + 30 = 160
+
+        // At index i = r = 30, coordinate must be c + k - 1 = 130
+        let p_at_r = base_coord - r;
+        assert_eq!(p_at_r, c + k - 1);
+
+        // At index i = r + k - 1 = 60, coordinate must be c = 100
+        let p_at_end_of_seed = base_coord - (r + k - 1);
+        assert_eq!(p_at_end_of_seed, c);
+
+        // At index i = 0, coordinate is 160
+        assert_eq!(base_coord - 0, 160);
     }
 }

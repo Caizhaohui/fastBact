@@ -1,0 +1,32 @@
+test_id	test_name	read_length_bp	seed_offset_bp	orientation	sequencing_errors	seed_type	old_baseline_result	new_fixed_result	failure_mode_old	status
+UT-01	test_reverse_coordinate_repro_minimal_failure	75	30	reverse	0	unique	FAIL	PASS	Shifted coordinates (shift=16bp) mutated correct contig sequence	VERIFIED
+UT-02	test_reverse_snv_correction	100	30	reverse	0	unique	FAIL	PASS	SNV correction failed at pos 160 due to coordinate drift	VERIFIED
+UT-03	test_matrix_len075_offset00_fwd	75	0	forward	0	unique	PASS	PASS	None (Forward coordinates were correct)	VERIFIED
+UT-04	test_matrix_len075_offset00_rev	75	0	reverse	0	unique	FAIL	PASS	Shifted coordinates (shift=-44bp) mutated contig	VERIFIED
+UT-05	test_matrix_len075_offset00_mixed	75	0	mixed	0	unique	FAIL	PASS	Reverse strand component shifted and corrupted consensus	VERIFIED
+UT-06	test_matrix_len075_offset30_fwd	75	30	forward	0	unique	PASS	PASS	None (Forward coordinates were correct)	VERIFIED
+UT-07	test_matrix_len075_offset30_rev	75	30	reverse	0	unique	FAIL	PASS	Shifted coordinates (shift=16bp) mutated contig	VERIFIED
+UT-08	test_matrix_len075_offset30_mixed	75	30	mixed	0	unique	FAIL	PASS	Reverse strand component shifted and corrupted consensus	VERIFIED
+UT-09	test_matrix_len100_offset00_fwd	100	0	forward	0	unique	PASS	PASS	None (Forward coordinates were correct)	VERIFIED
+UT-10	test_matrix_len100_offset00_rev	100	0	reverse	0	unique	FAIL	PASS	Shifted coordinates (shift=-69bp) mutated contig	VERIFIED
+UT-11	test_matrix_len100_offset00_mixed	100	0	mixed	0	unique	FAIL	PASS	Reverse strand component shifted and corrupted consensus	VERIFIED
+UT-12	test_matrix_len100_offset30_fwd	100	30	forward	0	unique	PASS	PASS	None (Forward coordinates were correct)	VERIFIED
+UT-13	test_matrix_len100_offset30_rev	100	30	reverse	0	unique	FAIL	PASS	Shifted coordinates (shift=-9bp) mutated contig	VERIFIED
+UT-14	test_matrix_len100_offset30_mixed	100	30	mixed	0	unique	FAIL	PASS	Reverse strand component shifted and corrupted consensus	VERIFIED
+UT-15	test_matrix_len100_offset60_fwd	100	60	forward	0	unique	PASS	PASS	None (Forward coordinates were correct)	VERIFIED
+UT-16	test_matrix_len100_offset60_rev	100	60	reverse	0	unique	FAIL	PASS	Shifted coordinates (shift=+51bp) mutated contig	VERIFIED
+UT-17	test_matrix_len100_offset60_mixed	100	60	mixed	0	unique	FAIL	PASS	Reverse strand component shifted and corrupted consensus	VERIFIED
+UT-18	test_matrix_len150_offset00_fwd	150	0	forward	0	unique	PASS	PASS	None (Forward coordinates were correct)	VERIFIED
+UT-19	test_matrix_len150_offset00_rev	150	0	reverse	0	unique	FAIL	PASS	Shifted coordinates (shift=-119bp) mutated contig	VERIFIED
+UT-20	test_matrix_len150_offset00_mixed	150	0	mixed	0	unique	FAIL	PASS	Reverse strand component shifted and corrupted consensus	VERIFIED
+UT-21	test_matrix_len150_offset30_fwd	150	30	forward	0	unique	PASS	PASS	None (Forward coordinates were correct)	VERIFIED
+UT-22	test_matrix_len150_offset30_rev	150	30	reverse	0	unique	FAIL	PASS	Shifted coordinates (shift=-59bp) mutated contig	VERIFIED
+UT-23	test_matrix_len150_offset30_mixed	150	30	mixed	0	unique	FAIL	PASS	Reverse strand component shifted and corrupted consensus	VERIFIED
+UT-24	test_matrix_len150_offset60_fwd	150	60	forward	0	unique	PASS	PASS	None (Forward coordinates were correct)	VERIFIED
+UT-25	test_matrix_len150_offset60_rev	150	60	reverse	0	unique	FAIL	PASS	Shifted coordinates (shift=+1bp) mutated contig	VERIFIED
+UT-26	test_matrix_len150_offset60_mixed	150	60	mixed	0	unique	FAIL	PASS	Reverse strand component shifted and corrupted consensus	VERIFIED
+UT-27	test_reverse_reads_with_small_sequencing_errors	100	30	reverse	1-2/read	unique	FAIL	PASS	Coordinate drift compounded with errors corrupted contig	VERIFIED
+UT-28	test_repeated_seed_and_unanchored_reads	75	30	reverse	0	repeated	PASS	PASS	None (Seed correctly filtered out by seed index count check)	VERIFIED
+UT-29	test_unknown_orientation_rejected	100	0	unknown	0	non-matching	PASS	PASS	Old unanchored hash failed lookup; New explicitly verifies anchor orientation	VERIFIED
+UT-30	test_is_reverse_complement_exact	31	NA	both	0	synthetic	NA	PASS	New unit test for zero-allocation exact reverse complement check	VERIFIED
+UT-31	test_reverse_coordinate_formula	NA	NA	reverse	NA	NA	NA	PASS	New unit test verifying p(i) = c + k - 1 + r - i boundary arithmetic	VERIFIED
