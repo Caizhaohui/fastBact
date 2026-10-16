@@ -623,16 +623,25 @@ pub fn resolve_repeats_exspander_with_stats(
                 Err(err) => {
                     stats.rejected_invalid_joins += 1;
                     tracing::debug!("[exSPAnder] Path rejected for seed {}: {}", seed_id, err);
+                    for &nid in &local_used {
+                        rejected_nodes.insert(nid);
+                    }
                     for step in &full_path {
                         rejected_nodes.insert(step.dir.id());
                     }
-                    // Do NOT commit: used_in_path, node deletions, and graph stay untouched
+                    // Contract 1: Do NOT commit: used_in_path, node deletions, and graph stay untouched
                 }
             }
         }
     }
 
-    // Clean up residual small non-circular unitigs, protecting any nodes from rejected paths
+    // Post-exSPAnder Cleanup Phase:
+    // Defined behavioral contracts:
+    // Contract 1: Candidate paths rejected during exploration or validation make ZERO modifications to graph topology.
+    // Contract 2: Short unitigs (< 500 bp) involved in rejected candidate paths are protected via `rejected_nodes`
+    //             and MUST NOT be deleted by cleanup, preserving graph connectivity for downstream stages.
+    // Contract 3: Unrelated short unitigs (< 500 bp, non-circular, not protected by `rejected_nodes` and never incorporated
+    //             into any contig) are safely cleaned up to eliminate orphan sequencing artifacts.
     for node in graph.nodes.iter_mut() {
         if !node.is_circular && node.seq_len < 500 && !rejected_nodes.contains(&node.id) {
             node.is_deleted = true;

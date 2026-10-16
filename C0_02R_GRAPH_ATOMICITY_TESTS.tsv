@@ -1,0 +1,7 @@
+test_id	contract_tested	test_description	expected_behavior	graph_integrity_verified	status
+G1	Contract 1 (Single path failure safety)	Full graph snapshot captured before and after verification failure	0% mutation to nodes, edges, strands, support, or deleted flags	Snapshot 100% bit-identical	PASS
+G2	Contract 1 (Used-state isolation)	Path rejection does not pollute used_in_path; subsequent seed can legally splice candidate	Candidate target freed upon rejection; second seed successfully commits join	No used-state contamination	PASS
+G3	Contract 1 (Multi-path isolation)	Consecutive candidate paths: failure of Pair A does not impede success of Pair B	Pair A preserved intact; Pair B merged into spliced contig; no cross-talk	Independent failure isolation	PASS
+G4	Contract 2 (Short-node protection)	Short node (<500 bp) involved in rejected candidate path protected against cleanup	Node protected via rejected_nodes; is_deleted remains false after cleanup	Protected node preserved	PASS
+G5	Contract 3 (Unrelated short-node cleanup)	Unrelated isolated short node (<500 bp) not in rejected_nodes and unincorporated	Deleted by post-exSPAnder cleanup policy to eliminate orphan artifacts	Policy cleanly executed	PASS
+G6	Commit Atomicity (No node leakage)	Successful commit marks constituent nodes deleted and creates single merged contig	Constituents deleted, new contig added, bystander active, total bases conserved	Zero node loss or leakage	PASS
