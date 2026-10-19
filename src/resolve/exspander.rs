@@ -133,6 +133,7 @@ fn extend_one_direction(
     mut curr_dir: DirUnitigId,
     graph: &CdbgGraph,
     matrix: &PairLinkMatrix,
+    dist: &InsertSizeDist,
     params: ExspanderParams,
     used_unique: &mut HashSet<u32>,
     stats: &mut JunctionStats,
@@ -236,7 +237,11 @@ fn extend_one_direction(
                         100.0
                     };
 
-                    if best_support >= params.min_support && ratio >= params.decision_threshold {
+                    // A pair linking curr_dir to cand cannot span a repeat wider than the insert size.
+                    let gap = target_node.seq_len as i64
+                        - edge_to_target.overlap_k as i64
+                        - edge_target_to_cand.overlap_k as i64;
+                    if best_support >= params.min_support && ratio >= params.decision_threshold && gap <= dist.max_insert as i64 {
                         if !used_unique.contains(&cand.id()) && !graph.nodes[cand.id() as usize].is_deleted {
                             used_unique.insert(cand.id());
                             ext.push(PathStep {
@@ -476,7 +481,7 @@ pub fn validate_and_splice_path(
 pub fn resolve_repeats_exspander_with_stats(
     graph: &mut CdbgGraph,
     matrix: &PairLinkMatrix,
-    _dist: &InsertSizeDist,
+    dist: &InsertSizeDist,
     params: ExspanderParams,
 ) -> JunctionStats {
     let k = graph.k;
@@ -509,10 +514,10 @@ pub fn resolve_repeats_exspander_with_stats(
         local_used.insert(seed_id);
 
         // 1. Extend forward from 3' end
-        let fwd_ext = extend_one_direction(seed_fwd, graph, matrix, params, &mut local_used, &mut stats, &mut rejected_nodes);
+        let fwd_ext = extend_one_direction(seed_fwd, graph, matrix, dist, params, &mut local_used, &mut stats, &mut rejected_nodes);
 
         // 2. Extend backward from 5' end (forward from seed.twin())
-        let bwd_ext = extend_one_direction(seed_fwd.twin(), graph, matrix, params, &mut local_used, &mut stats, &mut rejected_nodes);
+        let bwd_ext = extend_one_direction(seed_fwd.twin(), graph, matrix, dist, params, &mut local_used, &mut stats, &mut rejected_nodes);
 
         // Construct full path with explicit PathSteps:
         // bwd_ext is reversed and twinned

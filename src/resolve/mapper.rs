@@ -46,9 +46,7 @@ impl PairLinkMatrix {
     }
 
     pub fn get_support(&self, u1: DirUnitigId, u2: DirUnitigId) -> u32 {
-        let direct = *self.links.get(&(u1, u2)).unwrap_or(&0);
-        let norm = *self.links.get(&(u1.forward(), u2.forward())).unwrap_or(&0);
-        direct.max(norm)
+        *self.links.get(&(u1, u2)).unwrap_or(&0)
     }
 }
 
@@ -159,8 +157,6 @@ pub fn map_paired_reads<K: KmerInt>(
                 // Inter-unitig pair: record links
                 matrix.add_link(u1, u2_forward);
                 matrix.add_link(u2_forward.twin(), u1.twin());
-                matrix.add_link(u1, u2);
-                matrix.add_link(u2.twin(), u1.twin());
             }
         }
     }

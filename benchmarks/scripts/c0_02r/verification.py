@@ -1,0 +1,129 @@
+from __future__ import annotations
+
+from dataclasses import asdict
+import json
+from pathlib import Path
+from .execution import GateError, digest, require_compute, source_identity
+from .inputs import FileIdentity
+from .metrics import parse_quast
+
+
+def register_identity(identities: dict[Path, str], file: FileIdentity) -> None:
+    path = Path(file.path)
+    if path in identities and identities[path] != file.sha256:
+        raise GateError(f"Conflicting hashes for {path}")
+    identities[path] = file.sha256
+
+
+def verify_manifest(path: Path) -> tuple[int, int]:
+    require_compute()
+    match json.loads(path.read_text()):
+        case {
+            "status": "PASS",
+            "runs": list(runs),
+            "commands": list(commands),
+            "sources": dict(sources),
+        }:
+            pass
+        case _:
+            raise GateError("Manifest does not record a complete PASS")
+    if len(runs) != 18 or len(sources) != 3 or not commands:
+        raise GateError("Manifest is missing run/source/command records")
+    identities: dict[Path, str] = {}
+    matrix: set[tuple[str, str]] = set()
+    for run in runs:
+        match run:
+            case {
+                "dataset": {
+                    "name": str(name),
+                    "r1": dict(r1),
+                    "r2": dict(r2),
+                    "reference": dict(reference),
+                },
+                "variant": str(variant),
+                "binary": dict(binary),
+                "fasta": dict(fasta),
+                "quast_report": dict(quast),
+                "graph_telemetry": dict(graph),
+                "metrics": dict(recorded_metrics),
+            }:
+                if (name, variant) in matrix:
+                    raise GateError("Duplicate assembly matrix entry")
+                matrix.add((name, variant))
+                for file in (r1, r2, reference, binary, fasta, quast, graph):
+                    match file:
+                        case {"path": str(filename), "sha256": str(expected)}:
+                            register_identity(
+                                identities, FileIdentity(filename, expected)
+                            )
+                        case _:
+                            raise GateError("Missing file identity")
+                if asdict(parse_quast(Path(quast["path"]))) != recorded_metrics:
+                    raise GateError(
+                        f"Recorded metrics disagree with QUAST: {name}/{variant}"
+                    )
+            case _:
+                raise GateError("Incomplete assembly record")
+    expected_names = {
+        "S1-COV-150X",
+        "S1-COV-003",
+        "SYN-2.5M",
+        "S2-REAL-001",
+        "R1-001",
+        "R1-003",
+    }
+    if matrix != {
+        (name, variant) for name in expected_names for variant in ("A", "B", "C")
+    }:
+        raise GateError("Unexpected assembly matrix")
+    for command in commands:
+        match command:
+            case {
+                "exit_code": 0,
+                "argv": list(argv),
+                "cwd": str(),
+                "stdout": str(stdout),
+                "stderr": str(stderr),
+                "stdout_sha256": str(out_hash),
+                "stderr_sha256": str(err_hash),
+            }:
+                if not argv:
+                    raise GateError("Empty recorded command")
+                register_identity(identities, FileIdentity(stdout, out_hash))
+                register_identity(identities, FileIdentity(stderr, err_hash))
+            case _:
+                raise GateError("Failed or incomplete recorded command")
+    for source in sources.values():
+        match source:
+            case {
+                "path": str(directory),
+                "commit": str(commit),
+                "git_tree": str(tree),
+                "source_tree_sha256": str(tree_hash),
+                "dirty_status": "",
+            }:
+                actual = source_identity(Path(directory))
+                if (
+                    actual.commit,
+                    actual.git_tree,
+                    actual.source_tree_sha256,
+                    actual.dirty_status,
+                ) != (commit, tree, tree_hash, ""):
+                    raise GateError(f"Changed source identity: {directory}")
+            case _:
+                raise GateError("Missing clean source identity")
+    for filename, expected in sorted(identities.items()):
+        if digest(filename) != expected:
+            raise GateError(f"Artifact hash mismatch: {filename}")
+    for name in (
+        "C0_02R_ASSEMBLY_AB.tsv",
+        "C0_02R_ALIGNMENT_EVENTS.tsv",
+        "C0_02_JUNCTION_DELTAS.tsv",
+        "C0_02R_FINAL_VERDICT.md",
+    ):
+        artifact = path.parent / name
+        if not artifact.is_file() or artifact.stat().st_size == 0:
+            raise GateError(f"Missing output artifact: {artifact}")
+        print(f"OUTPUT_SHA256\t{artifact.name}\t{digest(artifact)}")
+    print(f"MANIFEST_SHA256\t{digest(path)}")
+    return len(identities), len(commands)

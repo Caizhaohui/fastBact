@@ -18,15 +18,15 @@ No reset, branch recreation, history rewrite, or frozen-artifact overwrite.
 
 ## Execution ledger
 
-1. Phase A (in progress): run E1–E8 against b9727c3 production sources with
+1. Phase A (completed, f500d0f): run E1–E8 against b9727c3 production sources with
    test-only injection; preserve commands, source identity, exits, and logs.
    Add direct validator ambiguity/losing-edge and reciprocal-support tests,
    prove red on inherited HEAD, minimally fix, then run overlap/polish regressions.
-2. Phase B (gated on A): independently reproduce G1–G6 and check complete
+2. Phase B (completed, 0d13f99): independently reproduce G1–G6 and check complete
    snapshots, cleanup scope, retry safety, successful node conservation.
-3. Phase C (gated on B): correct alignment event extraction and fail-closed
+3. Phase C (completed, b318061): correct alignment event extraction and fail-closed
    provenance; write fresh outputs outside frozen C0-01/C0-02 artifacts.
-4. Phase D (gated on C): fresh A/B/C runs across all six requested datasets,
+4. Phase D (in progress, Slurm 2978178 + 2978185): fresh A/B/C runs across all six requested datasets,
    complete regression, review, and evidence-derived acceptance.
 
 ## Confirmed source defects / tests
@@ -169,5 +169,19 @@ Results include all requested filenames plus regenerated C0_02_JUNCTION_DELTAS.t
 inside the NEW results directory. Starting dirty frozen/root artifacts remain
 protected, outside the accepted output set. All datasets currently qualify only
 as REPRODUCIBLE_ON_ORIGINAL_HPC; self-contained external packaging is not claimed.
-Phase D next: formal execution, inspect acceptance, archive fresh receipts,
-independent review, final documentation commit; push only after gate completion.
+Phase D formal executions:
+- Run 1 (job 2978178): R1-003 mismatches increased vs B (1.51 -> 1.56).
+- Follow-up polish anchor fix (commit fc926ec) in run 2 (job 2978440): R1-001 mismatches (2.14 -> 2.86) and indels (0.48 -> 0.96) regressed; R1-003 mismatches (1.51 -> 1.67) regressed.
+
+## Phase D investigation & PE evidence fix
+
+Root cause analysis on real isolate regressions revealed two core paired-end mapping/repeat resolution defects:
+1. `PairLinkMatrix::get_support()` took `max(direct, norm)`, conflating forward and reverse complement strands. In addition, `map_paired_reads()` injected symmetric non-twinned `(u1, u2)` links, destroying physical pair directionality.
+2. `resolve_repeats_exspander_with_stats()` ignored insert size bounds (`_dist: &InsertSizeDist`), allowing repeat traversal across distances exceeding library insert size (`dist.max_insert`).
+
+Red-to-green verification (Slurm job 2979536, compute node vnode1, qfree, 8 CPUs, 12 GB):
+- Test suite: `tests/test_c0_02r_pe_evidence.rs` (3 deterministic cases).
+- Red run on HEAD fc926ec: 2 failed, 1 passed (proved direction leakage and repeat width violation).
+- Green run on working tree: 3/3 passed; release all-targets test suite passed (97+ tests, exit 0).
+- Manifest verification suite added: `benchmarks/scripts/c0_02r/verification.py`, `tests/test_c0_02r_manifest.py` (5/5 passed in job 2978206).
+

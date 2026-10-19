@@ -1,0 +1,79 @@
+job=2978204 node=vnode1 cpus=1 mem=1024
+4bcc233735631f1d813417576e347648dc12662af43deb9a28e71d4f7ecfd66d  benchmarks/scripts/c0_02r/verification.py
+76f322ad57a7e9d7e99663892ca9cc0b5d1cfb571f0b204fcb1be3024889ff66  tests/test_c0_02r_manifest.py
+============================= test session starts ==============================
+platform linux -- Python 3.12.11, pytest-9.0.3, pluggy-1.6.0 -- /hpcfs/fpublic/app/miniforge3/conda/bin/python3
+cachedir: .pytest_cache
+rootdir: /hpcfs/fhome/caizhh/Desktop/03_Tool_Development/01_fastBact
+plugins: anyio-4.14.1, cov-7.1.0
+collecting ... collected 5 items
+
+tests/test_c0_02r_manifest.py::test_incomplete_or_failed_manifest_is_rejected[{}] PASSED [ 20%]
+tests/test_c0_02r_manifest.py::test_incomplete_or_failed_manifest_is_rejected[{"status":"FAIL"}] PASSED [ 40%]
+tests/test_c0_02r_manifest.py::test_incomplete_or_failed_manifest_is_rejected[{"status":"PASS","runs":[],"commands":[],"sources":{}}] PASSED [ 60%]
+tests/test_c0_02r_manifest.py::test_recorded_metrics_must_match_hashed_quast_report FAILED [ 80%]
+tests/test_c0_02r_manifest.py::test_command_hash_cannot_override_other_artifact_identity FAILED [100%]
+
+=================================== FAILURES ===================================
+_____________ test_recorded_metrics_must_match_hashed_quast_report _____________
+
+tmp_path = PosixPath('/tmp/pytest-of-caizhh/pytest-9/test_recorded_metrics_must_mat0')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x14f2f5fad760>
+
+    def test_recorded_metrics_must_match_hashed_quast_report(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        import json
+        path = manifest_fixture(tmp_path, monkeypatch)
+        manifest = json.loads(path.read_text())
+        manifest["runs"][0]["metrics"]["n50"] = 999
+        path.write_text(json.dumps(manifest))
+>       with pytest.raises(GateError):
+             ^^^^^^^^^^^^^^^^^^^^^^^^
+E       Failed: DID NOT RAISE <class 'c0_02r.execution.GateError'>
+
+tests/test_c0_02r_manifest.py:67: Failed
+----------------------------- Captured stdout call -----------------------------
+OUTPUT_SHA256	C0_02R_ASSEMBLY_AB.tsv	e80b71cd14d3cbd65f4173abcbfcf01a545dbca32a72d575108b553a648cc96f
+OUTPUT_SHA256	C0_02R_ALIGNMENT_EVENTS.tsv	e80b71cd14d3cbd65f4173abcbfcf01a545dbca32a72d575108b553a648cc96f
+OUTPUT_SHA256	C0_02_JUNCTION_DELTAS.tsv	e80b71cd14d3cbd65f4173abcbfcf01a545dbca32a72d575108b553a648cc96f
+OUTPUT_SHA256	C0_02R_FINAL_VERDICT.md	e80b71cd14d3cbd65f4173abcbfcf01a545dbca32a72d575108b553a648cc96f
+MANIFEST_SHA256	26af9ccfaed397fca0aeb25cc53cb79aee3d7b9ff714e7c8a6ae3d7874a80e65
+OUTPUT_SHA256	C0_02R_ASSEMBLY_AB.tsv	e80b71cd14d3cbd65f4173abcbfcf01a545dbca32a72d575108b553a648cc96f
+OUTPUT_SHA256	C0_02R_ALIGNMENT_EVENTS.tsv	e80b71cd14d3cbd65f4173abcbfcf01a545dbca32a72d575108b553a648cc96f
+OUTPUT_SHA256	C0_02_JUNCTION_DELTAS.tsv	e80b71cd14d3cbd65f4173abcbfcf01a545dbca32a72d575108b553a648cc96f
+OUTPUT_SHA256	C0_02R_FINAL_VERDICT.md	e80b71cd14d3cbd65f4173abcbfcf01a545dbca32a72d575108b553a648cc96f
+MANIFEST_SHA256	a28f86f1fc8888678e99282fae003c868e72dbd0338c0588997c65d0b4fada96
+__________ test_command_hash_cannot_override_other_artifact_identity ___________
+
+tmp_path = PosixPath('/tmp/pytest-of-caizhh/pytest-9/test_command_hash_cannot_overr0')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x14f2f5fafe30>
+
+    def test_command_hash_cannot_override_other_artifact_identity(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        import json
+        path = manifest_fixture(tmp_path, monkeypatch)
+        manifest = json.loads(path.read_text())
+        for run in manifest["runs"]:
+            for field in ("r1", "r2", "reference"):
+                run["dataset"][field]["sha256"] = "0" * 64
+            for field in ("binary", "fasta", "graph_telemetry"):
+                run[field]["sha256"] = "0" * 64
+        path.write_text(json.dumps(manifest))
+>       with pytest.raises(GateError):
+             ^^^^^^^^^^^^^^^^^^^^^^^^
+E       Failed: DID NOT RAISE <class 'c0_02r.execution.GateError'>
+
+tests/test_c0_02r_manifest.py:81: Failed
+----------------------------- Captured stdout call -----------------------------
+OUTPUT_SHA256	C0_02R_ASSEMBLY_AB.tsv	e80b71cd14d3cbd65f4173abcbfcf01a545dbca32a72d575108b553a648cc96f
+OUTPUT_SHA256	C0_02R_ALIGNMENT_EVENTS.tsv	e80b71cd14d3cbd65f4173abcbfcf01a545dbca32a72d575108b553a648cc96f
+OUTPUT_SHA256	C0_02_JUNCTION_DELTAS.tsv	e80b71cd14d3cbd65f4173abcbfcf01a545dbca32a72d575108b553a648cc96f
+OUTPUT_SHA256	C0_02R_FINAL_VERDICT.md	e80b71cd14d3cbd65f4173abcbfcf01a545dbca32a72d575108b553a648cc96f
+MANIFEST_SHA256	a5e44e7970463b394aa98afc636b3d5ad83f421c131f89e3357a08cb33efd7e3
+OUTPUT_SHA256	C0_02R_ASSEMBLY_AB.tsv	e80b71cd14d3cbd65f4173abcbfcf01a545dbca32a72d575108b553a648cc96f
+OUTPUT_SHA256	C0_02R_ALIGNMENT_EVENTS.tsv	e80b71cd14d3cbd65f4173abcbfcf01a545dbca32a72d575108b553a648cc96f
+OUTPUT_SHA256	C0_02_JUNCTION_DELTAS.tsv	e80b71cd14d3cbd65f4173abcbfcf01a545dbca32a72d575108b553a648cc96f
+OUTPUT_SHA256	C0_02R_FINAL_VERDICT.md	e80b71cd14d3cbd65f4173abcbfcf01a545dbca32a72d575108b553a648cc96f
+MANIFEST_SHA256	8c8570db7ec5ec9e5ce843e15641140945d45f1d44ca3bcef40ab10d4ac75874
+=========================== short test summary info ============================
+FAILED tests/test_c0_02r_manifest.py::test_recorded_metrics_must_match_hashed_quast_report
+FAILED tests/test_c0_02r_manifest.py::test_command_hash_cannot_override_other_artifact_identity
+========================= 2 failed, 3 passed in 0.20s ==========================
