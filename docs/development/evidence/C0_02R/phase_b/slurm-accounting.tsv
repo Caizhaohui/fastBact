@@ -1,0 +1,10 @@
+JobID|JobName|State|ExitCode|NodeList|AllocCPUS|ReqMem|Elapsed
+2978134|c002r-b-red|COMPLETED|0:0|vnode1|8|12G|00:00:20
+2978134.batch|batch|COMPLETED|0:0|vnode1|8||00:00:20
+2978134.extern|extern|COMPLETED|0:0|vnode1|8||00:00:20
+2978136|c002r-b-green|FAILED|101:0|vnode1|8|12G|00:00:27
+2978136.batch|batch|FAILED|101:0|vnode1|8||00:00:27
+2978136.extern|extern|COMPLETED|0:0|vnode1|8||00:00:27
+2978137|c002r-b-regress|COMPLETED|0:0|vnode1|8|12G|00:01:50
+2978137.batch|batch|COMPLETED|0:0|vnode1|8||00:01:50
+2978137.extern|extern|COMPLETED|0:0|vnode1|8||00:01:50

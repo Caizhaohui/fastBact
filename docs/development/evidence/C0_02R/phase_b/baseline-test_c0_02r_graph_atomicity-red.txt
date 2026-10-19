@@ -1,0 +1,14 @@
+   Compiling fastBact v0.1.0 (/hpcfs/fhome/caizhh/.local/state/codex-with-chatgpt/fastbact-preflight-69HE09JF/baseline)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 1.43s
+     Running tests/test_c0_02r_graph_atomicity.rs (/hpcfs/fhome/caizhh/.local/state/codex-with-chatgpt/fastbact-preflight-69HE09JF/target-baseline/debug/deps/test_c0_02r_graph_atomicity-e70c61bfc40ac385)
+
+running 6 tests
+test test_g4_short_nodes_in_rejected_paths_preserved_by_cleanup ... ok
+test test_g5_unrelated_isolated_short_nodes_deleted_by_policy ... ok
+test test_g1_verification_failure_leaves_graph_snapshot_identical ... ok
+test test_g2_path_rejection_does_not_pollute_used_state_for_other_paths ... ok
+test test_g6_successful_commit_no_abnormal_deletion_or_lost_nodes ... ok
+test test_g3_consecutive_candidate_paths_isolated_failure ... ok
+
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+

@@ -370,8 +370,8 @@ pub fn validate_and_splice_path(
         return Err("First step overlap must be 0");
     }
 
-    // 1. Verify all constituent nodes are non-deleted, within bounds, and not duplicated
-    let mut seen_nodes = hashbrown::HashSet::with_capacity(full_path.len());
+    // 1. Verify all constituent nodes are non-deleted, within bounds, and unique nodes are not duplicated
+    let mut seen_unique_nodes = hashbrown::HashSet::with_capacity(full_path.len());
     for step in full_path {
         let node_id = step.dir.id() as usize;
         if node_id >= graph.nodes.len() {
@@ -381,8 +381,8 @@ pub fn validate_and_splice_path(
         if node.is_deleted {
             return Err("Path contains deleted node");
         }
-        if !seen_nodes.insert(step.dir.id()) {
-            return Err("Unauthorized duplicate node reuse in path");
+        if node.seq_len >= 500 && !seen_unique_nodes.insert(step.dir.id()) {
+            return Err("Unauthorized unique node reuse in path");
         }
     }
 
@@ -659,8 +659,17 @@ pub fn resolve_repeats_exspander_with_stats(
     //             and MUST NOT be deleted by cleanup, preserving graph connectivity for downstream stages.
     // Contract 3: Unrelated short unitigs (< 500 bp, non-circular, not protected by `rejected_nodes` and never incorporated
     //             into any contig) are safely cleaned up to eliminate orphan sequencing artifacts.
+    let mut connected = HashSet::new();
+    for node in graph.nodes.iter().filter(|node| !node.is_deleted) {
+        for edge in node.edges_fwd.iter().chain(&node.edges_rev) {
+            if graph.nodes.get(edge.target.id() as usize).is_some_and(|target| !target.is_deleted) {
+                connected.insert(node.id);
+                connected.insert(edge.target.id());
+            }
+        }
+    }
     for node in graph.nodes.iter_mut() {
-        if !node.is_circular && node.seq_len < 500 && !rejected_nodes.contains(&node.id) {
+        if !node.is_circular && node.seq_len < 500 && !rejected_nodes.contains(&node.id) && !connected.contains(&node.id) {
             node.is_deleted = true;
         }
     }

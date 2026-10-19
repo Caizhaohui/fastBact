@@ -1,0 +1,27 @@
+   Compiling fastBact v0.1.0 (/hpcfs/fhome/caizhh/.local/state/codex-with-chatgpt/fastbact-preflight-69HE09JF/baseline)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 3.90s
+     Running tests/integration_test.rs (/hpcfs/fhome/caizhh/.local/state/codex-with-chatgpt/fastbact-preflight-69HE09JF/target-baseline/debug/deps/integration_test-3510b5ecd6528bfb)
+
+running 1 test
+[Timing] Stage 1+2 Ingest: 6.56s
+[Timing] Stage 3 Build k=31 + Simplify: 2.17s, active nodes=15, top lengths=[29351, 21889, 20007, 17448, 7644, 4000, 2403, 831]
+[Timing] Stage 4 Multi-k (79) + Simplify: 3.00s, active nodes=6, top lengths=[45115, 29459, 25157, 4000, 157, 91]
+[Timing] Stage 5 Mapper + exSPAnder: 477.83ms, active nodes=3, top lengths=[99585, 4000, 157]
+[Timing] Stage 6 Polish + Output: 379.13ms
+[Timing] Total Pipeline: 12.58s, Total With Simulation: 14.76s
+  Contig: contig_1 len=99585 circular=false
+  Contig: contig_2 len=4000 circular=true
+
+thread 'test_end_to_end_synthetic_bacterial_assembly' panicked at tests/integration_test.rs:290:5:
+End-to-end pipeline must complete in < 3.5s, took 12.58s
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+test test_end_to_end_synthetic_bacterial_assembly ... FAILED
+
+failures:
+
+failures:
+    test_end_to_end_synthetic_bacterial_assembly
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 14.77s
+
+error: test failed, to rerun pass `--test integration_test`

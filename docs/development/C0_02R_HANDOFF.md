@@ -82,3 +82,50 @@ diagnostics, not an LSP result. No toolchain install or login-node build was run
 Fresh `git ls-remote --heads origin` confirms remote main/master at dac6a57,
 C0-01 at 3950b2a, C0-02 at b9727c3, no remote C0-02R branch yet.
 Next active phase after this commit: Phase B. Phase C/D remain gated.
+
+## Phase B investigation
+
+Phase A commit: `f500d0f`. Red job 2978134: existing G1–G6 already pass on
+original b9727c3 and after A (6/6 each); these are not new failure evidence.
+Supplemental six cases fail 5/6 on original baseline, 3/6 after A. After A,
+connected-short cleanup, incoming-only connectivity, and legal short repeat
+reuse fail. The existing uncommitted short-repeat edit repairs the last case
+and is adopted as inherited work after independent reproduction.
+
+Cleanup policy: delete only unrelated isolated, noncircular nodes shorter than
+500 bp that are not in rejected_nodes. Connectivity uses incident edges
+between active nodes on either strand, including incoming-only edges.
+Invalid/deleted targets or deleted sources do not establish active connectivity.
+Candidate failure preserves graph state apart from the separately defined
+cleanup of unrelated isolated nodes; a whole-resolver equality claim without
+this qualification would be wrong.
+
+Supplemental snapshots include entire CdbgGraph Debug storage (all node fields
+and arena data/offsets/lengths), with explicit DNA/commit assertions. Test inputs
+are deterministic; red-to-green edits are formatting only. Successful repeat
+fixture expects exactly 2026 bp; retry fixture expects 1288 bp.
+
+Job 2978136: targeted 64/64 pass; library 32/32 pass; overall job FAILED 101:0
+because debug integration exceeds the unmodified 3.5s timing assertion (13.85s).
+Original b9727c3 independently reproduces the same timing failure (12.58s)
+in job 2978137. This timing failure is pre-existing and is not a correctness
+PASS. Release all-target regression is running in 2978137; Phase C/D stay gated
+until that result is assessed. No timing assertion/test is weakened or removed.
+
+## Phase B receipt
+
+Release regression job 2978137 COMPLETED 0:0 on qfree/vnode1, 8 CPUs/12G.
+`cargo test --release --locked --offline --all-targets` passed 97 tests:
+32 library + 1 full synthetic assembly + 64 targeted integration cases.
+Synthetic assembly test finished in 1.58s, preserving its original timing
+assertion. Original baseline debug timing failure is independently established;
+debug all-target regression is still reported as failed, not relabeled PASS.
+Phase B source is Phase A plus `phase_b/implementation.patch`; hashes match
+targeted job 2978136. Full synthetic assembly exercised pipeline through output.
+No test was removed, ignored, or weakened.
+
+Five review lanes independently examined Phase B; static goal, code, security,
+and local-context lanes PASS. Runtime lane reports the targeted gate PASS and
+initial debug full-regression FAIL; the separate release receipt now supplies
+the complete full-regression result. All raw outcomes are retained.
+Phase B ready for independent commit; Phase C is next, Phase D follows C.

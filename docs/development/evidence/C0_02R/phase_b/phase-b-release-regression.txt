@@ -1,0 +1,253 @@
+   Compiling crossbeam-utils v0.8.23
+   Compiling proc-macro2 v1.0.107
+   Compiling unicode-ident v1.0.27
+   Compiling quote v1.0.47
+   Compiling crossbeam-epoch v0.9.21
+   Compiling zerocopy v0.8.63
+   Compiling crossbeam-deque v0.8.8
+   Compiling rayon-core v1.13.0
+   Compiling crc32fast v1.5.2
+   Compiling version_check v0.9.5
+   Compiling cfg-if v1.0.5
+   Compiling heck v0.5.0
+   Compiling anyhow v1.0.104
+   Compiling ahash v0.8.12
+   Compiling once_cell v1.21.4
+   Compiling libc v0.2.190
+   Compiling syn v2.0.119
+   Compiling syn v3.0.9
+   Compiling utf8parse v0.2.2
+   Compiling anstyle-parse v1.0.0
+   Compiling clap_derive v4.6.7
+   Compiling tracing-core v0.1.36
+   Compiling tracing-attributes v0.1.31
+   Compiling colorchoice v1.0.5
+   Compiling anstyle v1.0.14
+   Compiling regex-syntax v0.8.11
+   Compiling adler2 v2.0.1
+   Compiling anstyle-query v1.1.5
+   Compiling simd-adler32 v0.3.10
+   Compiling is_terminal_polyfill v1.70.2
+   Compiling anstream v1.0.0
+   Compiling miniz_oxide v0.9.1
+   Compiling regex-automata v0.4.18
+   Compiling getrandom v0.2.17
+   Compiling either v1.19.0
+   Compiling rustix v1.1.5
+   Compiling lazy_static v1.5.1
+   Compiling pin-project-lite v0.2.17
+   Compiling getrandom v0.4.3
+   Compiling clap_lex v1.1.1
+   Compiling memchr v2.8.3
+   Compiling log v0.4.34
+   Compiling strsim v0.11.1
+   Compiling clap_builder v4.6.7
+   Compiling buffer-redux v1.1.0
+   Compiling tracing-log v0.2.0
+   Compiling tracing v0.1.44
+   Compiling matchers v0.2.0
+   Compiling sharded-slab v0.1.7
+   Compiling rayon v1.12.0
+   Compiling flate2 v1.1.10
+   Compiling rand_core v0.6.4
+   Compiling ppv-lite86 v0.2.21
+   Compiling thread_local v1.1.10
+   Compiling smallvec v1.16.3
+   Compiling bitflags v2.13.2
+   Compiling allocator-api2 v0.2.21
+   Compiling linux-raw-sys v0.12.1
+   Compiling nu-ansi-term v0.50.3
+   Compiling bytecount v0.6.9
+   Compiling needletail v0.5.1
+   Compiling tracing-subscriber v0.3.23
+   Compiling hashbrown v0.14.5
+   Compiling rand_chacha v0.3.1
+   Compiling clap v4.6.7
+   Compiling crossbeam-channel v0.5.17
+   Compiling fastrand v2.5.0
+   Compiling rustc-hash v2.1.3
+   Compiling tempfile v3.27.0
+   Compiling rand v0.8.8
+   Compiling fastBact v0.1.0 (/hpcfs/fhome/caizhh/.local/state/codex-with-chatgpt/fastbact-preflight-69HE09JF/phase-a)
+    Finished `release` profile [optimized] target(s) in 1m 29s
+     Running unittests src/lib.rs (/hpcfs/fhome/caizhh/.local/state/codex-with-chatgpt/fastbact-preflight-69HE09JF/target-phase-a/release/deps/fastbact-d7df48ee678619ed)
+
+running 32 tests
+test common::bitseq::tests::test_base_encoding ... ok
+test common::bitseq::tests::test_rev_comp_word ... ok
+test common::bitseq::tests::test_rev_comp_ascii ... ok
+test common::bitseq::tests::test_bitseq_arena_packing_unpacking ... ok
+test common::kmer::tests::test_minimizers_extraction ... ok
+test common::kmer::tests::test_nthash_rolling ... ok
+test common::kmer::tests::test_u128_kmer_basic ... ok
+test common::kmer::tests::test_rolling_kmer_verification_gate ... ok
+test common::kmer::tests::test_u256_kmer_basic ... ok
+test common::kmer::tests::test_u64_kmer_basic ... ok
+test common::sketch::tests::test_count_min_sketch_basic ... ok
+test common::sketch::tests::test_hll_cardinality_verification_gate ... ok
+test common::sketch::tests::test_count_min_sketch_multithreaded ... ok
+test common::bitseq::tests::test_random_dna_lengths_1_to_500 ... ok
+test ingest::estimator::tests::test_compute_dynamic_kmers_short_75bp ... ok
+test graph::cdbg::tests::test_dir_unitig_id ... ok
+test ingest::estimator::tests::test_compute_dynamic_kmers_standard_150bp ... ok
+test common::sketch::tests::test_hll_merge ... ok
+test ingest::estimator::tests::test_extract_read_id_prefix ... ok
+test ingest::trim_merge::tests::test_adapter_trimming ... ok
+test ingest::estimator::tests::test_count_fastx_exact_header_desync ... ok
+test ingest::trim_merge::tests::test_verification_gate_long_fragment_unmerged ... ok
+test ingest::trim_merge::tests::test_verification_gate_short_fragment_merge_with_errors ... ok
+test ingest::estimator::tests::test_count_fastx_exact_mismatched_pair_count ... ok
+test ingest::estimator::tests::test_count_fastx_exact_success ... ok
+test polish::consensus::tests::test_is_reverse_complement_exact ... ok
+test common::sketch::tests::test_hll_splitmix64_uniformity_vs_raw_min ... ok
+test polish::consensus::tests::test_reverse_coordinate_formula ... ok
+test common::sketch::tests::test_hll_multi_scale_cardinality ... ok
+test graph::local_multik::tests::test_verification_gate_multik_resolution_and_plasmid ... ok
+test graph::build::tests::test_verification_gate_circular_repeat_compaction ... ok
+test resolve::exspander::tests::test_verification_gate_exspander_350bp_repeat_resolution ... ok
+
+test result: ok. 32 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.15s
+
+     Running unittests src/bin/experiment_a.rs (/hpcfs/fhome/caizhh/.local/state/codex-with-chatgpt/fastbact-preflight-69HE09JF/target-phase-a/release/deps/experiment_a-a6b615e020c0b61a)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/main.rs (/hpcfs/fhome/caizhh/.local/state/codex-with-chatgpt/fastbact-preflight-69HE09JF/target-phase-a/release/deps/fastBact-22e2eccd9fbcb3d1)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/bin/generate_benchmark.rs (/hpcfs/fhome/caizhh/.local/state/codex-with-chatgpt/fastbact-preflight-69HE09JF/target-phase-a/release/deps/generate_benchmark-3b21a1421ccd8c55)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/bin/run_experiment_b.rs (/hpcfs/fhome/caizhh/.local/state/codex-with-chatgpt/fastbact-preflight-69HE09JF/target-phase-a/release/deps/run_experiment_b-abdf43bb6d1f185d)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/bin/verify_var1.rs (/hpcfs/fhome/caizhh/.local/state/codex-with-chatgpt/fastbact-preflight-69HE09JF/target-phase-a/release/deps/verify_var1-d73d5062870ef17b)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/bin/verify_var3_gates.rs (/hpcfs/fhome/caizhh/.local/state/codex-with-chatgpt/fastbact-preflight-69HE09JF/target-phase-a/release/deps/verify_var3_gates-95391757de7e7c65)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/integration_test.rs (/hpcfs/fhome/caizhh/.local/state/codex-with-chatgpt/fastbact-preflight-69HE09JF/target-phase-a/release/deps/integration_test-334e40ec32262371)
+
+running 1 test
+test test_end_to_end_synthetic_bacterial_assembly ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.58s
+
+     Running tests/test_c0_01_polish_orientation.rs (/hpcfs/fhome/caizhh/.local/state/codex-with-chatgpt/fastbact-preflight-69HE09JF/target-phase-a/release/deps/test_c0_01_polish_orientation-3e9e226b346f992e)
+
+running 29 tests
+test test_matrix_len075_offset00_fwd ... ok
+test test_matrix_len075_offset00_mixed ... ok
+test test_matrix_len075_offset00_rev ... ok
+test test_matrix_len075_offset30_fwd ... ok
+test test_matrix_len075_offset30_rev ... ok
+test test_matrix_len075_offset30_mixed ... ok
+test test_matrix_len100_offset00_fwd ... ok
+test test_matrix_len100_offset00_mixed ... ok
+test test_matrix_len100_offset00_rev ... ok
+test test_matrix_len100_offset30_fwd ... ok
+test test_matrix_len100_offset30_mixed ... ok
+test test_matrix_len100_offset30_rev ... ok
+test test_matrix_len100_offset60_fwd ... ok
+test test_matrix_len100_offset60_mixed ... ok
+test test_matrix_len100_offset60_rev ... ok
+test test_matrix_len150_offset00_fwd ... ok
+test test_matrix_len150_offset00_mixed ... ok
+test test_matrix_len150_offset00_rev ... ok
+test test_matrix_len150_offset30_fwd ... ok
+test test_matrix_len150_offset30_mixed ... ok
+test test_matrix_len150_offset30_rev ... ok
+test test_matrix_len150_offset60_fwd ... ok
+test test_matrix_len150_offset60_mixed ... ok
+test test_matrix_len150_offset60_rev ... ok
+test test_repeated_seed_and_unanchored_reads ... ok
+test test_reverse_reads_with_small_sequencing_errors ... ok
+test test_reverse_coordinate_repro_minimal_failure ... ok
+test test_reverse_snv_correction ... ok
+test test_unknown_orientation_rejected ... ok
+
+test result: ok. 29 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/test_c0_02_junction_overlap.rs (/hpcfs/fhome/caizhh/.local/state/codex-with-chatgpt/fastbact-preflight-69HE09JF/target-phase-a/release/deps/test_c0_02_junction_overlap-83670d9f3a62ac62)
+
+running 10 tests
+test test_t3_same_directed_pair_both_k_and_k_minus_1_edges ... ok
+test test_t1_two_unitigs_valid_overlap_k_minus_1 ... ok
+test test_t10_backward_path_reversal_references_correct_edge_and_overlap ... ok
+test test_t2_two_unitigs_valid_overlap_k ... ok
+test test_t5_three_unitigs_mixing_k_and_k_minus_1 ... ok
+test test_t7_no_valid_connection_rejects_splicing ... ok
+test test_t4_reverse_complement_orientation ... ok
+test test_t8_failure_preserves_graph_state_atomically ... ok
+test test_t9_multiple_overlap_edges_explicit_selection_and_ambiguity_rejection ... ok
+test test_t6_edge_overlap_mismatches_actual_sequence ... ok
+
+test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/test_c0_02r_cleanup_gate.rs (/hpcfs/fhome/caizhh/.local/state/codex-with-chatgpt/fastbact-preflight-69HE09JF/target-phase-a/release/deps/test_c0_02r_cleanup_gate-78681d6603896001)
+
+running 6 tests
+test g1_failed_full_validation_preserves_arena_and_entire_graph ... ok
+test g6_long_unique_node_reuse_remains_rejected ... ok
+test g2_validation_failure_keeps_shared_short_path_available ... ok
+test g5_incoming_only_short_node_is_connected ... ok
+test g5_connected_short_nodes_are_not_isolated_cleanup_artifacts ... ok
+test g6_legal_short_repeat_reuse_commits_exact_sequence_once ... ok
+
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/test_c0_02r_directed_edge_identity.rs (/hpcfs/fhome/caizhh/.local/state/codex-with-chatgpt/fastbact-preflight-69HE09JF/target-phase-a/release/deps/test_c0_02r_directed_edge_identity-0d3ff43952fecd17)
+
+running 8 tests
+test test_e2_none_incoming_edge_on_non_first_step_rejected ... ok
+test test_e1_nonexistent_edge_matching_sequence_rejected ... ok
+test test_e4_incoming_edge_overlap_mismatch_rejected ... ok
+test test_e3_incoming_edge_target_mismatch_rejected ... ok
+test test_e5_forged_support_metadata_rejected ... ok
+test test_e6_backward_path_missing_reciprocal_edge_rejected ... ok
+test test_e7_multiple_overlap_candidates_tied_support_ambiguous_rejected ... ok
+test test_e8_valid_mixed_k_and_k_minus_1_path_succeeds ... ok
+
+test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/test_c0_02r_edge_gate.rs (/hpcfs/fhome/caizhh/.local/state/codex-with-chatgpt/fastbact-preflight-69HE09JF/target-phase-a/release/deps/test_c0_02r_edge_gate-b2d6f5ae8489994e)
+
+running 5 tests
+test e7_direct_validator_rejects_lower_support_edge ... ok
+test e1_matching_sequence_on_wrong_strand_is_rejected ... ok
+test e6_backward_reciprocal_support_must_match_selected_edge ... ok
+test e7_direct_validator_accepts_selected_edge ... ok
+test e7_direct_validator_rejects_tied_overlaps ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/test_c0_02r_graph_atomicity.rs (/hpcfs/fhome/caizhh/.local/state/codex-with-chatgpt/fastbact-preflight-69HE09JF/target-phase-a/release/deps/test_c0_02r_graph_atomicity-234157477a9d4557)
+
+running 6 tests
+test test_g1_verification_failure_leaves_graph_snapshot_identical ... ok
+test test_g2_path_rejection_does_not_pollute_used_state_for_other_paths ... ok
+test test_g3_consecutive_candidate_paths_isolated_failure ... ok
+test test_g4_short_nodes_in_rejected_paths_preserved_by_cleanup ... ok
+test test_g5_unrelated_isolated_short_nodes_deleted_by_policy ... ok
+test test_g6_successful_commit_no_abnormal_deletion_or_lost_nodes ... ok
+
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+

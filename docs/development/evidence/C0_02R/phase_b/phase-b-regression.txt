@@ -1,0 +1,104 @@
+   Compiling fastBact v0.1.0 (/hpcfs/fhome/caizhh/.local/state/codex-with-chatgpt/fastbact-preflight-69HE09JF/phase-a)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 3.88s
+     Running unittests src/lib.rs (/hpcfs/fhome/caizhh/.local/state/codex-with-chatgpt/fastbact-preflight-69HE09JF/target-phase-a/debug/deps/fastbact-1163af257deca3a0)
+
+running 32 tests
+test common::bitseq::tests::test_rev_comp_ascii ... ok
+test common::bitseq::tests::test_base_encoding ... ok
+test common::kmer::tests::test_nthash_rolling ... ok
+test common::bitseq::tests::test_rev_comp_word ... ok
+test common::kmer::tests::test_minimizers_extraction ... ok
+test common::kmer::tests::test_u128_kmer_basic ... ok
+test common::kmer::tests::test_u256_kmer_basic ... ok
+test common::kmer::tests::test_u64_kmer_basic ... ok
+test common::bitseq::tests::test_bitseq_arena_packing_unpacking ... ok
+test common::sketch::tests::test_count_min_sketch_basic ... ok
+test common::kmer::tests::test_rolling_kmer_verification_gate ... ok
+test graph::cdbg::tests::test_dir_unitig_id ... ok
+test common::sketch::tests::test_count_min_sketch_multithreaded ... ok
+test ingest::estimator::tests::test_compute_dynamic_kmers_short_75bp ... ok
+test ingest::estimator::tests::test_compute_dynamic_kmers_standard_150bp ... ok
+test ingest::estimator::tests::test_count_fastx_exact_header_desync ... ok
+test ingest::estimator::tests::test_count_fastx_exact_mismatched_pair_count ... ok
+test common::sketch::tests::test_hll_cardinality_verification_gate ... ok
+test ingest::estimator::tests::test_extract_read_id_prefix ... ok
+test ingest::estimator::tests::test_count_fastx_exact_success ... ok
+test ingest::trim_merge::tests::test_adapter_trimming ... ok
+test ingest::trim_merge::tests::test_verification_gate_long_fragment_unmerged ... ok
+test polish::consensus::tests::test_is_reverse_complement_exact ... ok
+test polish::consensus::tests::test_reverse_coordinate_formula ... ok
+test ingest::trim_merge::tests::test_verification_gate_short_fragment_merge_with_errors ... ok
+test common::sketch::tests::test_hll_merge ... ok
+test common::sketch::tests::test_hll_splitmix64_uniformity_vs_raw_min ... ok
+test common::bitseq::tests::test_random_dna_lengths_1_to_500 ... ok
+test common::sketch::tests::test_hll_multi_scale_cardinality ... ok
+test graph::build::tests::test_verification_gate_circular_repeat_compaction ... ok
+test graph::local_multik::tests::test_verification_gate_multik_resolution_and_plasmid ... ok
+test resolve::exspander::tests::test_verification_gate_exspander_350bp_repeat_resolution ... ok
+
+test result: ok. 32 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 2.35s
+
+     Running unittests src/bin/experiment_a.rs (/hpcfs/fhome/caizhh/.local/state/codex-with-chatgpt/fastbact-preflight-69HE09JF/target-phase-a/debug/deps/experiment_a-3ba0022bba67f01a)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/main.rs (/hpcfs/fhome/caizhh/.local/state/codex-with-chatgpt/fastbact-preflight-69HE09JF/target-phase-a/debug/deps/fastBact-23937af6d6fc96ba)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/bin/generate_benchmark.rs (/hpcfs/fhome/caizhh/.local/state/codex-with-chatgpt/fastbact-preflight-69HE09JF/target-phase-a/debug/deps/generate_benchmark-e0ffbd9cd2ea496d)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/bin/run_experiment_b.rs (/hpcfs/fhome/caizhh/.local/state/codex-with-chatgpt/fastbact-preflight-69HE09JF/target-phase-a/debug/deps/run_experiment_b-be68f950facf3b54)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/bin/verify_var1.rs (/hpcfs/fhome/caizhh/.local/state/codex-with-chatgpt/fastbact-preflight-69HE09JF/target-phase-a/debug/deps/verify_var1-1840a04d5ec57700)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/bin/verify_var3_gates.rs (/hpcfs/fhome/caizhh/.local/state/codex-with-chatgpt/fastbact-preflight-69HE09JF/target-phase-a/debug/deps/verify_var3_gates-41145eee471159b5)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/integration_test.rs (/hpcfs/fhome/caizhh/.local/state/codex-with-chatgpt/fastbact-preflight-69HE09JF/target-phase-a/debug/deps/integration_test-3510b5ecd6528bfb)
+
+running 1 test
+test test_end_to_end_synthetic_bacterial_assembly ... FAILED
+
+failures:
+
+---- test_end_to_end_synthetic_bacterial_assembly stdout ----
+[Timing] Stage 1+2 Ingest: 7.13s
+[Timing] Stage 3 Build k=31 + Simplify: 2.44s, active nodes=15, top lengths=[29351, 21889, 20007, 17448, 7644, 4000, 2403, 831]
+[Timing] Stage 4 Multi-k (79) + Simplify: 3.40s, active nodes=6, top lengths=[45115, 29459, 25157, 4000, 157, 91]
+[Timing] Stage 5 Mapper + exSPAnder: 495.31ms, active nodes=3, top lengths=[99585, 4000, 157]
+[Timing] Stage 6 Polish + Output: 380.91ms
+[Timing] Total Pipeline: 13.85s, Total With Simulation: 15.88s
+  Contig: contig_1 len=99585 circular=false
+  Contig: contig_2 len=4000 circular=true
+
+thread 'test_end_to_end_synthetic_bacterial_assembly' panicked at tests/integration_test.rs:290:5:
+End-to-end pipeline must complete in < 3.5s, took 13.85s
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    test_end_to_end_synthetic_bacterial_assembly
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 15.90s
+
+error: test failed, to rerun pass `--test integration_test`

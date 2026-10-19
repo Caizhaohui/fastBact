@@ -1,0 +1,182 @@
+job=2978134 node=vnode1 cpus=8 mem=12288
+b9727c3ab372f7b995e439d92b72c7a4bfd051cf
+a674d3e406959b7f261a9792d9ccdfb1ee9c7d1f
+318db75dc1fe20529b8b577e176eab953fcdc8bbaca5be355f2ac68c71ef2866  src/resolve/exspander.rs
+80e214bff794b1b68ccd9d8c00de9a8019ac40acf6d535ab164da1aa2e0f3bca  tests/test_c0_02r_cleanup_gate.rs
+b9d3a8c1e743ce0c5c0f7b7984447d1769814f4ac4ea837e00e95f7fdfffba44  tests/test_c0_02r_graph_atomicity.rs
+COMMAND: cargo test --locked --offline --test test_c0_02r_graph_atomicity -- --nocapture
+variant=baseline suite=test_c0_02r_graph_atomicity cargo_exit=0
+   Compiling fastBact v0.1.0 (/hpcfs/fhome/caizhh/.local/state/codex-with-chatgpt/fastbact-preflight-69HE09JF/baseline)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 1.43s
+     Running tests/test_c0_02r_graph_atomicity.rs (/hpcfs/fhome/caizhh/.local/state/codex-with-chatgpt/fastbact-preflight-69HE09JF/target-baseline/debug/deps/test_c0_02r_graph_atomicity-e70c61bfc40ac385)
+
+running 6 tests
+test test_g4_short_nodes_in_rejected_paths_preserved_by_cleanup ... ok
+test test_g5_unrelated_isolated_short_nodes_deleted_by_policy ... ok
+test test_g1_verification_failure_leaves_graph_snapshot_identical ... ok
+test test_g2_path_rejection_does_not_pollute_used_state_for_other_paths ... ok
+test test_g6_successful_commit_no_abnormal_deletion_or_lost_nodes ... ok
+test test_g3_consecutive_candidate_paths_isolated_failure ... ok
+
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+COMMAND: cargo test --locked --offline --test test_c0_02r_cleanup_gate -- --nocapture
+variant=baseline suite=test_c0_02r_cleanup_gate cargo_exit=101
+   Compiling fastBact v0.1.0 (/hpcfs/fhome/caizhh/.local/state/codex-with-chatgpt/fastbact-preflight-69HE09JF/baseline)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 1.35s
+     Running tests/test_c0_02r_cleanup_gate.rs (/hpcfs/fhome/caizhh/.local/state/codex-with-chatgpt/fastbact-preflight-69HE09JF/target-baseline/debug/deps/test_c0_02r_cleanup_gate-690e593216e7cb48)
+
+running 6 tests
+
+thread 'g5_connected_short_nodes_are_not_isolated_cleanup_artifacts' panicked at tests/test_c0_02r_cleanup_gate.rs:31:5:
+assertion `left == right` failed
+  left: "CdbgGraph { k: 31, arena: BitSeqArena { data: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], offsets: [0, 200], lengths: [200, 300] }, nodes: [UnitigNode { id: 0, seq_id: 0, seq_len: 200, kmer_cov: 25.0, edges_fwd: [GraphEdge { target: DirUnitigId(2), overlap_k: 31, support: 10 }], edges_rev: [], is_deleted: true, is_circular: false }, UnitigNode { id: 1, seq_id: 1, seq_len: 300, kmer_cov: 25.0, edges_fwd: [], edges_rev: [GraphEdge { target: DirUnitigId(1), overlap_k: 31, support: 10 }], is_deleted: true, is_circular: false }] }"
+ right: "CdbgGraph { k: 31, arena: BitSeqArena { data: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], offsets: [0, 200], lengths: [200, 300] }, nodes: [UnitigNode { id: 0, seq_id: 0, seq_len: 200, kmer_cov: 25.0, edges_fwd: [GraphEdge { target: DirUnitigId(2), overlap_k: 31, support: 10 }], edges_rev: [], is_deleted: false, is_circular: false }, UnitigNode { id: 1, seq_id: 1, seq_len: 300, kmer_cov: 25.0, edges_fwd: [], edges_rev: [GraphEdge { target: DirUnitigId(1), overlap_k: 31, support: 10 }], is_deleted: false, is_circular: false }] }"
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+thread 'g5_incoming_only_short_node_is_connected' panicked at tests/test_c0_02r_cleanup_gate.rs:43:5:
+assertion `left == right` failed: incoming edge from DirUnitigId(0) must protect short target
+  left: "CdbgGraph { k: 31, arena: BitSeqArena { data: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], offsets: [0, 700], lengths: [700, 200] }, nodes: [UnitigNode { id: 0, seq_id: 0, seq_len: 700, kmer_cov: 25.0, edges_fwd: [GraphEdge { target: DirUnitigId(2), overlap_k: 31, support: 10 }], edges_rev: [], is_deleted: false, is_circular: true }, UnitigNode { id: 1, seq_id: 1, seq_len: 200, kmer_cov: 25.0, edges_fwd: [], edges_rev: [], is_deleted: true, is_circular: false }] }"
+ right: "CdbgGraph { k: 31, arena: BitSeqArena { data: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], offsets: [0, 700], lengths: [700, 200] }, nodes: [UnitigNode { id: 0, seq_id: 0, seq_len: 700, kmer_cov: 25.0, edges_fwd: [GraphEdge { target: DirUnitigId(2), overlap_k: 31, support: 10 }], edges_rev: [], is_deleted: false, is_circular: true }, UnitigNode { id: 1, seq_id: 1, seq_len: 200, kmer_cov: 25.0, edges_fwd: [], edges_rev: [], is_deleted: false, is_circular: false }] }"
+
+thread 'g6_long_unique_node_reuse_remains_rejected' panicked at tests/test_c0_02r_cleanup_gate.rs:116:5:
+assertion failed: validate_and_splice_path(&graph, &path).is_err()
+
+thread 'g2_validation_failure_keeps_shared_short_path_available' panicked at tests/test_c0_02r_cleanup_gate.rs:73:5:
+assertion `left == right` failed
+  left: "UnitigNode { id: 0, seq_id: 0, seq_len: 750, kmer_cov: 25.0, edges_fwd: [GraphEdge { target: DirUnitigId(2), overlap_k: 31, support: 10 }], edges_rev: [], is_deleted: true, is_circular: false }"
+ right: "UnitigNode { id: 0, seq_id: 0, seq_len: 750, kmer_cov: 25.0, edges_fwd: [GraphEdge { target: DirUnitigId(2), overlap_k: 31, support: 10 }], edges_rev: [], is_deleted: false, is_circular: false }"
+
+thread 'g1_failed_full_validation_preserves_arena_and_entire_graph' panicked at tests/test_c0_02r_cleanup_gate.rs:55:5:
+assertion `left == right` failed
+  left: "CdbgGraph { k: 31, arena: BitSeqArena { data: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], offsets: [0, 700, 900], lengths: [700, 200, 869] }, nodes: [UnitigNode { id: 0, seq_id: 0, seq_len: 700, kmer_cov: 25.0, edges_fwd: [GraphEdge { target: DirUnitigId(2), overlap_k: 31, support: 10 }], edges_rev: [], is_deleted: true, is_circular: false }, UnitigNode { id: 1, seq_id: 1, seq_len: 200, kmer_cov: 25.0, edges_fwd: [], edges_rev: [GraphEdge { target: DirUnitigId(1), overlap_k: 31, support: 11 }], is_deleted: true, is_circular: false }, UnitigNode { id: 2, seq_id: 2, seq_len: 869, kmer_cov: 20.0, edges_fwd: [], edges_rev: [], is_deleted: false, is_circular: false }] }"
+ right: "CdbgGraph { k: 31, arena: BitSeqArena { data: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], offsets: [0, 700], lengths: [700, 200] }, nodes: [UnitigNode { id: 0, seq_id: 0, seq_len: 700, kmer_cov: 25.0, edges_fwd: [GraphEdge { target: DirUnitigId(2), overlap_k: 31, support: 10 }], edges_rev: [], is_deleted: false, is_circular: false }, UnitigNode { id: 1, seq_id: 1, seq_len: 200, kmer_cov: 25.0, edges_fwd: [], edges_rev: [GraphEdge { target: DirUnitigId(1), overlap_k: 31, support: 11 }], is_deleted: false, is_circular: false }] }"
+test g5_connected_short_nodes_are_not_isolated_cleanup_artifacts ... FAILED
+test g5_incoming_only_short_node_is_connected ... FAILED
+test g6_long_unique_node_reuse_remains_rejected ... FAILED
+test g2_validation_failure_keeps_shared_short_path_available ... FAILED
+test g6_legal_short_repeat_reuse_commits_exact_sequence_once ... ok
+test g1_failed_full_validation_preserves_arena_and_entire_graph ... FAILED
+
+failures:
+
+failures:
+    g1_failed_full_validation_preserves_arena_and_entire_graph
+    g2_validation_failure_keeps_shared_short_path_available
+    g5_connected_short_nodes_are_not_isolated_cleanup_artifacts
+    g5_incoming_only_short_node_is_connected
+    g6_long_unique_node_reuse_remains_rejected
+
+test result: FAILED. 1 passed; 5 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+error: test failed, to rerun pass `--test test_c0_02r_cleanup_gate`
+cbf5c1a328ee71fad865da51165a7dceb353e106
+fef5b3e16b51965c51dfe80657ed65cc6c630042
+d07d63d67c61b345f1c604e337ef9dff381820c800434d7879a9c8d52bec70cd  src/resolve/exspander.rs
+80e214bff794b1b68ccd9d8c00de9a8019ac40acf6d535ab164da1aa2e0f3bca  tests/test_c0_02r_cleanup_gate.rs
+b9d3a8c1e743ce0c5c0f7b7984447d1769814f4ac4ea837e00e95f7fdfffba44  tests/test_c0_02r_graph_atomicity.rs
+COMMAND: cargo test --locked --offline --test test_c0_02r_graph_atomicity -- --nocapture
+variant=phase-a suite=test_c0_02r_graph_atomicity cargo_exit=0
+   Compiling adler2 v2.0.1
+   Compiling anstyle v1.0.14
+   Compiling anstyle-query v1.1.5
+   Compiling is_terminal_polyfill v1.70.2
+   Compiling anstream v1.0.0
+   Compiling miniz_oxide v0.9.1
+   Compiling anyhow v1.0.104
+   Compiling memchr v2.8.3
+   Compiling syn v2.0.119
+   Compiling syn v3.0.9
+   Compiling clap_lex v1.1.1
+   Compiling regex-automata v0.4.18
+   Compiling lazy_static v1.5.1
+   Compiling heck v0.5.0
+   Compiling strsim v0.11.1
+   Compiling pin-project-lite v0.2.17
+   Compiling either v1.19.0
+   Compiling log v0.4.34
+   Compiling tracing-log v0.2.0
+   Compiling rayon v1.12.0
+   Compiling clap_builder v4.6.7
+   Compiling sharded-slab v0.1.7
+   Compiling buffer-redux v1.1.0
+   Compiling flate2 v1.1.10
+   Compiling thread_local v1.1.10
+   Compiling nu-ansi-term v0.50.3
+   Compiling matchers v0.2.0
+   Compiling libc v0.2.190
+   Compiling smallvec v1.16.3
+   Compiling allocator-api2 v0.2.21
+   Compiling bytecount v0.6.9
+   Compiling hashbrown v0.14.5
+   Compiling needletail v0.5.1
+   Compiling crossbeam-channel v0.5.17
+   Compiling rustc-hash v2.1.3
+   Compiling clap_derive v4.6.7
+   Compiling rustix v1.1.5
+   Compiling getrandom v0.4.3
+   Compiling ppv-lite86 v0.2.21
+   Compiling linux-raw-sys v0.12.1
+   Compiling bitflags v2.13.2
+   Compiling fastrand v2.5.0
+   Compiling tracing-attributes v0.1.31
+   Compiling getrandom v0.2.17
+   Compiling rand_core v0.6.4
+   Compiling rand_chacha v0.3.1
+   Compiling rand v0.8.8
+   Compiling clap v4.6.7
+   Compiling tracing v0.1.44
+   Compiling tracing-subscriber v0.3.23
+   Compiling tempfile v3.27.0
+   Compiling fastBact v0.1.0 (/hpcfs/fhome/caizhh/.local/state/codex-with-chatgpt/fastbact-preflight-69HE09JF/phase-a)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 15.59s
+     Running tests/test_c0_02r_graph_atomicity.rs (/hpcfs/fhome/caizhh/.local/state/codex-with-chatgpt/fastbact-preflight-69HE09JF/target-phase-a/debug/deps/test_c0_02r_graph_atomicity-e70c61bfc40ac385)
+
+running 6 tests
+test test_g4_short_nodes_in_rejected_paths_preserved_by_cleanup ... ok
+test test_g5_unrelated_isolated_short_nodes_deleted_by_policy ... ok
+test test_g1_verification_failure_leaves_graph_snapshot_identical ... ok
+test test_g2_path_rejection_does_not_pollute_used_state_for_other_paths ... ok
+test test_g3_consecutive_candidate_paths_isolated_failure ... ok
+test test_g6_successful_commit_no_abnormal_deletion_or_lost_nodes ... ok
+
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+COMMAND: cargo test --locked --offline --test test_c0_02r_cleanup_gate -- --nocapture
+variant=phase-a suite=test_c0_02r_cleanup_gate cargo_exit=101
+   Compiling fastBact v0.1.0 (/hpcfs/fhome/caizhh/.local/state/codex-with-chatgpt/fastbact-preflight-69HE09JF/phase-a)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 1.41s
+     Running tests/test_c0_02r_cleanup_gate.rs (/hpcfs/fhome/caizhh/.local/state/codex-with-chatgpt/fastbact-preflight-69HE09JF/target-phase-a/debug/deps/test_c0_02r_cleanup_gate-690e593216e7cb48)
+
+running 6 tests
+
+thread 'g5_incoming_only_short_node_is_connected' panicked at tests/test_c0_02r_cleanup_gate.rs:43:5:
+assertion `left == right` failed: incoming edge from DirUnitigId(0) must protect short target
+  left: "CdbgGraph { k: 31, arena: BitSeqArena { data: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], offsets: [0, 700], lengths: [700, 200] }, nodes: [UnitigNode { id: 0, seq_id: 0, seq_len: 700, kmer_cov: 25.0, edges_fwd: [GraphEdge { target: DirUnitigId(2), overlap_k: 31, support: 10 }], edges_rev: [], is_deleted: false, is_circular: true }, UnitigNode { id: 1, seq_id: 1, seq_len: 200, kmer_cov: 25.0, edges_fwd: [], edges_rev: [], is_deleted: true, is_circular: false }] }"
+ right: "CdbgGraph { k: 31, arena: BitSeqArena { data: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], offsets: [0, 700], lengths: [700, 200] }, nodes: [UnitigNode { id: 0, seq_id: 0, seq_len: 700, kmer_cov: 25.0, edges_fwd: [GraphEdge { target: DirUnitigId(2), overlap_k: 31, support: 10 }], edges_rev: [], is_deleted: false, is_circular: true }, UnitigNode { id: 1, seq_id: 1, seq_len: 200, kmer_cov: 25.0, edges_fwd: [], edges_rev: [], is_deleted: false, is_circular: false }] }"
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+test g6_long_unique_node_reuse_remains_rejected ... ok
+
+thread 'g5_connected_short_nodes_are_not_isolated_cleanup_artifacts' panicked at tests/test_c0_02r_cleanup_gate.rs:31:5:
+assertion `left == right` failed
+  left: "CdbgGraph { k: 31, arena: BitSeqArena { data: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], offsets: [0, 200], lengths: [200, 300] }, nodes: [UnitigNode { id: 0, seq_id: 0, seq_len: 200, kmer_cov: 25.0, edges_fwd: [GraphEdge { target: DirUnitigId(2), overlap_k: 31, support: 10 }], edges_rev: [], is_deleted: true, is_circular: false }, UnitigNode { id: 1, seq_id: 1, seq_len: 300, kmer_cov: 25.0, edges_fwd: [], edges_rev: [GraphEdge { target: DirUnitigId(1), overlap_k: 31, support: 10 }], is_deleted: true, is_circular: false }] }"
+ right: "CdbgGraph { k: 31, arena: BitSeqArena { data: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], offsets: [0, 200], lengths: [200, 300] }, nodes: [UnitigNode { id: 0, seq_id: 0, seq_len: 200, kmer_cov: 25.0, edges_fwd: [GraphEdge { target: DirUnitigId(2), overlap_k: 31, support: 10 }], edges_rev: [], is_deleted: false, is_circular: false }, UnitigNode { id: 1, seq_id: 1, seq_len: 300, kmer_cov: 25.0, edges_fwd: [], edges_rev: [GraphEdge { target: DirUnitigId(1), overlap_k: 31, support: 10 }], is_deleted: false, is_circular: false }] }"
+test g1_failed_full_validation_preserves_arena_and_entire_graph ... ok
+test g5_connected_short_nodes_are_not_isolated_cleanup_artifacts ... FAILED
+test g5_incoming_only_short_node_is_connected ... FAILED
+
+thread 'g6_legal_short_repeat_reuse_commits_exact_sequence_once' panicked at tests/test_c0_02r_cleanup_gate.rs:98:5:
+assertion failed: graph.nodes[..4].iter().all(|n| n.is_deleted)
+test g6_legal_short_repeat_reuse_commits_exact_sequence_once ... FAILED
+test g2_validation_failure_keeps_shared_short_path_available ... ok
+
+failures:
+
+failures:
+    g5_connected_short_nodes_are_not_isolated_cleanup_artifacts
+    g5_incoming_only_short_node_is_connected
+    g6_legal_short_repeat_reuse_commits_exact_sequence_once
+
+test result: FAILED. 3 passed; 3 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+error: test failed, to rerun pass `--test test_c0_02r_cleanup_gate`

@@ -1,0 +1,149 @@
+job=2978136 node=vnode1 cpus=8 mem=12288
+b516606d3fd1a60a741103ac3cc5d26e471e8b6bc3084825323d9ee2a0fd2fa3  src/resolve/exspander.rs
+9e8fc7a90f65ea266df1a4ece1b05eded0cab080ea0fc21bdb84e8135218daed  tests/test_c0_02r_cleanup_gate.rs
+COMMAND: cargo test --locked --offline --test test_c0_02r_graph_atomicity --test test_c0_02r_cleanup_gate --test test_c0_02r_directed_edge_identity --test test_c0_02r_edge_gate --test test_c0_02_junction_overlap --test test_c0_01_polish_orientation -- --nocapture
+targeted_exit=0
+   Compiling fastBact v0.1.0 (/hpcfs/fhome/caizhh/.local/state/codex-with-chatgpt/fastbact-preflight-69HE09JF/phase-a)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 5.18s
+     Running tests/test_c0_01_polish_orientation.rs (/hpcfs/fhome/caizhh/.local/state/codex-with-chatgpt/fastbact-preflight-69HE09JF/target-phase-a/debug/deps/test_c0_01_polish_orientation-29285f31a96be7fe)
+
+running 29 tests
+test test_matrix_len075_offset30_rev ... ok
+test test_matrix_len075_offset00_rev ... ok
+test test_matrix_len075_offset00_fwd ... ok
+test test_matrix_len075_offset00_mixed ... ok
+test test_matrix_len075_offset30_mixed ... ok
+test test_matrix_len075_offset30_fwd ... ok
+test test_matrix_len100_offset00_fwd ... ok
+test test_matrix_len100_offset00_mixed ... ok
+test test_matrix_len100_offset00_rev ... ok
+test test_matrix_len100_offset30_mixed ... ok
+test test_matrix_len100_offset30_fwd ... ok
+test test_matrix_len100_offset60_mixed ... ok
+test test_matrix_len100_offset30_rev ... ok
+test test_matrix_len100_offset60_fwd ... ok
+test test_matrix_len100_offset60_rev ... ok
+test test_matrix_len150_offset00_mixed ... ok
+test test_matrix_len150_offset00_fwd ... ok
+test test_matrix_len150_offset30_fwd ... ok
+test test_matrix_len150_offset30_rev ... ok
+test test_matrix_len150_offset30_mixed ... ok
+test test_matrix_len150_offset60_mixed ... ok
+test test_matrix_len150_offset00_rev ... ok
+test test_repeated_seed_and_unanchored_reads ... ok
+test test_matrix_len150_offset60_rev ... ok
+test test_reverse_coordinate_repro_minimal_failure ... ok
+test test_matrix_len150_offset60_fwd ... ok
+test test_unknown_orientation_rejected ... ok
+test test_reverse_reads_with_small_sequencing_errors ... ok
+test test_reverse_snv_correction ... ok
+
+test result: ok. 29 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/test_c0_02_junction_overlap.rs (/hpcfs/fhome/caizhh/.local/state/codex-with-chatgpt/fastbact-preflight-69HE09JF/target-phase-a/debug/deps/test_c0_02_junction_overlap-f54587ced662c4ee)
+
+running 10 tests
+test test_t7_no_valid_connection_rejects_splicing ... ok
+test test_t6_edge_overlap_mismatches_actual_sequence ... ok
+test test_t3_same_directed_pair_both_k_and_k_minus_1_edges ... ok
+test test_t1_two_unitigs_valid_overlap_k_minus_1 ... ok
+test test_t4_reverse_complement_orientation ... ok
+test test_t10_backward_path_reversal_references_correct_edge_and_overlap ... ok
+test test_t2_two_unitigs_valid_overlap_k ... ok
+test test_t5_three_unitigs_mixing_k_and_k_minus_1 ... ok
+test test_t8_failure_preserves_graph_state_atomically ... ok
+test test_t9_multiple_overlap_edges_explicit_selection_and_ambiguity_rejection ... ok
+
+test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/test_c0_02r_cleanup_gate.rs (/hpcfs/fhome/caizhh/.local/state/codex-with-chatgpt/fastbact-preflight-69HE09JF/target-phase-a/debug/deps/test_c0_02r_cleanup_gate-690e593216e7cb48)
+
+running 6 tests
+test g5_incoming_only_short_node_is_connected ... ok
+test g5_connected_short_nodes_are_not_isolated_cleanup_artifacts ... ok
+test g6_long_unique_node_reuse_remains_rejected ... ok
+test g1_failed_full_validation_preserves_arena_and_entire_graph ... ok
+test g2_validation_failure_keeps_shared_short_path_available ... ok
+test g6_legal_short_repeat_reuse_commits_exact_sequence_once ... ok
+
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/test_c0_02r_directed_edge_identity.rs (/hpcfs/fhome/caizhh/.local/state/codex-with-chatgpt/fastbact-preflight-69HE09JF/target-phase-a/debug/deps/test_c0_02r_directed_edge_identity-7ef43e95951a64a9)
+
+running 8 tests
+test test_e2_none_incoming_edge_on_non_first_step_rejected ... ok
+test test_e3_incoming_edge_target_mismatch_rejected ... ok
+test test_e4_incoming_edge_overlap_mismatch_rejected ... ok
+test test_e1_nonexistent_edge_matching_sequence_rejected ... ok
+test test_e5_forged_support_metadata_rejected ... ok
+test test_e6_backward_path_missing_reciprocal_edge_rejected ... ok
+test test_e7_multiple_overlap_candidates_tied_support_ambiguous_rejected ... ok
+test test_e8_valid_mixed_k_and_k_minus_1_path_succeeds ... ok
+
+test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/test_c0_02r_edge_gate.rs (/hpcfs/fhome/caizhh/.local/state/codex-with-chatgpt/fastbact-preflight-69HE09JF/target-phase-a/debug/deps/test_c0_02r_edge_gate-7cc5068585f0124a)
+
+running 5 tests
+test e1_matching_sequence_on_wrong_strand_is_rejected ... ok
+test e7_direct_validator_rejects_lower_support_edge ... ok
+test e7_direct_validator_rejects_tied_overlaps ... ok
+test e7_direct_validator_accepts_selected_edge ... ok
+test e6_backward_reciprocal_support_must_match_selected_edge ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/test_c0_02r_graph_atomicity.rs (/hpcfs/fhome/caizhh/.local/state/codex-with-chatgpt/fastbact-preflight-69HE09JF/target-phase-a/debug/deps/test_c0_02r_graph_atomicity-e70c61bfc40ac385)
+
+running 6 tests
+test test_g5_unrelated_isolated_short_nodes_deleted_by_policy ... ok
+test test_g4_short_nodes_in_rejected_paths_preserved_by_cleanup ... ok
+test test_g1_verification_failure_leaves_graph_snapshot_identical ... ok
+test test_g6_successful_commit_no_abnormal_deletion_or_lost_nodes ... ok
+test test_g2_path_rejection_does_not_pollute_used_state_for_other_paths ... ok
+test test_g3_consecutive_candidate_paths_isolated_failure ... ok
+
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+COMMAND: cargo test --locked --offline --all-targets
+regression_exit=101
+     Running unittests src/bin/verify_var1.rs (/hpcfs/fhome/caizhh/.local/state/codex-with-chatgpt/fastbact-preflight-69HE09JF/target-phase-a/debug/deps/verify_var1-1840a04d5ec57700)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/bin/verify_var3_gates.rs (/hpcfs/fhome/caizhh/.local/state/codex-with-chatgpt/fastbact-preflight-69HE09JF/target-phase-a/debug/deps/verify_var3_gates-41145eee471159b5)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/integration_test.rs (/hpcfs/fhome/caizhh/.local/state/codex-with-chatgpt/fastbact-preflight-69HE09JF/target-phase-a/debug/deps/integration_test-3510b5ecd6528bfb)
+
+running 1 test
+test test_end_to_end_synthetic_bacterial_assembly ... FAILED
+
+failures:
+
+---- test_end_to_end_synthetic_bacterial_assembly stdout ----
+[Timing] Stage 1+2 Ingest: 7.13s
+[Timing] Stage 3 Build k=31 + Simplify: 2.44s, active nodes=15, top lengths=[29351, 21889, 20007, 17448, 7644, 4000, 2403, 831]
+[Timing] Stage 4 Multi-k (79) + Simplify: 3.40s, active nodes=6, top lengths=[45115, 29459, 25157, 4000, 157, 91]
+[Timing] Stage 5 Mapper + exSPAnder: 495.31ms, active nodes=3, top lengths=[99585, 4000, 157]
+[Timing] Stage 6 Polish + Output: 380.91ms
+[Timing] Total Pipeline: 13.85s, Total With Simulation: 15.88s
+  Contig: contig_1 len=99585 circular=false
+  Contig: contig_2 len=4000 circular=true
+
+thread 'test_end_to_end_synthetic_bacterial_assembly' panicked at tests/integration_test.rs:290:5:
+End-to-end pipeline must complete in < 3.5s, took 13.85s
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    test_end_to_end_synthetic_bacterial_assembly
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 15.90s
+
+error: test failed, to rerun pass `--test integration_test`

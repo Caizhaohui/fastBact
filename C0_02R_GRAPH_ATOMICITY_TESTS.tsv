@@ -1,7 +1,13 @@
-test_id	contract_tested	test_description	expected_behavior	graph_integrity_verified	status
-G1	Contract 1 (Single path failure safety)	Full graph snapshot captured before and after verification failure	0% mutation to nodes, edges, strands, support, or deleted flags	Snapshot 100% bit-identical	PASS
-G2	Contract 1 (Used-state isolation)	Path rejection does not pollute used_in_path; subsequent seed can legally splice candidate	Candidate target freed upon rejection; second seed successfully commits join	No used-state contamination	PASS
-G3	Contract 1 (Multi-path isolation)	Consecutive candidate paths: failure of Pair A does not impede success of Pair B	Pair A preserved intact; Pair B merged into spliced contig; no cross-talk	Independent failure isolation	PASS
-G4	Contract 2 (Short-node protection)	Short node (<500 bp) involved in rejected candidate path protected against cleanup	Node protected via rejected_nodes; is_deleted remains false after cleanup	Protected node preserved	PASS
-G5	Contract 3 (Unrelated short-node cleanup)	Unrelated isolated short node (<500 bp) not in rejected_nodes and unincorporated	Deleted by post-exSPAnder cleanup policy to eliminate orphan artifacts	Policy cleanly executed	PASS
-G6	Commit Atomicity (No node leakage)	Successful commit marks constituent nodes deleted and creates single merged contig	Constituents deleted, new contig added, bystander active, total bases conserved	Zero node loss or leakage	PASS
+test_name	baseline_b9727c3	after_phase_a	phase_b	fixed_job
+g5_incoming_only_short_node_is_connected	FAILED	FAILED	ok	2978136
+g5_connected_short_nodes_are_not_isolated_cleanup_artifacts	FAILED	FAILED	ok	2978136
+g6_long_unique_node_reuse_remains_rejected	FAILED	ok	ok	2978136
+g1_failed_full_validation_preserves_arena_and_entire_graph	FAILED	ok	ok	2978136
+g2_validation_failure_keeps_shared_short_path_available	FAILED	ok	ok	2978136
+g6_legal_short_repeat_reuse_commits_exact_sequence_once	ok	FAILED	ok	2978136
+test_g5_unrelated_isolated_short_nodes_deleted_by_policy	ok	ok	ok	2978136
+test_g4_short_nodes_in_rejected_paths_preserved_by_cleanup	ok	ok	ok	2978136
+test_g1_verification_failure_leaves_graph_snapshot_identical	ok	ok	ok	2978136
+test_g6_successful_commit_no_abnormal_deletion_or_lost_nodes	ok	ok	ok	2978136
+test_g2_path_rejection_does_not_pollute_used_state_for_other_paths	ok	ok	ok	2978136
+test_g3_consecutive_candidate_paths_isolated_failure	ok	ok	ok	2978136
