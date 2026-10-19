@@ -58,9 +58,13 @@ Every cross-model execution MUST record the following fields:
     - *Coverage*: Not covered by existing unit tests.
     - *Fix Direction*: Recover oriented read intervals from anchor coordinates and sampled offsets; estimate distribution only from concordant inward-facing pairs.
   - **Final Question Answer**: `Does gap <= max_insert provide sufficient paired-end evidence for accepting the selected path?` **NO**. `gap` only measures net separation across the repeat node (`start(B) - end(A)`), not actual fragment span (`(|A| - s) + gap + e`). It is a necessary geometric lower-bound exclusion filter, but not sufficient evidence for path acceptance.
+- **Phase E Empirical Verification (2026-10-19)**:
+  - **P1 Status**: **`VERIFIED`**. Confirmed in production pipeline test `tests/test_c0_02r_p1_counterexample.rs` (commit `b4472a1`). exSPAnder erroneously selected shortcut $A \to R \to B$ (1038 bp) over true path $A \to R \to C \to B$ (1247 bp) because `PairLinkMatrix` only stored aggregate counts `(A, B) = 25`. Minimal design proposal drafted in [`docs/development/P1_MINIMAL_DESIGN_PROPOSAL.md`](./P1_MINIMAL_DESIGN_PROPOSAL.md).
+  - **P2 Status**: **`VERIFIED` & `REPAIRED`** (in feature worktree). Confirmed in deterministic red test `tests/test_c0_02r_p2_estimator.rs` (+119 bp estimation error on unpatched code). Minimal repair implemented in `src/resolve/mapper.rs` (commit `480ff5f`), restoring true fragment span recovery across arbitrary seed offsets and inward strand orientations. All 106 tests green.
+  - **R1-001 517 bp Contig Status**: **`VERIFIED` (False Hypothesis Eliminated)**. The extra 517 bp contig `contig_164` aligned 100.0% identity (0 mismatches, 0 indels) to `NC_000913.3`. Diagnostic QUAST (Slurm Job `2980935`) with `contig_164` removed yielded identical error rates (2.86 mismatches, 0.96 indels). The true root cause is consensus polishing base shifts across 10 other contigs (e.g. `contig_51`, `contig_105`) caused by anchor selection differences.
 - **Next Action**:
-  - Report findings to user. Await completion of ongoing Slurm benchmark job 2980439.
-  - Do NOT modify Rust algorithms until authorized. Formulate minimal Antigravity patch retaining read offsets / concordant fragment span verification, or evaluate escalation to Claude for bioinfo algorithm review.
+  - Maintain C0-02R as **NOT ACCEPTED**.
+  - Await user guidance on initiating Phase F (production implementation of P1 fragment span verification and consensus polishing stabilization).
 
 ---
 

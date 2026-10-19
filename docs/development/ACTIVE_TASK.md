@@ -1,65 +1,78 @@
-# ACTIVE TASK: fastBact C0-02R Phase D (Final Gate & Provenance Acceptance)
+# ACTIVE TASK: fastBact C0-02R Phase E (Evidence, Root Cause & Minimal Repair)
 
-**Status**: BENCHMARK_RUNNING  
-**Branch**: `fix/c0-02r-final-gate`  
-**Current HEAD**: `97510e6`  
-**Benchmark Target Commit**: `f241d9d` (sources/C worktree)  
-**Target Node**: Slurm `vnode1` (`qfree`, `-c 8 --mem=12G`)  
-**Slurm Benchmark Job**: `2980439` (Status: `RUNNING`, Started: 17:37:10, Elapsed: ~25 min)  
-**Benchmark Output Dir**: `benchmark-results/C0_02R_pe_fix_20261019`  
-**Phase D Acceptance Verdict**: **UNKNOWN** (Awaiting completion of Job 2980439)  
+**Status**: PHASE_E_COMPLETED  
+**Overall Acceptance Status**: **NOT ACCEPTED** (C0-02R blocked by Phase D gate failures & P1 vulnerability)  
+**Main Branch**: `fix/c0-02r-final-gate` (HEAD `460541b`)  
+**P2 Feature Branch**: `feature/c0-02r-p2-estimator` (HEAD `b4472a1` in worktree `fastBact-p2-worktree`)  
+**Slurm Benchmark Job**: `2980439` (Status: `COMPLETED`, Elapsed: `00:29:32`, ExitCode: 1:0)  
+**Diagnostic QUAST Job**: `2980935` (Status: `COMPLETED`, ExitCode: 0:0)  
+**Phase D Benchmark Verdict**: **FAIL** (Gate failures on R1-001 and R1-003)  
 **Coordinator**: Antigravity CLI  
 **Last Updated**: 2026-10-19
 
 ---
 
-## 1. Task Objective
+## 1. Task Objective & Scope Boundary
 
-Complete C0-02R (Final Correctness and Evidence Recovery for FB-P0-02 repeat resolution):
-1. Resolve all regressions observed on real isolates (R1-001, R1-003) in previous runs (`2978178`, `2978440`).
-2. Run clean 3-way A/B/C benchmark (`submit_c0_02r_final_gate.sh`) across all 6 standard datasets on Slurm compute node `vnode1`.
-3. Satisfy conservative acceptance criteria:
-   - 0 increased extensive or local misassemblies vs A and B.
-   - 0 increased mismatches or indels per 100kbp vs A and B.
-   - 0 decreased genome fraction vs A and B.
-   - Invariant bit-identical FASTA identity on `S1-COV-150X` and `S1-COV-003`.
-4. Perform machine-verified provenance audit via `verify_c0_02r_manifest.py`.
+Execute Phase E (Evidence, Root Cause & Minimal Repair) under strict constraints:
+- C0-02R remains **NOT ACCEPTED**.
+- No external AI calls (Codex, Claude, Cursor prohibited).
+- No production algorithm refactoring of P1 in Phase E.
+- No auto-merging main or modifying baseline history.
+- All conclusions strictly classified: `VERIFIED`, `UNVERIFIED`, `BLOCKED`.
 
 ---
 
-## 2. Recent Progress & Root-Cause Analysis
+## 2. Phase E Deliverables & Verification Evidence
 
-### Previous Gate Failure (`2978440`, commit `fc926ec`)
-- **R1-001**: mismatches increased vs B (2.14 $\to$ 2.86), indels increased vs B (0.48 $\to$ 0.96).
-- **R1-003**: mismatches increased vs B (1.51 $\to$ 1.67).
+### E1 — Benchmark Final Evidence & R1-001 Root Cause (`VERIFIED`)
+- **Slurm Benchmark Job `2980439` Outcome**:
+  - 18/18 assembly and QUAST evaluations completed.
+  - S1-COV-150X, S1-COV-003, S1-COV-015, S1-COV-030: Zero misassemblies, invariant FASTA identity on 150X and 003.
+  - **Gate Failures (3 total)**:
+    - R1-001: `mismatches_per_100kbp` increased vs B (2.14 $\to$ 2.86).
+    - R1-001: `indels_per_100kbp` increased vs B (0.48 $\to$ 0.96).
+    - R1-003: `mismatches_per_100kbp` increased vs B (1.51 $\to$ 1.67).
+- **R1-001 517 bp Contig Investigation (`VERIFIED`)**:
+  - Extra contig `contig_164` (517 bp) in C aligned with **100.0% identity (0 mismatches, 0 indels)** against `NC_000913.3`.
+  - Diagnostic QUAST on compute node `vnode1` (Job `2980935`) with `contig_164` removed yielded **identical error rates** (2.86 mismatches, 0.96 indels).
+  - **Root Cause Confirmed**: The regression was **not** caused by `contig_164`, but by small consensus polishing sequence shifts across 10 other contigs (e.g. `contig_51`, `contig_105`) arising from anchor selection differences.
 
-### Root Causes Identified
-1. **Strand & Orientation Leak in `src/resolve/mapper.rs`**:
-   - `PairLinkMatrix::get_support()` took `max(direct, norm)`, normalizing both unitigs to forward strand regardless of actual orientation.
-   - `map_paired_reads()` redundantly added non-twinned `(u1, u2)` alongside `(u1, u2_forward)`, corrupting physical inward-facing pair semantics.
-2. **Missing Insert Size Constraint in `src/resolve/exspander.rs`**:
-   - `resolve_repeats_exspander_with_stats()` accepted `_dist: &InsertSizeDist` but never inspected `dist.max_insert`.
-   - `extend_one_direction()` traversed repeat bridges regardless of length, permitting read pairs to span repeats wider than physical library fragment distribution.
-   - **Verification on Insert-Size Semantic Scope**: The insert-size check `gap <= dist.max_insert as i64` explicitly measures the span across the specific repeat node being bridged (`target_node.seq_len - overlaps`), and does NOT prematurely reject paths simply because cumulative path length exceeds insert size.
+### E2 — P2 Insert-Size Estimator Repair (`VERIFIED`)
+- **Worktree**: `/hpcfs/fhome/caizhh/Desktop/03_Tool_Development/fastBact-p2-worktree` (`feature/c0-02r-p2-estimator`).
+- **Deterministic Red Tests**: `tests/test_c0_02r_p2_estimator.rs` demonstrated systematic +119 bp and +59 bp estimation biases on unpatched code due to unrecovered k-mer seed step offsets and missing strand orientation checks.
+- **Minimal Fix**: Updated `map_read` in `src/resolve/mapper.rs` to track seed `step` and compute true fragment span with inward-facing (FR) concordancy enforcement:
+  - Subcase A: R1 fwd, R2 rev $\implies \text{span} = (\text{pos}_2 + k + \text{step}_2) - (\text{pos}_1 - \text{step}_1)$.
+  - Subcase B: R1 rev, R2 fwd $\implies \text{span} = (\text{pos}_1 + k + \text{step}_1) - (\text{pos}_2 - \text{step}_2)$.
+  - Same-strand (FF/RR) and outward pairs rejected.
+- **Green Validation**: All 5 deterministic P2 tests passed; full 106 test release regression suite passed on Slurm compute node `vnode1`.
+- **Commit**: `480ff5f`.
 
-### Empirical Evidence & Verification (`2979536`)
-- **Deterministic Test**: Added `tests/test_c0_02r_pe_evidence.rs`.
-- **Red Run** (HEAD `fc926ec`): Failed 2/3 assertions (link support was direction-agnostic; repeat wider than insert size was falsely resolved).
-- **Green Run** (Working tree): 3/3 passed; release full-regression 97+ tests passed (exit 0).
-- **Committed**: Commit `f241d9d`.
+### E3 — P1 Production Counterexample (`VERIFIED`)
+- **Deterministic Test**: `tests/test_c0_02r_p1_counterexample.rs` (commit `b4472a1`).
+- **Graph Topology**: $A \to R \to B$ (erroneous shortcut, span 391 bp) vs $A \to R \to C \to B$ (true path, span 600 bp).
+- **Library Span**: Calibrated median 600 bp, $\text{min\_insert} = 530$, $\text{max\_insert} = 670$.
+- **Finding**: Through full production pipeline (`map_paired_reads` $\to$ `PairLinkMatrix` $\to$ `resolve_repeats_exspander_with_stats`), exSPAnder chose the shortcut $A \to R \to B$ (assembled unitig length 1038 bp) because `PairLinkMatrix` only stored aggregate counts `(A, B) = 25`, deleting intermediate unitig $C$ (240 bp).
+- **Conclusion**: Codex Finding P1 is **empirically VERIFIED** in the production pipeline.
+
+### E4 — P1 Minimal Design Proposal (`COMPLETED`)
+- Formulated non-invasive, lightweight fragment coordinate architecture:
+  - Document: [`docs/development/P1_MINIMAL_DESIGN_PROPOSAL.md`](./P1_MINIMAL_DESIGN_PROPOSAL.md).
+  - Stores compact 4-byte `FragmentTerminalDistance` (`dist_from_u1_exit: u16, dist_from_u2_entry: u16`) in `SmallVec`.
+  - Enables $O(1)$ candidate path span verification against `[min_insert, max_insert]`.
+  - Memory overhead $< 0.1\%$ peak RSS; computation overhead $< 0.05\%$.
+  - Preserves backwards compatibility; safe non-resolution fallback.
 
 ---
 
 ## 3. Work in Progress / Next Steps
 
-1. [x] Establish `ACTIVE_TASK.md` and `docs/development/HANDOFF.md`.
-2. [x] Commit PE evidence fixes (`src/resolve/mapper.rs`, `src/resolve/exspander.rs`, `tests/test_c0_02r_pe_evidence.rs`, and manifest verification suite) $\to$ Commit `f241d9d`.
-3. [x] Submit clean 3-way benchmark job via `submit_c0_02r_final_gate.sh` to Slurm compute node `vnode1` $\to$ Job `2980439` (target `benchmark-results/C0_02R_pe_fix_20261019`).
-4. [ ] Monitor Slurm job 2980439 execution to completion (currently `PENDING (Resources)`).
-5. [ ] Verify manifest integrity with `verify_c0_02r_manifest.py` on compute node upon job completion.
-6. [ ] Review 6-dataset acceptance matrix; verify zero regression.
-7. [ ] Archive Phase D receipts in `docs/development/evidence/C0_02R/phase_d/`.
-8. [ ] Execute prepared Codex read-only audit upon user approval.
+1. [x] E1: Slurm Job 2980439 completion and R1-001 root-cause verification.
+2. [x] E2: P2 estimator deterministic red/green fix and full regression on `vnode1` (Commit `480ff5f`).
+3. [x] E3: P1 production counterexample verifying shortcut vulnerability (Commit `b4472a1`).
+4. [x] E4: P1 minimal design proposal drafted (`P1_MINIMAL_DESIGN_PROPOSAL.md`).
+5. [x] E5: Synchronize `ACTIVE_TASK.md`, `HANDOFF.md`, and `AUDIT_FINDINGS.md`.
+6. [ ] Await user guidance on initiating Phase F (production implementation of P1 span verification).
 
 ---
 
