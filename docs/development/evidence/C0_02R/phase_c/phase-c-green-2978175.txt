@@ -1,0 +1,82 @@
+job=2978175 node=vnode1 cpus=8 mem=12288
+============================= test session starts ==============================
+platform linux -- Python 3.12.11, pytest-9.0.3, pluggy-1.6.0 -- /hpcfs/fpublic/app/miniforge3/conda/bin/python3
+cachedir: .pytest_cache
+rootdir: /hpcfs/fhome/caizhh/Desktop/03_Tool_Development/01_fastBact
+plugins: anyio-4.14.1, cov-7.1.0
+collecting ... collected 22 items
+
+tests/test_c0_02r_alignment.py::test_deletion_consumes_target_coordinates_only PASSED [  4%]
+tests/test_c0_02r_alignment.py::test_insertion_consumes_query_coordinates_only PASSED [  9%]
+tests/test_c0_02r_alignment.py::test_reverse_substitution_uses_forward_query_coordinates PASSED [ 13%]
+tests/test_c0_02r_alignment.py::test_reverse_reference_projection_accounts_for_nonzero_query_start PASSED [ 18%]
+tests/test_c0_02r_alignment.py::test_contig_split_is_distinct_from_sequence_events PASSED [ 22%]
+tests/test_c0_02r_alignment.py::test_contig_merge_is_distinct_from_sequence_events PASSED [ 27%]
+tests/test_c0_02r_alignment.py::test_repetitive_secondary_alignment_does_not_duplicate_indel_events PASSED [ 31%]
+tests/test_c0_02r_alignment.py::test_malformed_or_inconsistent_alignment_fails_closed[:5-a:4] PASSED [ 36%]
+tests/test_c0_02r_alignment.py::test_malformed_or_inconsistent_alignment_fails_closed[:5~gt10ag:5] PASSED [ 40%]
+tests/test_c0_02r_alignment.py::test_malformed_or_inconsistent_alignment_fails_closed[:5garbage:5] PASSED [ 45%]
+tests/test_c0_02r_alignment.py::test_quast_missing_or_unparseable_metrics_fail_closed[missing] PASSED [ 50%]
+tests/test_c0_02r_alignment.py::test_quast_missing_or_unparseable_metrics_fail_closed[nan] PASSED [ 54%]
+tests/test_c0_02r_alignment.py::test_quast_missing_or_unparseable_metrics_fail_closed[-] PASSED [ 59%]
+tests/test_c0_02r_alignment.py::test_quast_missing_or_unparseable_metrics_fail_closed[] PASSED [ 63%]
+tests/test_c0_02r_alignment.py::test_nonzero_command_is_recorded_and_rejected PASSED [ 68%]
+tests/test_c0_02r_alignment.py::test_command_labels_with_periods_keep_distinct_receipts PASSED [ 72%]
+tests/test_c0_02r_alignment.py::test_overlapping_split_is_reported_with_structural_ambiguity FAILED [ 77%]
+tests/test_c0_02r_alignment.py::test_overlapping_merge_is_reported_with_structural_ambiguity FAILED [ 81%]
+tests/test_c0_02r_alignment.py::test_primary_inversion_tag_is_preserved FAILED [ 86%]
+tests/test_c0_02r_alignment.py::test_unknown_alignment_type_fails_closed FAILED [ 90%]
+tests/test_c0_02r_legacy_delta.py::test_one_indel_does_not_create_coordinate_shift_substitutions PASSED [ 95%]
+tests/test_c0_02r_legacy_delta.py::test_reverse_complement_is_an_alignment_event PASSED [100%]
+
+=================================== FAILURES ===================================
+_________ test_overlapping_split_is_reported_with_structural_ambiguity _________
+
+    def test_overlapping_split_is_reported_with_structural_ambiguity() -> None:
+        text = "q1\t600\t0\t600\t+\tt\t1000\t0\t600\t600\t600\t60\ttp:A:P\tcs:Z::600\nq2\t600\t0\t600\t+\tt\t1000\t400\t1000\t600\t600\t60\ttp:A:P\tcs:Z::600"
+        events = extract_events(parse_paf(text))
+>       assert len(events) == 1
+E       assert 0 == 1
+E        +  where 0 = len([])
+
+tests/test_c0_02r_alignment.py:116: AssertionError
+_________ test_overlapping_merge_is_reported_with_structural_ambiguity _________
+
+    def test_overlapping_merge_is_reported_with_structural_ambiguity() -> None:
+        text = "q\t1000\t0\t600\t+\tt1\t600\t0\t600\t600\t600\t60\ttp:A:P\tcs:Z::600\nq\t1000\t400\t1000\t+\tt2\t600\t0\t600\t600\t600\t60\ttp:A:P\tcs:Z::600"
+        events = extract_events(parse_paf(text))
+>       assert any(e.event_type == "CONTIG_MERGE" for e in events)
+E       assert False
+E        +  where False = any(<generator object test_overlapping_merge_is_reported_with_structural_ambiguity.<locals>.<genexpr> at 0x14aa08dd4a00>)
+
+tests/test_c0_02r_alignment.py:124: AssertionError
+___________________ test_primary_inversion_tag_is_preserved ____________________
+
+    def test_primary_inversion_tag_is_preserved() -> None:
+        text = paf(":10", 10, 10).replace("\t+\t", "\t-\t").replace("tp:A:P", "tp:A:I")
+>       assert [e.event_type for e in extract_events(parse_paf(text))] == ["REVERSE_COMPLEMENT_ALIGNMENT"]
+E       AssertionError: assert [] == ['REVERSE_COM...NT_ALIGNMENT']
+E         
+E         Right contains one more item: 'REVERSE_COMPLEMENT_ALIGNMENT'
+E         
+E         Full diff:
+E         + []
+E         - [
+E         -     'REVERSE_COMPLEMENT_ALIGNMENT',
+E         - ]
+
+tests/test_c0_02r_alignment.py:130: AssertionError
+___________________ test_unknown_alignment_type_fails_closed ___________________
+
+    def test_unknown_alignment_type_fails_closed() -> None:
+>       with pytest.raises(AlignmentError):
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       Failed: DID NOT RAISE <class 'c0_02r.alignment.AlignmentError'>
+
+tests/test_c0_02r_alignment.py:135: Failed
+=========================== short test summary info ============================
+FAILED tests/test_c0_02r_alignment.py::test_overlapping_split_is_reported_with_structural_ambiguity
+FAILED tests/test_c0_02r_alignment.py::test_overlapping_merge_is_reported_with_structural_ambiguity
+FAILED tests/test_c0_02r_alignment.py::test_primary_inversion_tag_is_preserved
+FAILED tests/test_c0_02r_alignment.py::test_unknown_alignment_type_fails_closed
+========================= 4 failed, 18 passed in 0.28s =========================

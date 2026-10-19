@@ -129,3 +129,45 @@ and local-context lanes PASS. Runtime lane reports the targeted gate PASS and
 initial debug full-regression FAIL; the separate release receipt now supplies
 the complete full-regression result. All raw outcomes are retained.
 Phase B ready for independent commit; Phase C is next, Phase D follows C.
+
+## Phase C receipt
+
+Phase B commit: `0d13f99`. Legacy `run_c0_02_benchmark.py` now delegates to a
+new modular alignment/provenance implementation, retaining compare_fasta API.
+The preserved untracked `run_c0_02r_benchmark.py` is NOT the accepted runner.
+
+Original comparator failure: job2978143 reports4540 differences for1 inserted
+base, and fails reverse-complement recognition. Dotted-label receipt collision
+reproduced2978159; overlapping split/merge and inversion tp:A:I holes reproduced
+2978175; all repaired. Latest2978177:26/26 Python tests pass onqfree/vnode1,
+8CPUs/12G. Ruff default checks and shell syntax checks pass. Static source/goal,
+security, context and runtime reviewers passed their scoped checks after fixes.
+New modules remain below250 pureLOC (alignment216, orchestration246; split before
+future growth). No unrelated Rust refactor was introduced into the large existing
+resolver module. Data boundaries have typed records; operation handling is
+exhaustive, no type suppressions or broad exception swallowing were added.
+
+Formal runner requires clean A/B/C sources, verifies original A/B SHA, builds
+fresh binaries, rejects command/QUAST/parser failures, hashes source/binary/data/
+FASTA/report, records exact commands/exits/versions/Slurm/resources/RSS/walltime,
+and rechecks source/input identities. All18 assembly/QUAST pairs rerun; historical
+FASTA/QUAST metrics are not reused. Benchmark acceptance criteria are explicitly
+conservative versus bothA/B: no structural/error metric increase or genome
+fraction decrease; N50 alone never fails the gate.
+
+Builtin --dump-stages on all original versions supplies graph node/edge/base
+inventories; Stage05 includes post-exSPAnder simplification. Counts are measured
+stage inventories, not proof of path atomicity (the graph tests provide that).
+Coordinates are0-based half-open; cs alleles follow alignment orientation.
+Reference-coordinate projection does NOT establish reference-confirmed correction.
+Overlapping structural relationships retain explicit ambiguity.
+
+Formal invocation after this commit:
+`bash benchmarks/scripts/submit_c0_02r_final_gate.sh "$PWD" "$PWD/benchmark-results/C0_02R_takeover_20261019"`.
+This creates separate clean detached sources and submits all compute to Slurm.
+Results include all requested filenames plus regenerated C0_02_JUNCTION_DELTAS.tsv
+inside the NEW results directory. Starting dirty frozen/root artifacts remain
+protected, outside the accepted output set. All datasets currently qualify only
+as REPRODUCIBLE_ON_ORIGINAL_HPC; self-contained external packaging is not claimed.
+Phase D next: formal execution, inspect acceptance, archive fresh receipts,
+independent review, final documentation commit; push only after gate completion.

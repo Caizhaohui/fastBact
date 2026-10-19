@@ -1,0 +1,52 @@
+job=2978143 node=vnode1 cpus=8 mem=12288
+0d13f998878054393fbd204d021ccd2c503dbb29
+29e49ce166f90dbb5891d8b3b0f92d7d9c23eadf7c20dcb721e31fe69d279453  benchmarks/scripts/run_c0_02_benchmark.py
+668fd68466bb5d9ef19e757b0732ff9f0a1a22a28c78ad407d8974803f11b864  tests/test_c0_02r_legacy_delta.py
+============================= test session starts ==============================
+platform linux -- Python 3.12.11, pytest-9.0.3, pluggy-1.6.0 -- /hpcfs/fpublic/app/miniforge3/conda/bin/python3
+cachedir: .pytest_cache
+rootdir: /hpcfs/fhome/caizhh/Desktop/03_Tool_Development/01_fastBact
+plugins: anyio-4.14.1, cov-7.1.0
+collecting ... collected 2 items
+
+tests/test_c0_02r_legacy_delta.py::test_one_indel_does_not_create_coordinate_shift_substitutions FAILED [ 50%]
+tests/test_c0_02r_legacy_delta.py::test_reverse_complement_is_an_alignment_event FAILED [100%]
+
+=================================== FAILURES ===================================
+________ test_one_indel_does_not_create_coordinate_shift_substitutions _________
+
+tmp_path = PosixPath('/tmp/pytest-of-caizhh/pytest-1/test_one_indel_does_not_create0')
+
+    def test_one_indel_does_not_create_coordinate_shift_substitutions(tmp_path: Path) -> None:
+        rng = random.Random(20261019)
+        dna = "".join(rng.choices("ACGT", k=12000))
+        old, new = tmp_path / "old.fa", tmp_path / "new.fa"
+        old.write_text(f">contig\n{dna[:6000]}A{dna[6000:]}\n")
+        new.write_text(f">contig\n{dna}\n")
+        events = compare_fasta(str(old), str(new))
+>       assert len(events) == 1
+E       AssertionError: assert 4540 == 1
+E        +  where 4540 = len([{'context': 'CTACTCTAGACGTAACTTGA', 'contig': 'contig', 'len_new': 12000, 'len_old': 12001, ...}, {'context': 'TACTCTAGACGTAACTTGAC', 'contig': 'contig', 'len_new': 12000, 'len_old': 12001, ...}, {'context': 'ACTCTAGACGTAACTTGACA', 'contig': 'contig', 'len_new': 12000, 'len_old': 12001, ...}, {'context': 'CTCTAGACGTAACTTGACAG', 'contig': 'contig', 'len_new': 12000, 'len_old': 12001, ...}, {'context': 'CTAGACGTAACTTGACAGGG', 'contig': 'contig', 'len_new': 12000, 'len_old': 12001, ...}, {'context': 'TAGACGTAACTTGACAGGGA', 'contig': 'contig', 'len_new': 12000, 'len_old': 12001, ...}, ...])
+
+tests/test_c0_02r_legacy_delta.py:16: AssertionError
+________________ test_reverse_complement_is_an_alignment_event _________________
+
+tmp_path = PosixPath('/tmp/pytest-of-caizhh/pytest-1/test_reverse_complement_is_an_0')
+
+    def test_reverse_complement_is_an_alignment_event(tmp_path: Path) -> None:
+        rng = random.Random(2468)
+        dna = "".join(rng.choices("ACGT", k=12000))
+        reverse = dna.translate(str.maketrans("ACGT", "TGCA"))[::-1]
+        old, new = tmp_path / "old.fa", tmp_path / "new.fa"
+        old.write_text(f">old\n{dna}\n")
+        new.write_text(f">new\n{reverse}\n")
+        events = compare_fasta(str(old), str(new))
+>       assert len(events) == 1
+E       AssertionError: assert 2 == 1
+E        +  where 2 = len([{'context': 'Delta length: 12000 bp', 'contig': 'new', 'len_new': 12000, 'len_old': 0, ...}, {'context': 'Delta length: -12000 bp', 'contig': 'old', 'len_new': 0, 'len_old': 12000, ...}])
+
+tests/test_c0_02r_legacy_delta.py:29: AssertionError
+=========================== short test summary info ============================
+FAILED tests/test_c0_02r_legacy_delta.py::test_one_indel_does_not_create_coordinate_shift_substitutions
+FAILED tests/test_c0_02r_legacy_delta.py::test_reverse_complement_is_an_alignment_event
+============================== 2 failed in 0.07s ===============================

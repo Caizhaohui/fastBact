@@ -1,0 +1,45 @@
+job=2978176 node=vnode1 cpus=8 mem=12288
+a1bc82dae82e69e578a354b5c4de6754adff04d9b9db6f34fadf94e02d1078fd  benchmarks/scripts/c0_02r/alignment.py
+3df602be763c26a70438d7ba86c254cb7373fbc082577046e615fc98ec341b8a  benchmarks/scripts/c0_02r/artifacts.py
+26b85fcfafa03f179d542c4b83f7b4ead050460da68aba0a121a21caccdd37be  benchmarks/scripts/c0_02r/benchmark.py
+da78f48e2fa4e468448b8c8fb3d51cee75819ce55f3357a434c7de14a1ba403f  benchmarks/scripts/c0_02r/comparison.py
+b2bcc2d963eaa2df7c1a8c864db269b6f991f4d3555f3330c45a3fe831cab3fb  benchmarks/scripts/c0_02r/execution.py
+5f256b2d45ccfb0d36819a25e0f6431cac70691f2e325dee8c2790086aab1ca0  benchmarks/scripts/c0_02r/inputs.py
+8de335c235efda75bf769734da453e07e44ba00b9d8695f726e6eb60128e27bf  benchmarks/scripts/c0_02r/metrics.py
+aee2e46475a3a78e4bfcf7699d16c1a93e37994ff0ac7fa87732ff7c883d40e2  benchmarks/scripts/c0_02r/report.py
+2b64f8a7f37662b06b88de08a14e9df80d3eead2cd25474420c716911264a381  benchmarks/scripts/c0_02r/structure.py
+f9cf7df5dddea02973c5c6c6851a15a12527beb1c5d01cb7f8db211adc38fcba  benchmarks/scripts/run_c0_02_benchmark.py
+4946c27b4bd14e7c35cf0ee6caafcc97620e0a8a11188d2994a531bfdd909b59  tests/test_c0_02r_alignment.py
+993851314a0be8d49a230972d71555896b810175a8ddba23c92a579b6105f345  tests/test_c0_02r_legacy_delta.py
+2.24-r1122
+============================= test session starts ==============================
+platform linux -- Python 3.12.11, pytest-9.0.3, pluggy-1.6.0 -- /hpcfs/fpublic/app/miniforge3/conda/bin/python3
+cachedir: .pytest_cache
+rootdir: /hpcfs/fhome/caizhh/Desktop/03_Tool_Development/01_fastBact
+plugins: anyio-4.14.1, cov-7.1.0
+collecting ... collected 22 items
+
+tests/test_c0_02r_alignment.py::test_deletion_consumes_target_coordinates_only PASSED [  4%]
+tests/test_c0_02r_alignment.py::test_insertion_consumes_query_coordinates_only PASSED [  9%]
+tests/test_c0_02r_alignment.py::test_reverse_substitution_uses_forward_query_coordinates PASSED [ 13%]
+tests/test_c0_02r_alignment.py::test_reverse_reference_projection_accounts_for_nonzero_query_start PASSED [ 18%]
+tests/test_c0_02r_alignment.py::test_contig_split_is_distinct_from_sequence_events PASSED [ 22%]
+tests/test_c0_02r_alignment.py::test_contig_merge_is_distinct_from_sequence_events PASSED [ 27%]
+tests/test_c0_02r_alignment.py::test_repetitive_secondary_alignment_does_not_duplicate_indel_events PASSED [ 31%]
+tests/test_c0_02r_alignment.py::test_malformed_or_inconsistent_alignment_fails_closed[:5-a:4] PASSED [ 36%]
+tests/test_c0_02r_alignment.py::test_malformed_or_inconsistent_alignment_fails_closed[:5~gt10ag:5] PASSED [ 40%]
+tests/test_c0_02r_alignment.py::test_malformed_or_inconsistent_alignment_fails_closed[:5garbage:5] PASSED [ 45%]
+tests/test_c0_02r_alignment.py::test_quast_missing_or_unparseable_metrics_fail_closed[missing] PASSED [ 50%]
+tests/test_c0_02r_alignment.py::test_quast_missing_or_unparseable_metrics_fail_closed[nan] PASSED [ 54%]
+tests/test_c0_02r_alignment.py::test_quast_missing_or_unparseable_metrics_fail_closed[-] PASSED [ 59%]
+tests/test_c0_02r_alignment.py::test_quast_missing_or_unparseable_metrics_fail_closed[] PASSED [ 63%]
+tests/test_c0_02r_alignment.py::test_nonzero_command_is_recorded_and_rejected PASSED [ 68%]
+tests/test_c0_02r_alignment.py::test_command_labels_with_periods_keep_distinct_receipts PASSED [ 72%]
+tests/test_c0_02r_alignment.py::test_overlapping_split_is_reported_with_structural_ambiguity PASSED [ 77%]
+tests/test_c0_02r_alignment.py::test_overlapping_merge_is_reported_with_structural_ambiguity PASSED [ 81%]
+tests/test_c0_02r_alignment.py::test_primary_inversion_tag_is_preserved PASSED [ 86%]
+tests/test_c0_02r_alignment.py::test_unknown_alignment_type_fails_closed PASSED [ 90%]
+tests/test_c0_02r_legacy_delta.py::test_one_indel_does_not_create_coordinate_shift_substitutions PASSED [ 95%]
+tests/test_c0_02r_legacy_delta.py::test_reverse_complement_is_an_alignment_event PASSED [100%]
+
+============================== 22 passed in 0.26s ==============================

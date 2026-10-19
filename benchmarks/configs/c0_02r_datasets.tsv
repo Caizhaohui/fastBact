@@ -1,0 +1,7 @@
+dataset	kind	r1	r2	reference
+S1-COV-150X	Synthetic 200kb 150X	benchmark-results/data_store/S1-COV-150X_R1.fq.gz	benchmark-results/data_store/S1-COV-150X_R2.fq.gz	benchmark-results/data_store/S1-COV_ref.fa
+S1-COV-003	Synthetic 200kb 300X	benchmark-results/data_store/S1-COV-003_R1.fq.gz	benchmark-results/data_store/S1-COV-003_R2.fq.gz	benchmark-results/data_store/S1-COV_ref.fa
+SYN-2.5M	Synthetic 2.5Mb 100X	benchmark-results/data_store/SYN-2.5M_R1.fq.gz	benchmark-results/data_store/SYN-2.5M_R2.fq.gz	benchmark-results/data_store/SYN-2.5M_ref.fa
+S2-REAL-001	Synthetic E. coli K-12 100X	benchmark-results/data_store/S2-REAL-001_R1.fq.gz	benchmark-results/data_store/S2-REAL-001_R2.fq.gz	benchmark-results/data_store/S2-REAL-001_ref.fa
+R1-001	Real isolate E. coli MG1655	/hpcfs/fhome/caizhh/Desktop/03_Tool_Development/04_ProkaDiff/data/prjna1088182/fastq/SRR28349173/SRR28349173_1.fastq.gz	/hpcfs/fhome/caizhh/Desktop/03_Tool_Development/04_ProkaDiff/data/prjna1088182/fastq/SRR28349173/SRR28349173_2.fastq.gz	/hpcfs/fhome/caizhh/Desktop/03_Tool_Development/04_ProkaDiff/data/references/m6_identity/NC_000913.3.fasta
+R1-003	Real isolate E. coli BW25113	/hpcfs/fhome/caizhh/Desktop/03_Tool_Development/04_ProkaDiff/data/prjna1088182/fastq/SRR28349164/SRR28349164_1.fastq.gz	/hpcfs/fhome/caizhh/Desktop/03_Tool_Development/04_ProkaDiff/data/prjna1088182/fastq/SRR28349164/SRR28349164_2.fastq.gz	/hpcfs/fhome/caizhh/Desktop/03_Tool_Development/04_ProkaDiff/data/references/m6_identity/CP009273.1.fasta

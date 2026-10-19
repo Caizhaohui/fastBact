@@ -1,0 +1,99 @@
+from __future__ import annotations
+
+from collections import defaultdict
+from .alignment import Alignment, Event, alignment_events, ambiguous
+
+
+def coverage(intervals: list[tuple[int, int]]) -> int:
+    end = 0
+    total = 0
+    for start, stop in sorted(intervals):
+        total += max(0, stop - max(start, end))
+        end = max(end, stop)
+    return total
+
+
+def extract_events(alignments: tuple[Alignment, ...]) -> list[Event]:
+    events: list[Event] = []
+    by_target: dict[str, list[Alignment]] = defaultdict(list)
+    by_query: dict[str, list[Alignment]] = defaultdict(list)
+    for a in alignments:
+        if not a.primary:
+            continue
+        evidence = (
+            "AMBIGUOUS_REPETITIVE_ALIGNMENT"
+            if ambiguous(a, alignments)
+            else "HIGH_MAPQ_PAIRWISE_ALIGNMENT"
+        )
+        events.extend(alignment_events(a, evidence))
+        if ambiguous(a, alignments):
+            events.append(
+                Event(
+                    "AMBIGUOUS_REPETITIVE_ALIGNMENT",
+                    a.target,
+                    a.target_start,
+                    a.target_end,
+                    a.query,
+                    a.query_start,
+                    a.query_end,
+                    a.strand,
+                    a.query_end - a.query_start,
+                    evidence=evidence,
+                )
+            )
+        else:
+            by_target[a.target].append(a)
+            by_query[a.query].append(a)
+    for group in by_target.values():
+        spans = [(a.target_start, a.target_end) for a in group]
+        covered = coverage(spans)
+        if (
+            len({a.query for a in group}) > 1
+            and covered >= group[0].target_length * 0.8
+        ):
+            a = group[0]
+            events.append(
+                Event(
+                    "CONTIG_SPLIT",
+                    a.target,
+                    min(x for x, y in spans),
+                    max(y for x, y in spans),
+                    ",".join(sorted({b.query for b in group})),
+                    0,
+                    0,
+                    ".",
+                    covered,
+                    evidence=(
+                        "DISJOINT_HIGH_MAPQ_ALIGNMENTS"
+                        if sum(y - x for x, y in spans) == covered
+                        else "OVERLAPPING_STRUCTURE_AMBIGUOUS"
+                    ),
+                )
+            )
+    for group in by_query.values():
+        spans = [(a.query_start, a.query_end) for a in group]
+        covered = coverage(spans)
+        if (
+            len({a.target for a in group}) > 1
+            and covered >= group[0].query_length * 0.8
+        ):
+            a = group[0]
+            events.append(
+                Event(
+                    "CONTIG_MERGE",
+                    ",".join(sorted({b.target for b in group})),
+                    0,
+                    0,
+                    a.query,
+                    min(x for x, y in spans),
+                    max(y for x, y in spans),
+                    ".",
+                    covered,
+                    evidence=(
+                        "DISJOINT_HIGH_MAPQ_ALIGNMENTS"
+                        if sum(y - x for x, y in spans) == covered
+                        else "OVERLAPPING_STRUCTURE_AMBIGUOUS"
+                    ),
+                )
+            )
+    return events

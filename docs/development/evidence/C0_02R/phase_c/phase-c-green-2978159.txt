@@ -1,0 +1,64 @@
+job=2978159 node=vnode1 cpus=8 mem=12288
+============================= test session starts ==============================
+platform linux -- Python 3.12.11, pytest-9.0.3, pluggy-1.6.0 -- /hpcfs/fpublic/app/miniforge3/conda/bin/python3
+cachedir: .pytest_cache
+rootdir: /hpcfs/fhome/caizhh/Desktop/03_Tool_Development/01_fastBact
+plugins: anyio-4.14.1, cov-7.1.0
+collecting ... collected 18 items
+
+tests/test_c0_02r_alignment.py::test_deletion_consumes_target_coordinates_only PASSED [  5%]
+tests/test_c0_02r_alignment.py::test_insertion_consumes_query_coordinates_only PASSED [ 11%]
+tests/test_c0_02r_alignment.py::test_reverse_substitution_uses_forward_query_coordinates PASSED [ 16%]
+tests/test_c0_02r_alignment.py::test_reverse_reference_projection_accounts_for_nonzero_query_start PASSED [ 22%]
+tests/test_c0_02r_alignment.py::test_contig_split_is_distinct_from_sequence_events PASSED [ 27%]
+tests/test_c0_02r_alignment.py::test_contig_merge_is_distinct_from_sequence_events PASSED [ 33%]
+tests/test_c0_02r_alignment.py::test_repetitive_secondary_alignment_does_not_duplicate_indel_events PASSED [ 38%]
+tests/test_c0_02r_alignment.py::test_malformed_or_inconsistent_alignment_fails_closed[:5-a:4] PASSED [ 44%]
+tests/test_c0_02r_alignment.py::test_malformed_or_inconsistent_alignment_fails_closed[:5~gt10ag:5] PASSED [ 50%]
+tests/test_c0_02r_alignment.py::test_malformed_or_inconsistent_alignment_fails_closed[:5garbage:5] PASSED [ 55%]
+tests/test_c0_02r_alignment.py::test_quast_missing_or_unparseable_metrics_fail_closed[missing] PASSED [ 61%]
+tests/test_c0_02r_alignment.py::test_quast_missing_or_unparseable_metrics_fail_closed[nan] PASSED [ 66%]
+tests/test_c0_02r_alignment.py::test_quast_missing_or_unparseable_metrics_fail_closed[-] PASSED [ 72%]
+tests/test_c0_02r_alignment.py::test_quast_missing_or_unparseable_metrics_fail_closed[] PASSED [ 77%]
+tests/test_c0_02r_alignment.py::test_nonzero_command_is_recorded_and_rejected PASSED [ 83%]
+tests/test_c0_02r_alignment.py::test_command_labels_with_periods_keep_distinct_receipts FAILED [ 88%]
+tests/test_c0_02r_legacy_delta.py::test_one_indel_does_not_create_coordinate_shift_substitutions PASSED [ 94%]
+tests/test_c0_02r_legacy_delta.py::test_reverse_complement_is_an_alignment_event PASSED [100%]
+
+=================================== FAILURES ===================================
+___________ test_command_labels_with_periods_keep_distinct_receipts ____________
+
+tmp_path = PosixPath('/tmp/pytest-of-caizhh/pytest-3/test_command_labels_with_perio0')
+
+    def test_command_labels_with_periods_keep_distinct_receipts(tmp_path: Path) -> None:
+        executor = Executor(tmp_path, [])
+        first = executor.run((sys.executable, "-c", "print('A')"), "SYN-2.5M-A")
+>       second = executor.run((sys.executable, "-c", "print('B')"), "SYN-2.5M-B")
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_c0_02r_alignment.py:107: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = Executor(directory=PosixPath('/tmp/pytest-of-caizhh/pytest-3/test_command_labels_with_perio0'), history=[Command(argv=...f0e9afdf3f88174c1ee6f9de004fc30a0', stderr_sha256='e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855')])
+argv = ('/hpcfs/fpublic/app/miniforge3/conda/bin/python3', '-c', "print('B')")
+label = 'SYN-2.5M-B', cwd = None
+
+    def run(
+        self, argv: tuple[str, ...], label: str, cwd: Path | None = None
+    ) -> Command:
+        require_compute()
+        prefix = self.directory / label
+        prefix.parent.mkdir(parents=True, exist_ok=True)
+        stdout, stderr, rss = (
+            prefix.with_suffix(".stdout"),
+            prefix.with_suffix(".stderr"),
+            prefix.with_suffix(".rss"),
+        )
+        if stdout.exists() or stderr.exists():
+>           raise GateError(f"Refusing to overwrite command evidence: {prefix}")
+E           c0_02r.execution.GateError: Refusing to overwrite command evidence: /tmp/pytest-of-caizhh/pytest-3/test_command_labels_with_perio0/SYN-2.5M-B
+
+benchmarks/scripts/c0_02r/execution.py:89: GateError
+=========================== short test summary info ============================
+FAILED tests/test_c0_02r_alignment.py::test_command_labels_with_periods_keep_distinct_receipts
+========================= 1 failed, 17 passed in 0.30s =========================

@@ -1,0 +1,28 @@
+job=2978160 node=vnode1 cpus=8 mem=12288
+============================= test session starts ==============================
+platform linux -- Python 3.12.11, pytest-9.0.3, pluggy-1.6.0 -- /hpcfs/fpublic/app/miniforge3/conda/bin/python3
+cachedir: .pytest_cache
+rootdir: /hpcfs/fhome/caizhh/Desktop/03_Tool_Development/01_fastBact
+plugins: anyio-4.14.1, cov-7.1.0
+collecting ... collected 18 items
+
+tests/test_c0_02r_alignment.py::test_deletion_consumes_target_coordinates_only PASSED [  5%]
+tests/test_c0_02r_alignment.py::test_insertion_consumes_query_coordinates_only PASSED [ 11%]
+tests/test_c0_02r_alignment.py::test_reverse_substitution_uses_forward_query_coordinates PASSED [ 16%]
+tests/test_c0_02r_alignment.py::test_reverse_reference_projection_accounts_for_nonzero_query_start PASSED [ 22%]
+tests/test_c0_02r_alignment.py::test_contig_split_is_distinct_from_sequence_events PASSED [ 27%]
+tests/test_c0_02r_alignment.py::test_contig_merge_is_distinct_from_sequence_events PASSED [ 33%]
+tests/test_c0_02r_alignment.py::test_repetitive_secondary_alignment_does_not_duplicate_indel_events PASSED [ 38%]
+tests/test_c0_02r_alignment.py::test_malformed_or_inconsistent_alignment_fails_closed[:5-a:4] PASSED [ 44%]
+tests/test_c0_02r_alignment.py::test_malformed_or_inconsistent_alignment_fails_closed[:5~gt10ag:5] PASSED [ 50%]
+tests/test_c0_02r_alignment.py::test_malformed_or_inconsistent_alignment_fails_closed[:5garbage:5] PASSED [ 55%]
+tests/test_c0_02r_alignment.py::test_quast_missing_or_unparseable_metrics_fail_closed[missing] PASSED [ 61%]
+tests/test_c0_02r_alignment.py::test_quast_missing_or_unparseable_metrics_fail_closed[nan] PASSED [ 66%]
+tests/test_c0_02r_alignment.py::test_quast_missing_or_unparseable_metrics_fail_closed[-] PASSED [ 72%]
+tests/test_c0_02r_alignment.py::test_quast_missing_or_unparseable_metrics_fail_closed[] PASSED [ 77%]
+tests/test_c0_02r_alignment.py::test_nonzero_command_is_recorded_and_rejected PASSED [ 83%]
+tests/test_c0_02r_alignment.py::test_command_labels_with_periods_keep_distinct_receipts PASSED [ 88%]
+tests/test_c0_02r_legacy_delta.py::test_one_indel_does_not_create_coordinate_shift_substitutions PASSED [ 94%]
+tests/test_c0_02r_legacy_delta.py::test_reverse_complement_is_an_alignment_event PASSED [100%]
+
+============================== 18 passed in 0.25s ==============================
