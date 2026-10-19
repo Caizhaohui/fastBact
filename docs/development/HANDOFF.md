@@ -4,45 +4,100 @@
 **Current Active Branch**: `fix/c0-02r-final-gate`  
 **Base Commit**: `b9727c3ab372f7b995e439d92b72c7a4bfd051cf` (C0-02 baseline)  
 **Main/Upstream**: `dac6a57` (`origin/main`, `origin/master`)  
-**Primary Coordinator**: Antigravity CLI  
-**Active Task**: [`ACTIVE_TASK.md`](../../ACTIVE_TASK.md)  
-**Specific Phase Handoff**: [`C0_02R_HANDOFF.md`](./C0_02R_HANDOFF.md)  
+**Primary Coordinator & Implementer**: Antigravity CLI  
+**Active Task Board**: [`ACTIVE_TASK.md`](./ACTIVE_TASK.md) (mirrored at [`repo root`](../../ACTIVE_TASK.md))  
+**Specific Phase Ledger**: [`C0_02R_HANDOFF.md`](./C0_02R_HANDOFF.md)  
+**Audit Findings Registry**: [`AUDIT_FINDINGS.md`](./AUDIT_FINDINGS.md)  
 
 ---
 
 ## 1. Operating Rules & Engineering Principles
 
-1. **Self-Contained Primary Development**: Routine development, debugging, and testing are carried out directly by Antigravity CLI to conserve external API quotas.
-2. **Strict External CLI Dispatch**:
+1. **Self-Contained Primary Development**:
+   - Everyday code implementation, bug fixing, test development, benchmark runs, documentation, and maintenance are handled directly by Antigravity CLI to conserve external quota.
+   - External CLI dispatch is never invoked for ceremonial multi-agent interaction.
+2. **Strict External CLI Dispatch & Escalation**:
    - **Codex CLI (`~/.local/bin/codex`)**: Reserved for complex Rust language correctness and memory/graph mutation invariant audits.
    - **Claude Code (`~/.local/share/omniakey/bin/claude`)**: Reserved for bioinformatics algorithms and biological/scientific correctness reviews.
-   - **Cursor Agent (`~/.local/bin/agent`)**: Optional engineering assistance.
-   - **User Approval**: First-time invocation of any external CLI, any Opus model usage, or tasks with significant resource/quota cost must receive explicit user approval.
-   - **Read-Only**: External CLIs are strictly read-only and never write directly to the working directory.
-   - **Audit Trail**: Every cross-model invocation must record target Git SHA, exact command line, exit code, and structured audit outcome in `ACTIVE_TASK.md` and this document.
+   - **Cursor Agent (`~/.local/bin/agent`)**: Optional engineering assistance (available economic models only).
+   - **Escalation Path**:
+     $$\text{Antigravity Implementation} \longrightarrow \text{Codex Medium Review} \longrightarrow \text{Antigravity Fix} \longrightarrow \text{Claude Sonnet High Review (if needed)} \longrightarrow \text{Claude Opus High (critical unresolved disputes only)}$$
 3. **Slurm Compute Exclusivity**:
-   - All Rust compilation (`cargo build`, `cargo test`, `cargo check`), assembly runs, and QUAST evaluations MUST run on Slurm compute nodes (`qfree` partition, typically `vnode1`).
-   - Login nodes must never run heavy compilation or assembly pipelines.
+   - All Rust compilation (`cargo build`, `cargo test`, `cargo check`), assembly pipelines, and QUAST evaluations MUST run on Slurm compute nodes (`qfree` partition, typically `vnode1`).
+   - Login nodes must never execute compilation or assembly workloads.
 4. **Git Protection & Historical Data Integrity**:
-   - Never auto-merge `main` or force-push (`push -f`).
+   - Never auto-merge `main` or force-push (`git push --force`).
+   - Never execute destructive operations: `git reset --hard`, `git clean -fd`, `rm -rf`.
    - Never overwrite or delete historical benchmark results or frozen baseline artifacts.
 5. **Deterministic Verification**:
    - All core correctness issues and bug fixes must have deterministic counter-examples proving red before green, followed by regression testing.
 
 ---
 
-## 2. Phase Execution Status Summary (FB-P0-02R)
+## 2. External Model & Permission Routing Policy
+
+### Permission Levels
+
+| Permission Level | Description | Execution Constraints |
+| :--- | :--- | :--- |
+| **`READ_ONLY`** (Default) | Code analysis, algorithm inspection, and existing result review | Shares project source view. No workspace modifications permitted. |
+| **`WORKSPACE_WRITE`** | Concrete authorized code edits | Allowed **only** inside an isolated Git worktree. Requires explicit user approval. Never modify active working branch. |
+| **`HUMAN_APPROVAL`** | High-risk, destructive, or high-cost actions | Requires explicit user sign-off before invocation. |
+
+### Mandatory Approval Triggers
+The following require explicit user authorization before execution:
+- Every invocation of **Claude Opus**.
+- **First-time invocation** of any external CLI tool.
+- Any transition of an external CLI to **`WORKSPACE_WRITE`**.
+- Any authentication mode that could incur additional API charges (e.g., fallback to pay-per-token API keys).
+- Submitting large-scale or high-duration Slurm tasks.
+- Installing external dependencies over the network or broadening filesystem access.
+
+### Strictly Prohibited Flags
+- `codex --dangerously-bypass-approvals-and-sandbox` / `--yolo`
+- `claude --dangerously-skip-permissions` / `--allow-dangerously-skip-permissions`
+- `agent --force` / `--yolo`
+- `agy --dangerously-skip-permissions`
+
+### CLI Capability, Verified Model & Flag Routing Matrix
+
+| Tool | Verified Binary Path | Current Auth Mode | Task Type | Verified Model ID | Reasoning Effort | Default Permissions / CLI Invocation Pattern |
+| :--- | :--- | :--- | :--- | :--- | :--- | :--- |
+| **Codex** | `~/.local/bin/codex` | ChatGPT OAuth Tokens (`~/.codex/auth.json`) | Standard Rust Review | `gpt-6.1-sol` | Medium | `codex exec -s read-only -m gpt-6.1-sol -c plan_mode_reasoning_effort="medium" -o <out>` |
+| **Codex** | `~/.local/bin/codex` | ChatGPT OAuth Tokens | Complex P0 Correctness | `gpt-6.1-sol` | High | `codex exec -s read-only -m gpt-6.1-sol -c plan_mode_reasoning_effort="high" -o <out>` |
+| **Claude** | `~/.local/share/omniakey/bin/claude` | OmniaKey / Local Session | Standard Algorithm Review | `sonnet` | Medium | `claude -p --permission-mode plan --model sonnet "<prompt>"` |
+| **Claude** | `~/.local/share/omniakey/bin/claude` | OmniaKey / Local Session | Complex Algorithm Review | `sonnet` | High | `claude -p --permission-mode plan --model sonnet "<prompt>"` (with high-effort prompt) |
+| **Claude** | `~/.local/share/omniakey/bin/claude` | OmniaKey / Local Session | Critical Graph Disputes | `opus` | High | *Requires explicit user approval*. `claude -p --permission-mode plan --model opus "<prompt>"` |
+| **Cursor** | `~/.local/bin/agent` | Local Cursor Agent CLI | Optional Engineering | `composer-2.5` / `cursor-grok-4.5-low` | Default | `agent -p --mode=ask --model composer-2.5 "<prompt>"` (*Note: `-p` is NOT read-only; `--mode=ask` enforces read-only*) |
+
+### Execution Safety & Subprocess Rules
+- When calling external CLIs via Python, always use argument arrays (`argv: list[str]`) with `shell=False`.
+- Never perform unvetted string concatenation into shell commands.
+- External model reviews are informational evidence; they do not automatically constitute verification PASS.
+- Every invocation must be logged to [`AUDIT_FINDINGS.md`](./AUDIT_FINDINGS.md) with Task ID, Agent, Model, Effort, Permissions, Git SHA, sanitized CLI command, exit code, output path, findings, and next actions.
+
+### Quota & Rate Limit Handling
+- If Codex or Claude returns quota exceeded or rate limit:
+  1. Immediately stop invocations of that CLI.
+  2. Do not loop or retry infinitely.
+  3. Do not switch automatically to pay-as-you-go API keys.
+  4. Do not auto-upgrade to higher tier models.
+  5. Record quota block in this document and continue unblocked Antigravity tasks.
+
+---
+
+## 3. Phase Execution Status Summary (FB-P0-02R)
 
 | Phase | Scope | Baseline / Target | Status | Key Milestone / Commit |
 | :--- | :--- | :--- | :---: | :--- |
 | **Phase A** | Directed Edge Verification Contract | `b9727c3` | **PASS** | Commit `f500d0f`: Replaced weak path validation with 9-point contract; eliminated unverified `GraphEdge::new()`. Tests E1–E8. |
 | **Phase B** | Graph Mutation Safety & Tri-Contract Boundary | `f500d0f` | **PASS** | Commit `0d13f99`: Formalized 3 contracts (snapshot rollback, protected rejected short nodes, isolated node cleanup). Tests G1–G6. |
 | **Phase C** | Modular Alignment & Provenance Engine | `0d13f99` | **PASS** | Commit `b318061`: Replaced position diffing with `minimap2 --cs=short` event extraction; machine-verifiable manifest architecture. |
-| **Phase D** | 3-Way A/B/C Benchmark & Final Acceptance | `b318061` | **IN PROGRESS** | Fixed residual polish anchor stealing (`fc926ec`); resolved PE link strand orientation leak and repeat length vs insert size constraint (`tests/test_c0_02r_pe_evidence.rs`, verified in Slurm job `2979536`). Full 3-way gate pending. |
+| **Phase D** | 3-Way A/B/C Benchmark & Final Acceptance | `b318061` | **IN PROGRESS** | Fixed residual polish anchor stealing (`fc926ec`); resolved PE link strand orientation leak and repeat length vs insert size constraint (Commit `f241d9d`, verified in Slurm job `2979536`). Full 3-way gate submitted (Job `2980439`). |
 
 ---
 
-## 3. HPC Cluster Environment & Compute Resources
+## 4. HPC Cluster Environment & Compute Resources
 
 - **Scheduler**: Slurm 22.05+
 - **Default Work Allocation**: Partition `qfree`, Node `vnode1`, 8 CPUs (`-c 8`), 12 GB RAM (`--mem=12G`).
@@ -50,9 +105,3 @@
 - **Rust Toolchain**: `rustc 1.83.0+` (`~/.cargo/bin`).
 - **QUAST**: `~/.local/bin/quast.py`.
 - **Minimap2**: System / local binary in `PATH`.
-
----
-
-## 4. Current State & Pending Handoff Actions
-
-See [`ACTIVE_TASK.md`](../../ACTIVE_TASK.md) for the active checklist and immediate execution roadmap.

@@ -2,7 +2,7 @@
 
 **Status**: IN_PROGRESS  
 **Branch**: `fix/c0-02r-final-gate`  
-**Current HEAD**: `fc926ec74b1191eb165a15ec503b14f136856d0e`  
+**Current HEAD**: `f241d9d`  
 **Target Node**: Slurm `vnode1` (`qfree`, `-c 8 --mem=12G`)  
 **Coordinator**: Antigravity CLI  
 **Last Updated**: 2026-10-19
@@ -47,9 +47,9 @@ Complete C0-02R (Final Correctness and Evidence Recovery for FB-P0-02 repeat res
 ## 3. Work in Progress / Next Steps
 
 1. [x] Establish `ACTIVE_TASK.md` and `docs/development/HANDOFF.md`.
-2. [ ] Commit PE evidence fixes (`src/resolve/mapper.rs`, `src/resolve/exspander.rs`, `tests/test_c0_02r_pe_evidence.rs`, and manifest verification suite).
-3. [ ] Submit clean 3-way benchmark job via `submit_c0_02r_final_gate.sh` to Slurm compute node `vnode1`.
-4. [ ] Monitor Slurm job execution to completion.
+2. [x] Commit PE evidence fixes (`src/resolve/mapper.rs`, `src/resolve/exspander.rs`, `tests/test_c0_02r_pe_evidence.rs`, and manifest verification suite) -> Commit `f241d9d`.
+3. [x] Submit clean 3-way benchmark job via `submit_c0_02r_final_gate.sh` to Slurm compute node `vnode1` -> Job `2980439` (target `benchmark-results/C0_02R_pe_fix_20261019`).
+4. [ ] Monitor Slurm job 2980439 execution to completion.
 5. [ ] Verify manifest integrity with `verify_c0_02r_manifest.py` on compute node.
 6. [ ] Review 6-dataset acceptance matrix; verify zero regression.
 7. [ ] Archive Phase D receipts in `docs/development/evidence/C0_02R/phase_d/`.
