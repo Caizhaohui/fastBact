@@ -63,8 +63,8 @@ The following require explicit user authorization before execution:
 
 | Tool | Verified Binary Path | Current Auth Mode | Task Type | Verified Model ID | Reasoning Effort | Default Permissions / CLI Invocation Pattern |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
-| **Codex** | `~/.local/bin/codex` | ChatGPT OAuth Tokens (`~/.codex/auth.json`) | Standard Rust Review | `gpt-6.1-sol` | Medium | `codex exec -s read-only -m gpt-6.1-sol -c plan_mode_reasoning_effort="medium" -o <out>` |
-| **Codex** | `~/.local/bin/codex` | ChatGPT OAuth Tokens | Complex P0 Correctness | `gpt-6.1-sol` | High | `codex exec -s read-only -m gpt-6.1-sol -c plan_mode_reasoning_effort="high" -o <out>` |
+| **Codex** | `~/.local/bin/codex` | ChatGPT OAuth Tokens (`~/.codex/auth.json`) | Standard Rust Review | `gpt-6.1-sol` | Medium | `codex exec -s read-only -m gpt-6.1-sol -c model_reasoning_effort="medium" -o <out>` |
+| **Codex** | `~/.local/bin/codex` | ChatGPT OAuth Tokens | Complex P0 Correctness | `gpt-6.1-sol` | High | `codex exec -s read-only -m gpt-6.1-sol -c model_reasoning_effort="high" -o <out>` |
 | **Claude** | `~/.local/share/omniakey/bin/claude` | OmniaKey / Local Session | Standard Algorithm Review | `sonnet` | Medium | `claude -p --permission-mode plan --model sonnet "<prompt>"` |
 | **Claude** | `~/.local/share/omniakey/bin/claude` | OmniaKey / Local Session | Complex Algorithm Review | `sonnet` | High | `claude -p --permission-mode plan --model sonnet "<prompt>"` (with high-effort prompt) |
 | **Claude** | `~/.local/share/omniakey/bin/claude` | OmniaKey / Local Session | Critical Graph Disputes | `opus` | High | *Requires explicit user approval*. `claude -p --permission-mode plan --model opus "<prompt>"` |
