@@ -189,7 +189,7 @@ fn test_end_to_end_synthetic_bacterial_assembly() {
     let read_iter = (0..bank.merged_reads.len())
         .map(|i| bank.merged_reads.extract_ascii(i as u32))
         .chain((0..bank.pe_forward.len()).map(|i| bank.pe_forward.extract_ascii(i as u32)));
-    polish_contigs(&mut graph, read_iter);
+    polish_contigs(&mut graph, read_iter, 500);
 
     let contigs = curate_contigs(&graph, 500, 2.0);
     write_outputs(&graph, &contigs, &outdir).unwrap();

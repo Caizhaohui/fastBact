@@ -5,12 +5,16 @@
 
 use crate::common::bitseq::{ASCII_TO_2BIT, TWO_BIT_TO_ASCII};
 use crate::common::kmer::nthash_canonical;
-use crate::graph::cdbg::CdbgGraph;
+use crate::graph::cdbg::{CdbgGraph, UnitigNode};
 use hashbrown::HashMap;
 use rustc_hash::FxHasher;
 use std::hash::BuildHasherDefault;
 
 type FxHashMap<K, V> = HashMap<K, V, BuildHasherDefault<FxHasher>>;
+
+fn output_eligible(node: &UnitigNode, min_output_len: usize) -> bool {
+    !node.is_deleted && node.seq_len as usize >= min_output_len
+}
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 enum AnchorOrientation {
@@ -54,21 +58,34 @@ pub struct PolishStats {
 
 /// Anchors reads from the read pool onto assembled contigs and performs fast in-memory
 /// pileup error correction.
+///
+/// `min_output_len` is the FASTA retention threshold. Shorter residual nodes are kept in
+/// the graph for connectivity accounting, but they are not consensus targets. Indexing
+/// them lets a repeat copy capture the first read seed and drop coverage on the contig
+/// that will actually be emitted.
 pub fn polish_contigs(
     graph: &mut CdbgGraph,
     reads: impl Iterator<Item = Vec<u8>>,
+    min_output_len: usize,
 ) -> PolishStats {
     let k = 31;
     let n = graph.nodes.len();
     let mut stats = PolishStats::default();
 
-    let total_active_len: usize = graph.nodes.iter().filter(|n| !n.is_deleted).map(|n| n.seq_len as usize).sum();
+    let total_active_len: usize = graph
+        .nodes
+        .iter()
+        .filter(|node| output_eligible(node, min_output_len))
+        .map(|node| node.seq_len as usize)
+        .sum();
     let est_seeds = (total_active_len / 25).max(1024);
-    let mut seed_index: FxHashMap<u64, (u32, usize)> = FxHashMap::with_capacity_and_hasher(est_seeds, Default::default());
-    let mut seed_counts: FxHashMap<u64, u32> = FxHashMap::with_capacity_and_hasher(est_seeds, Default::default());
+    let mut seed_index: FxHashMap<u64, (u32, usize)> =
+        FxHashMap::with_capacity_and_hasher(est_seeds, Default::default());
+    let mut seed_counts: FxHashMap<u64, u32> =
+        FxHashMap::with_capacity_and_hasher(est_seeds, Default::default());
 
     for id in 0..n as u32 {
-        if graph.nodes[id as usize].is_deleted {
+        if !output_eligible(&graph.nodes[id as usize], min_output_len) {
             continue;
         }
         let seq = graph.get_unitig_seq(id);
@@ -95,7 +112,7 @@ pub fn polish_contigs(
 
     for id in 0..n {
         let node = &graph.nodes[id];
-        if node.is_deleted {
+        if !output_eligible(node, min_output_len) {
             pileups.push(Vec::new());
             contig_seqs.push(Vec::new());
         } else {
@@ -186,7 +203,7 @@ pub fn polish_contigs(
 
     // 4. Polish contig sequences based on pileup counts
     for id in 0..n as u32 {
-        if graph.nodes[id as usize].is_deleted {
+        if !output_eligible(&graph.nodes[id as usize], min_output_len) {
             continue;
         }
 

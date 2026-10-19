@@ -79,7 +79,7 @@ fn run_matrix_case(len: usize, offset: usize, mode: &str) {
         _ => unreachable!(),
     };
 
-    let stats = polish_contigs(&mut graph, reads.into_iter());
+    let stats = polish_contigs(&mut graph, reads.into_iter(), 0);
     assert_eq!(
         graph.get_unitig_seq(0),
         contig_seq,
@@ -115,7 +115,7 @@ fn test_reverse_coordinate_repro_minimal_failure() {
     let rev_read = make_reverse_read(&contig_seq, 150, 30, 75);
     let reads = vec![rev_read; 10];
 
-    let stats = polish_contigs(&mut graph, reads.into_iter());
+    let stats = polish_contigs(&mut graph, reads.into_iter(), 0);
     let polished_seq = graph.get_unitig_seq(0);
 
     assert_eq!(
@@ -146,7 +146,7 @@ fn test_reverse_snv_correction() {
     let rev_read = make_reverse_read(&truth_seq, 125, 30, 100);
     let reads = vec![rev_read; 10];
 
-    let stats = polish_contigs(&mut graph, reads.into_iter());
+    let stats = polish_contigs(&mut graph, reads.into_iter(), 0);
     let polished_seq = graph.get_unitig_seq(0);
 
     assert_eq!(
@@ -234,7 +234,7 @@ fn test_reverse_reads_with_small_sequencing_errors() {
         reads.push(r);
     }
 
-    let stats = polish_contigs(&mut graph, reads.into_iter());
+    let stats = polish_contigs(&mut graph, reads.into_iter(), 0);
     assert_eq!(
         graph.get_unitig_seq(0),
         contig_seq,
@@ -256,7 +256,7 @@ fn test_repeated_seed_and_unanchored_reads() {
     let rev_read = make_reverse_read(&contig_seq, 50, 30, 75);
     let reads = vec![rev_read; 10];
 
-    let stats = polish_contigs(&mut graph, reads.into_iter());
+    let stats = polish_contigs(&mut graph, reads.into_iter(), 0);
     assert_eq!(graph.get_unitig_seq(0), contig_seq);
     assert_eq!(stats.bases_modified, 0);
     assert_eq!(stats.fwd_mapped_reads, 0);
@@ -273,7 +273,7 @@ fn test_unknown_orientation_rejected() {
     let bogus_read = make_deterministic_dna(0x7777_8888, 100);
     let reads = vec![bogus_read; 10];
 
-    let stats = polish_contigs(&mut graph, reads.into_iter());
+    let stats = polish_contigs(&mut graph, reads.into_iter(), 0);
     assert_eq!(graph.get_unitig_seq(0), contig_seq);
     assert_eq!(stats.bases_modified, 0);
     assert_eq!(stats.fwd_mapped_reads, 0);
