@@ -113,14 +113,14 @@ pub fn map_paired_reads<K: KmerInt>(
 
     let num_pairs = bank.pe_forward.len().min(bank.pe_reverse.len());
 
-    let map_read = |r: &[u8]| -> Option<(DirUnitigId, u32)> {
+    let map_read = |r: &[u8]| -> Option<(DirUnitigId, u32, usize)> {
         for step in [0, 20, 40, 60, 80, 100] {
             if step + k <= r.len() {
                 let km = K::from_ascii(&r[step..step + k]);
                 let (can, is_rc) = km.canonical(k);
                 if let Some(&(uid, pos)) = index.get(&can.to_u64()) {
                     let dir = if is_rc { uid.twin() } else { uid };
-                    return Some((dir, pos));
+                    return Some((dir, pos, step));
                 }
             }
         }
@@ -141,16 +141,34 @@ pub fn map_paired_reads<K: KmerInt>(
         let map1 = map_read(&r1);
         let map2 = map_read(&r2);
 
-        if let (Some((u1, pos1)), Some((u2, pos2))) = (map1, map2) {
+        if let (Some((u1, pos1, step1)), Some((u2, pos2, step2))) = (map1, map2) {
             let u2_forward = u2.twin();
 
             if u1.id() == u2.id() {
                 // Intra-unitig pair: estimate insert size
                 let node_len = graph.nodes[u1.id() as usize].seq_len;
                 if node_len >= 1500 {
-                    let d = (pos2 as i64 - pos1 as i64).abs() as usize + r1.len();
-                    if d >= 100 && d <= 1500 {
-                        insert_sizes.push(d);
+                    // Paired-end Illumina reads are inward-facing (FR orientation).
+                    // Subcase A: R1 forward, R2 reverse (u1.is_rc() == false, u2.is_rc() == true)
+                    // Subcase B: R1 reverse, R2 forward (u1.is_rc() == true, u2.is_rc() == false)
+                    // Same-strand pairs (FF / RR) are non-concordant and rejected.
+                    let span: i64 = match (u1.is_rc(), u2.is_rc()) {
+                        (false, true) => {
+                            let s1 = pos1 as i64 - step1 as i64;
+                            let e2 = pos2 as i64 + k as i64 + step2 as i64;
+                            e2 - s1
+                        }
+                        (true, false) => {
+                            let s2 = pos2 as i64 - step2 as i64;
+                            let e1 = pos1 as i64 + k as i64 + step1 as i64;
+                            e1 - s2
+                        }
+                        _ => -1,
+                    };
+
+                    let min_len = (r1.len().max(r2.len()) as i64).max(100);
+                    if span >= min_len && span <= 1500 {
+                        insert_sizes.push(span as usize);
                     }
                 }
             } else {
