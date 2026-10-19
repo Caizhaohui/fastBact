@@ -1,0 +1,42 @@
+You are performing an independent Rust correctness review of commit f241d9d in the fastBact repository.
+
+Review Scope:
+- `src/resolve/mapper.rs`
+- `src/resolve/exspander.rs`
+- `tests/test_c0_02r_pe_evidence.rs`
+- The actual git diff of commit `f241d9d3c9d21470f63bd85b5e1bd6eb0bfc8d30`
+
+Tasks to answer independently:
+A. Does PairLinkMatrix correctly handle directed unitig, twin, and read-pair orientation?
+B. Does get_support() have any mixing of different orientations, duplicate counting, or improper normalization?
+C. In exspander.rs, what does the expression:
+   `let gap = target_node.seq_len as i64 - edge_to_target.overlap_k as i64 - edge_target_to_cand.overlap_k as i64;`
+   actually represent in graph topology?
+D. Is `gap <= dist.max_insert as i64` sufficient to support the paired-end repeat-bridge decision?
+   Specifically check:
+   1. Is `gap` only the repeat net span, or the actual read-pair fragment span?
+   2. Could a connection be accepted where `gap` is valid (<= max_insert) but no authentic PE fragment support actually spans the distance?
+   3. Could a connection with valid PE support be erroneously rejected?
+   4. Does it properly handle the insert-size distribution and variance?
+   5. Are there negative gap values, signed/unsigned integer conversion issues, or arithmetic underflow/overflow risks?
+E. Do existing deterministic unit tests in `tests/test_c0_02r_pe_evidence.rs` adequately cover these risks?
+F. If any issues are found, provide minimal, production-path reachable counterexamples with exact file and line numbers.
+
+Required Output Format:
+
+VERDICT:
+PASS / CONDITIONAL PASS / FAIL
+
+FINDINGS:
+P0 / P1 / P2
+For every finding, include:
+- File and line number
+- Necessary conditions for defect to trigger
+- Minimal counterexample
+- Whether existing tests cover it
+- Recommended fix direction
+
+Final Question:
+Does gap <= max_insert provide sufficient paired-end evidence for accepting the selected path?
+Answer: YES / NO / CONDITIONAL
+(Provide strict technical justification based on graph topology and fragment physics. Mark unproven issues as UNVERIFIED.)

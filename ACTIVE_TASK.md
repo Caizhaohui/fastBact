@@ -1,13 +1,13 @@
 # ACTIVE TASK: fastBact C0-02R Phase D (Final Gate & Provenance Acceptance)
 
-**Status**: PENDING_SLURM_EXECUTION  
+**Status**: BENCHMARK_RUNNING  
 **Branch**: `fix/c0-02r-final-gate`  
-**Current HEAD**: `20a4689`  
+**Current HEAD**: `97510e6`  
 **Benchmark Target Commit**: `f241d9d` (sources/C worktree)  
 **Target Node**: Slurm `vnode1` (`qfree`, `-c 8 --mem=12G`)  
-**Slurm Benchmark Job**: `2980439` (Status: `PENDING (Resources)`, Est Start: ~17:36:59)  
+**Slurm Benchmark Job**: `2980439` (Status: `RUNNING`, Started: 17:37:10, Elapsed: ~25 min)  
 **Benchmark Output Dir**: `benchmark-results/C0_02R_pe_fix_20261019`  
-**Phase D Acceptance Verdict**: **UNKNOWN** (Awaiting Slurm Job 2980439 execution and manifest verification)  
+**Phase D Acceptance Verdict**: **UNKNOWN** (Awaiting completion of Job 2980439)  
 **Coordinator**: Antigravity CLI  
 **Last Updated**: 2026-10-19
 
@@ -55,11 +55,11 @@ Complete C0-02R (Final Correctness and Evidence Recovery for FB-P0-02 repeat res
 1. [x] Establish `ACTIVE_TASK.md` and `docs/development/HANDOFF.md`.
 2. [x] Commit PE evidence fixes (`src/resolve/mapper.rs`, `src/resolve/exspander.rs`, `tests/test_c0_02r_pe_evidence.rs`, and manifest verification suite) $\to$ Commit `f241d9d`.
 3. [x] Submit clean 3-way benchmark job via `submit_c0_02r_final_gate.sh` to Slurm compute node `vnode1` $\to$ Job `2980439` (target `benchmark-results/C0_02R_pe_fix_20261019`).
-4. [ ] Monitor Slurm job 2980439 execution to completion (currently `PENDING (Resources)`).
+4. [ ] Monitor Slurm job 2980439 execution to completion (currently `RUNNING` on R1-003).
 5. [ ] Verify manifest integrity with `verify_c0_02r_manifest.py` on compute node upon job completion.
 6. [ ] Review 6-dataset acceptance matrix; verify zero regression.
 7. [ ] Archive Phase D receipts in `docs/development/evidence/C0_02R/phase_d/`.
-8. [ ] Execute prepared Codex read-only audit upon user approval.
+8. [x] Execute approved Codex read-only audit $\to$ `AUDIT-20261019-001` completed (Verdict: FAIL, P1/P2 findings documented).
 
 ---
 
@@ -70,17 +70,16 @@ Complete C0-02R (Final Correctness and Evidence Recovery for FB-P0-02 repeat res
 - **Claude Code**: Verified wrapper (`~/.local/share/omniakey/bin/claude`). **Security Finding**: Routes to third-party API gateway `https://api.omniakey.com` via API key `~/.config/omniakey/claude-api-key` (not web subscription OAuth). **Status: Automatic invocation strictly PROHIBITED; requires explicit user approval.**
 - **Cursor Agent**: Verified local binary (`~/.local/bin/agent`). Default `--mode=ask` enforced for read-only. Status: Capability-checked only.
 
-### Prepared Dry-Run Task (Awaiting User Approval)
-- **Task ID**: `C0-02R-PE-FIX-AUDIT`
-- **Agent**: Codex CLI
-- **Model**: `gpt-6.1-sol`
-- **Reasoning Effort**: `medium` (`-c model_reasoning_effort="medium"`)
-- **Permission Level**: `READ_ONLY` (`-s read-only`)
-- **Target Git SHA**: `f241d9d3c9d21470f63bd85b5e1bd6eb0bfc8d30`
-- **Review Scope**: `src/resolve/mapper.rs`, `src/resolve/exspander.rs`, `tests/test_c0_02r_pe_evidence.rs`
-- **Output Path**: `docs/development/evidence/C0_02R/phase_d/codex_review_pe_fix.md`
-- **Command Line**:
-  ```bash
-  codex exec -s read-only -m gpt-6.1-sol -c model_reasoning_effort="medium" -o docs/development/evidence/C0_02R/phase_d/codex_review_pe_fix.md "Review commit f241d9d in src/resolve/mapper.rs and src/resolve/exspander.rs regarding directed paired-end link support and insert size constraint gap <= dist.max_insert. Verify Rust correctness, integer overflow safety, and edge invariants."
-  ```
-- **Execution State**: **PENDING_USER_APPROVAL** (No execution performed).
+### Executed Audits
+- **[AUDIT-20261019-001] Codex Medium Read-Only Review for PE Fidelity & Insert-Size Bounds**:
+  - **Task ID**: `C0-02R-PE-FIX-AUDIT`
+  - **Agent**: Codex CLI (`gpt-6.1-sol`, medium reasoning effort, read-only)
+  - **Exit Code**: 0 (63,169 tokens)
+  - **Verdict**: **FAIL**
+  - **Findings**:
+    - Orientation handling verified correct; no mixing or double counting.
+    - **P1**: Unitig-pair count aggregation allows shortcuts when alternate longer traversals share endpoints (`src/resolve/exspander.rs:223`, `src/resolve/mapper.rs:144`).
+    - **P2**: Insert size estimator uses k-mer anchor coordinates instead of read endpoints (`src/resolve/mapper.rs:116`).
+    - **Sufficiency of `gap <= max_insert`**: **NO** (scalar gap is only boundary separation, not fragment span; does not establish that authentic fragments span the selected traversal).
+  - **Full Report**: [`docs/development/evidence/C0_02R/phase_d/codex_review_pe_fix.md`](./evidence/C0_02R/phase_d/codex_review_pe_fix.md)
+  - **Ledger Record**: [`docs/development/AUDIT_FINDINGS.md`](./AUDIT_FINDINGS.md)

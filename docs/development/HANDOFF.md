@@ -93,7 +93,7 @@ The following require explicit user authorization before execution:
 | **Phase A** | Directed Edge Verification Contract | `b9727c3` | **PASS** | Commit `f500d0f`: Replaced weak path validation with 9-point contract; eliminated unverified `GraphEdge::new()`. Tests E1–E8. |
 | **Phase B** | Graph Mutation Safety & Tri-Contract Boundary | `f500d0f` | **PASS** | Commit `0d13f99`: Formalized 3 contracts (snapshot rollback, protected rejected short nodes, isolated node cleanup). Tests G1–G6. |
 | **Phase C** | Modular Alignment & Provenance Engine | `0d13f99` | **PASS** | Commit `b318061`: Replaced position diffing with `minimap2 --cs=short` event extraction; machine-verifiable manifest architecture. |
-| **Phase D** | 3-Way A/B/C Benchmark & Final Acceptance | `b318061` | **IN PROGRESS** | Fixed residual polish anchor stealing (`fc926ec`); resolved PE link strand orientation leak and repeat length vs insert size constraint (Commit `f241d9d`, verified in Slurm job `2979536`). Full 3-way gate submitted (Job `2980439`). |
+| **Phase D** | 3-Way A/B/C Benchmark & Final Acceptance | `b318061` | **IN PROGRESS** | Fixed residual polish anchor stealing (`fc926ec`); resolved PE link strand orientation leak and repeat length vs insert size constraint (Commit `f241d9d`). Slurm 3-way gate running (Job `2980439`). Independent Codex read-only audit completed (`AUDIT-20261019-001`, Verdict: FAIL; confirmed orientation fidelity but revealed P1 shortcut risk without fragment span coordinate verification and P2 estimator k-mer offset bias). |
 
 ---
 
