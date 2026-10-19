@@ -1,0 +1,93 @@
+job=2978131 node=vnode1 cpus=8 memory=12288
+b9727c3ab372f7b995e439d92b72c7a4bfd051cf
+a674d3e406959b7f261a9792d9ccdfb1ee9c7d1f
+5a28fdd06e179194506cc8868f1d8f3fec3ba0961c9ff4da9716e2ecf3ce8218  tests/test_c0_02r_directed_edge_identity.rs
+273982dca70ef92a00b0248496cafd157c6ead34aa7eed7d802ad67757cab0c5  tests/test_c0_02r_edge_gate.rs
+COMMAND: cargo test --locked --offline --test test_c0_02r_directed_edge_identity -- --nocapture
+test_c0_02r_directed_edge_identity	101
+   Compiling fastBact v0.1.0 (/hpcfs/fhome/caizhh/.local/state/codex-with-chatgpt/fastbact-preflight-69HE09JF/baseline)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 1.79s
+     Running tests/test_c0_02r_directed_edge_identity.rs (/hpcfs/fhome/caizhh/.local/state/codex-with-chatgpt/fastbact-preflight-69HE09JF/target-baseline/debug/deps/test_c0_02r_directed_edge_identity-7ef43e95951a64a9)
+
+running 8 tests
+
+thread 'test_e4_incoming_edge_overlap_mismatch_rejected' panicked at tests/test_c0_02r_directed_edge_identity.rs:222:5:
+assertion failed: res.is_err()
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+thread 'test_e3_incoming_edge_target_mismatch_rejected' panicked at tests/test_c0_02r_directed_edge_identity.rs:183:5:
+assertion failed: res.is_err()
+
+thread 'test_e2_none_incoming_edge_on_non_first_step_rejected' panicked at tests/test_c0_02r_directed_edge_identity.rs:143:5:
+assertion failed: res.is_err()
+
+thread 'test_e5_forged_support_metadata_rejected' panicked at tests/test_c0_02r_directed_edge_identity.rs:269:5:
+assertion failed: res.is_err()
+
+thread 'test_e1_nonexistent_edge_matching_sequence_rejected' panicked at tests/test_c0_02r_directed_edge_identity.rs:98:5:
+assertion failed: res.is_err()
+
+thread 'test_e6_backward_path_missing_reciprocal_edge_rejected' panicked at tests/test_c0_02r_directed_edge_identity.rs:315:5:
+assertion `left == right` failed
+  left: 1
+ right: 0
+test test_e5_forged_support_metadata_rejected ... FAILED
+test test_e3_incoming_edge_target_mismatch_rejected ... FAILED
+test test_e4_incoming_edge_overlap_mismatch_rejected ... FAILED
+test test_e2_none_incoming_edge_on_non_first_step_rejected ... FAILED
+test test_e1_nonexistent_edge_matching_sequence_rejected ... FAILED
+test test_e6_backward_path_missing_reciprocal_edge_rejected ... FAILED
+test test_e7_multiple_overlap_candidates_tied_support_ambiguous_rejected ... ok
+test test_e8_valid_mixed_k_and_k_minus_1_path_succeeds ... ok
+
+failures:
+
+failures:
+    test_e1_nonexistent_edge_matching_sequence_rejected
+    test_e2_none_incoming_edge_on_non_first_step_rejected
+    test_e3_incoming_edge_target_mismatch_rejected
+    test_e4_incoming_edge_overlap_mismatch_rejected
+    test_e5_forged_support_metadata_rejected
+    test_e6_backward_path_missing_reciprocal_edge_rejected
+
+test result: FAILED. 2 passed; 6 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+error: test failed, to rerun pass `--test test_c0_02r_directed_edge_identity`
+COMMAND: cargo test --locked --offline --test test_c0_02r_edge_gate -- --nocapture
+test_c0_02r_edge_gate	101
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.16s
+     Running tests/test_c0_02r_edge_gate.rs (/hpcfs/fhome/caizhh/.local/state/codex-with-chatgpt/fastbact-preflight-69HE09JF/target-baseline/debug/deps/test_c0_02r_edge_gate-7cc5068585f0124a)
+
+running 5 tests
+
+thread 'e7_direct_validator_rejects_lower_support_edge' panicked at tests/test_c0_02r_edge_gate.rs:36:5:
+assertion failed: validate_and_splice_path(&graph, &path).is_err()
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+thread 'e1_matching_sequence_on_wrong_strand_is_rejected' panicked at tests/test_c0_02r_edge_gate.rs:65:5:
+assertion failed: validate_and_splice_path(&graph, &path).is_err()
+
+thread 'e7_direct_validator_rejects_tied_overlaps' panicked at tests/test_c0_02r_edge_gate.rs:30:5:
+assertion failed: validate_and_splice_path(&graph, &path).is_err()
+test e7_direct_validator_accepts_selected_edge ... ok
+
+thread 'e6_backward_reciprocal_support_must_match_selected_edge' panicked at tests/test_c0_02r_edge_gate.rs:54:5:
+assertion `left == right` failed
+  left: 1
+ right: 0
+test e7_direct_validator_rejects_lower_support_edge ... FAILED
+test e1_matching_sequence_on_wrong_strand_is_rejected ... FAILED
+test e7_direct_validator_rejects_tied_overlaps ... FAILED
+test e6_backward_reciprocal_support_must_match_selected_edge ... FAILED
+
+failures:
+
+failures:
+    e1_matching_sequence_on_wrong_strand_is_rejected
+    e6_backward_reciprocal_support_must_match_selected_edge
+    e7_direct_validator_rejects_lower_support_edge
+    e7_direct_validator_rejects_tied_overlaps
+
+test result: FAILED. 1 passed; 4 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+error: test failed, to rerun pass `--test test_c0_02r_edge_gate`

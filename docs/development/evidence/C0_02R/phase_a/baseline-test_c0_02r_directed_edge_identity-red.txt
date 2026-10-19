@@ -1,0 +1,48 @@
+   Compiling fastBact v0.1.0 (/hpcfs/fhome/caizhh/.local/state/codex-with-chatgpt/fastbact-preflight-69HE09JF/baseline)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 1.79s
+     Running tests/test_c0_02r_directed_edge_identity.rs (/hpcfs/fhome/caizhh/.local/state/codex-with-chatgpt/fastbact-preflight-69HE09JF/target-baseline/debug/deps/test_c0_02r_directed_edge_identity-7ef43e95951a64a9)
+
+running 8 tests
+
+thread 'test_e4_incoming_edge_overlap_mismatch_rejected' panicked at tests/test_c0_02r_directed_edge_identity.rs:222:5:
+assertion failed: res.is_err()
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+thread 'test_e3_incoming_edge_target_mismatch_rejected' panicked at tests/test_c0_02r_directed_edge_identity.rs:183:5:
+assertion failed: res.is_err()
+
+thread 'test_e2_none_incoming_edge_on_non_first_step_rejected' panicked at tests/test_c0_02r_directed_edge_identity.rs:143:5:
+assertion failed: res.is_err()
+
+thread 'test_e5_forged_support_metadata_rejected' panicked at tests/test_c0_02r_directed_edge_identity.rs:269:5:
+assertion failed: res.is_err()
+
+thread 'test_e1_nonexistent_edge_matching_sequence_rejected' panicked at tests/test_c0_02r_directed_edge_identity.rs:98:5:
+assertion failed: res.is_err()
+
+thread 'test_e6_backward_path_missing_reciprocal_edge_rejected' panicked at tests/test_c0_02r_directed_edge_identity.rs:315:5:
+assertion `left == right` failed
+  left: 1
+ right: 0
+test test_e5_forged_support_metadata_rejected ... FAILED
+test test_e3_incoming_edge_target_mismatch_rejected ... FAILED
+test test_e4_incoming_edge_overlap_mismatch_rejected ... FAILED
+test test_e2_none_incoming_edge_on_non_first_step_rejected ... FAILED
+test test_e1_nonexistent_edge_matching_sequence_rejected ... FAILED
+test test_e6_backward_path_missing_reciprocal_edge_rejected ... FAILED
+test test_e7_multiple_overlap_candidates_tied_support_ambiguous_rejected ... ok
+test test_e8_valid_mixed_k_and_k_minus_1_path_succeeds ... ok
+
+failures:
+
+failures:
+    test_e1_nonexistent_edge_matching_sequence_rejected
+    test_e2_none_incoming_edge_on_non_first_step_rejected
+    test_e3_incoming_edge_target_mismatch_rejected
+    test_e4_incoming_edge_overlap_mismatch_rejected
+    test_e5_forged_support_metadata_rejected
+    test_e6_backward_path_missing_reciprocal_edge_rejected
+
+test result: FAILED. 2 passed; 6 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+error: test failed, to rerun pass `--test test_c0_02r_directed_edge_identity`

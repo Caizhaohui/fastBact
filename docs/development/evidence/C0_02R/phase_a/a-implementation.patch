@@ -1,0 +1,26 @@
+--- a/src/resolve/exspander.rs
++++ b/src/resolve/exspander.rs
+@@ -432,6 +432,23 @@
+                 return Err("Incoming edge support does not match graph edge support");
+             }
+ 
++            match resolve_edge_between(graph, prev.dir, step.dir) {
++                EdgeResolveResult::Valid(selected) if selected == *edge => {}
++                EdgeResolveResult::Valid(_) => return Err("Incoming edge is not the selected edge"),
++                EdgeResolveResult::Ambiguous => return Err("Ambiguous incoming edge"),
++                EdgeResolveResult::InvalidSequenceOverlap => return Err("Sequence overlap mismatch at junction"),
++                EdgeResolveResult::NoEdge => return Err("Incoming edge does not exist in predecessor outgoing edges"),
++            }
++            match resolve_edge_between(graph, step.dir.twin(), prev.dir.twin()) {
++                EdgeResolveResult::Valid(reciprocal)
++                    if reciprocal.overlap_k == edge.overlap_k
++                        && reciprocal.support == edge.support => {}
++                EdgeResolveResult::Valid(_)
++                | EdgeResolveResult::Ambiguous
++                | EdgeResolveResult::InvalidSequenceOverlap
++                | EdgeResolveResult::NoEdge => return Err("Missing or inconsistent reciprocal edge"),
++            }
++
+             // 7. Real sequence base-by-base match
+             let ov = step.overlap;
+             let prev_seq = graph.get_stranded_seq(prev.dir);

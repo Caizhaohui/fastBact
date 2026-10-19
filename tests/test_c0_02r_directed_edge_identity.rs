@@ -152,7 +152,8 @@ fn test_e3_incoming_edge_target_mismatch_rejected() {
     let ov_len = 31;
 
     let seq0 = make_deterministic_dna(0xE301, 600);
-    let seq1 = make_deterministic_dna(0xE302, 600);
+    let mut seq1 = seq0[569..].to_vec();
+    seq1.extend_from_slice(&make_deterministic_dna(0xE302, 569));
     let seq2 = make_deterministic_dna(0xE303, 600);
 
     let u0 = create_unitig(&mut graph, 0, &seq0, 25.0);
@@ -193,7 +194,8 @@ fn test_e4_incoming_edge_overlap_mismatch_rejected() {
     let mut graph = CdbgGraph::new(k);
 
     let seq0 = make_deterministic_dna(0xE401, 600);
-    let seq1 = make_deterministic_dna(0xE402, 600);
+    let mut seq1 = seq0[569..].to_vec();
+    seq1.extend_from_slice(&make_deterministic_dna(0xE402, 569));
 
     let u0 = create_unitig(&mut graph, 0, &seq0, 25.0);
     let u1 = create_unitig(&mut graph, 1, &seq1, 25.0);
@@ -410,8 +412,8 @@ fn test_e8_valid_mixed_k_and_k_minus_1_path_succeeds() {
     expected_seq.extend_from_slice(&suff2);
     assert_eq!(expected_seq.len(), 1739);
 
-    let edge01 = graph.nodes[0].find_edge(false, u1, ov_k as u8).copied().unwrap();
-    let edge12 = graph.nodes[1].find_edge(false, u2, ov_km1 as u8).copied().unwrap();
+    let edge01 = graph.nodes[0].edges(false).iter().find(|edge| edge.target == u1 && usize::from(edge.overlap_k) == ov_k).copied().unwrap();
+    let edge12 = graph.nodes[1].edges(false).iter().find(|edge| edge.target == u2 && usize::from(edge.overlap_k) == ov_km1).copied().unwrap();
 
     let path = vec![
         PathStep {

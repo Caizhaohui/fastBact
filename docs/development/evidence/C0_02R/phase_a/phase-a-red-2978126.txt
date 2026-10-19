@@ -1,0 +1,151 @@
+job=2978126 node=vnode1 cpus=8 memory=12288
+rustc 1.89.0 (29483883e 2025-08-04)
+cargo 1.89.0 (c24e10642 2025-06-23)
+b9727c3ab372f7b995e439d92b72c7a4bfd051cf
+a674d3e406959b7f261a9792d9ccdfb1ee9c7d1f
+?? tests/test_c0_02r_directed_edge_identity.rs
+?? tests/test_c0_02r_edge_gate.rs
+318db75dc1fe20529b8b577e176eab953fcdc8bbaca5be355f2ac68c71ef2866  src/resolve/exspander.rs
+dfef7f397bab13ecbbd39d1e4ec7c8c174da166ec107f389fda5b6fb5a3be731  tests/test_c0_02r_directed_edge_identity.rs
+273982dca70ef92a00b0248496cafd157c6ead34aa7eed7d802ad67757cab0c5  tests/test_c0_02r_edge_gate.rs
+COMMAND: cargo test --locked --offline --test test_c0_02r_directed_edge_identity --test test_c0_02r_edge_gate -- --nocapture
+baseline	101
+   Compiling either v1.19.0
+   Compiling clap_lex v1.1.1
+   Compiling anyhow v1.0.104
+   Compiling log v0.4.34
+   Compiling clap_builder v4.6.7
+   Compiling tracing-log v0.2.0
+   Compiling rayon v1.12.0
+   Compiling buffer-redux v1.1.0
+   Compiling flate2 v1.1.10
+   Compiling sharded-slab v0.1.7
+   Compiling thread_local v1.1.10
+   Compiling libc v0.2.190
+   Compiling smallvec v1.16.3
+   Compiling nu-ansi-term v0.50.3
+   Compiling matchers v0.2.0
+   Compiling allocator-api2 v0.2.21
+   Compiling bytecount v0.6.9
+   Compiling needletail v0.5.1
+   Compiling crossbeam-channel v0.5.17
+   Compiling hashbrown v0.14.5
+   Compiling rustc-hash v2.1.3
+   Compiling getrandom v0.4.3
+   Compiling rustix v1.1.5
+   Compiling clap_derive v4.6.7
+   Compiling ppv-lite86 v0.2.21
+   Compiling linux-raw-sys v0.12.1
+   Compiling bitflags v2.13.2
+   Compiling fastrand v2.5.0
+   Compiling tracing-attributes v0.1.31
+   Compiling getrandom v0.2.17
+   Compiling rand_core v0.6.4
+   Compiling rand_chacha v0.3.1
+   Compiling rand v0.8.8
+   Compiling clap v4.6.7
+   Compiling tracing v0.1.44
+   Compiling tracing-subscriber v0.3.23
+   Compiling tempfile v3.27.0
+   Compiling fastBact v0.1.0 (/hpcfs/fhome/caizhh/.local/state/codex-with-chatgpt/fastbact-preflight-69HE09JF/baseline)
+error[E0599]: no method named `find_edge` found for struct `UnitigNode` in the current scope
+   --> tests/test_c0_02r_directed_edge_identity.rs:413:33
+    |
+413 |     let edge01 = graph.nodes[0].find_edge(false, u1, ov_k as u8).copied().unwrap();
+    |                                 ^^^^^^^^^
+    |
+help: there is a method `add_edge` with a similar name, but with different arguments
+   --> /hpcfs/fhome/caizhh/.local/state/codex-with-chatgpt/fastbact-preflight-69HE09JF/baseline/src/graph/cdbg.rs:108:5
+    |
+108 |     pub fn add_edge(&mut self, is_rc: bool, edge: GraphEdge) {
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+error[E0599]: no method named `find_edge` found for struct `UnitigNode` in the current scope
+   --> tests/test_c0_02r_directed_edge_identity.rs:414:33
+    |
+414 |     let edge12 = graph.nodes[1].find_edge(false, u2, ov_km1 as u8).copied().unwrap();
+    |                                 ^^^^^^^^^
+    |
+help: there is a method `add_edge` with a similar name, but with different arguments
+   --> /hpcfs/fhome/caizhh/.local/state/codex-with-chatgpt/fastbact-preflight-69HE09JF/baseline/src/graph/cdbg.rs:108:5
+    |
+108 |     pub fn add_edge(&mut self, is_rc: bool, edge: GraphEdge) {
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+For more information about this error, try `rustc --explain E0599`.
+error: could not compile `fastBact` (test "test_c0_02r_directed_edge_identity") due to 2 previous errors
+warning: build failed, waiting for other jobs to finish...
+cbf5c1a328ee71fad865da51165a7dceb353e106
+fef5b3e16b51965c51dfe80657ed65cc6c630042
+?? tests/test_c0_02r_edge_gate.rs
+bd69e3eefef41f5ae0c1f87127d7fd431f2a708207fc3fb49fc91bd1d96a3eb6  src/resolve/exspander.rs
+dfef7f397bab13ecbbd39d1e4ec7c8c174da166ec107f389fda5b6fb5a3be731  tests/test_c0_02r_directed_edge_identity.rs
+273982dca70ef92a00b0248496cafd157c6ead34aa7eed7d802ad67757cab0c5  tests/test_c0_02r_edge_gate.rs
+b9d3a8c1e743ce0c5c0f7b7984447d1769814f4ac4ea837e00e95f7fdfffba44  tests/test_c0_02r_graph_atomicity.rs
+COMMAND: cargo test --locked --offline --test test_c0_02r_directed_edge_identity --test test_c0_02r_edge_gate -- --nocapture
+inherited	101
+   Compiling crossbeam-channel v0.5.17
+   Compiling clap_derive v4.6.7
+   Compiling rustc-hash v2.1.3
+   Compiling rustix v1.1.5
+   Compiling getrandom v0.4.3
+   Compiling ppv-lite86 v0.2.21
+   Compiling linux-raw-sys v0.12.1
+   Compiling bitflags v2.13.2
+   Compiling fastrand v2.5.0
+   Compiling tracing-attributes v0.1.31
+   Compiling getrandom v0.2.17
+   Compiling rand_core v0.6.4
+   Compiling rand_chacha v0.3.1
+   Compiling rand v0.8.8
+   Compiling clap v4.6.7
+   Compiling tracing v0.1.44
+   Compiling tracing-subscriber v0.3.23
+   Compiling tempfile v3.27.0
+   Compiling fastBact v0.1.0 (/hpcfs/fhome/caizhh/.local/state/codex-with-chatgpt/fastbact-preflight-69HE09JF/inherited)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 15.69s
+     Running tests/test_c0_02r_directed_edge_identity.rs (/hpcfs/fhome/caizhh/.local/state/codex-with-chatgpt/fastbact-preflight-69HE09JF/target-inherited/debug/deps/test_c0_02r_directed_edge_identity-7ef43e95951a64a9)
+
+running 8 tests
+test test_e4_incoming_edge_overlap_mismatch_rejected ... ok
+test test_e5_forged_support_metadata_rejected ... ok
+test test_e1_nonexistent_edge_matching_sequence_rejected ... ok
+test test_e3_incoming_edge_target_mismatch_rejected ... ok
+test test_e2_none_incoming_edge_on_non_first_step_rejected ... ok
+test test_e6_backward_path_missing_reciprocal_edge_rejected ... ok
+test test_e7_multiple_overlap_candidates_tied_support_ambiguous_rejected ... ok
+test test_e8_valid_mixed_k_and_k_minus_1_path_succeeds ... ok
+
+test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/test_c0_02r_edge_gate.rs (/hpcfs/fhome/caizhh/.local/state/codex-with-chatgpt/fastbact-preflight-69HE09JF/target-inherited/debug/deps/test_c0_02r_edge_gate-7cc5068585f0124a)
+
+running 5 tests
+
+thread 'e7_direct_validator_rejects_tied_overlaps' panicked at tests/test_c0_02r_edge_gate.rs:30:5:
+assertion failed: validate_and_splice_path(&graph, &path).is_err()
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+thread 'e7_direct_validator_rejects_lower_support_edge' panicked at tests/test_c0_02r_edge_gate.rs:36:5:
+assertion failed: validate_and_splice_path(&graph, &path).is_err()
+
+thread 'e6_backward_reciprocal_support_must_match_selected_edge' panicked at tests/test_c0_02r_edge_gate.rs:54:5:
+assertion `left == right` failed
+  left: 1
+ right: 0
+test e1_matching_sequence_on_wrong_strand_is_rejected ... ok
+test e7_direct_validator_accepts_selected_edge ... ok
+test e7_direct_validator_rejects_tied_overlaps ... FAILED
+test e7_direct_validator_rejects_lower_support_edge ... FAILED
+test e6_backward_reciprocal_support_must_match_selected_edge ... FAILED
+
+failures:
+
+failures:
+    e6_backward_reciprocal_support_must_match_selected_edge
+    e7_direct_validator_rejects_lower_support_edge
+    e7_direct_validator_rejects_tied_overlaps
+
+test result: FAILED. 2 passed; 3 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+error: test failed, to rerun pass `--test test_c0_02r_edge_gate`

@@ -1,0 +1,36 @@
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.16s
+     Running tests/test_c0_02r_edge_gate.rs (/hpcfs/fhome/caizhh/.local/state/codex-with-chatgpt/fastbact-preflight-69HE09JF/target-baseline/debug/deps/test_c0_02r_edge_gate-7cc5068585f0124a)
+
+running 5 tests
+
+thread 'e7_direct_validator_rejects_lower_support_edge' panicked at tests/test_c0_02r_edge_gate.rs:36:5:
+assertion failed: validate_and_splice_path(&graph, &path).is_err()
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+thread 'e1_matching_sequence_on_wrong_strand_is_rejected' panicked at tests/test_c0_02r_edge_gate.rs:65:5:
+assertion failed: validate_and_splice_path(&graph, &path).is_err()
+
+thread 'e7_direct_validator_rejects_tied_overlaps' panicked at tests/test_c0_02r_edge_gate.rs:30:5:
+assertion failed: validate_and_splice_path(&graph, &path).is_err()
+test e7_direct_validator_accepts_selected_edge ... ok
+
+thread 'e6_backward_reciprocal_support_must_match_selected_edge' panicked at tests/test_c0_02r_edge_gate.rs:54:5:
+assertion `left == right` failed
+  left: 1
+ right: 0
+test e7_direct_validator_rejects_lower_support_edge ... FAILED
+test e1_matching_sequence_on_wrong_strand_is_rejected ... FAILED
+test e7_direct_validator_rejects_tied_overlaps ... FAILED
+test e6_backward_reciprocal_support_must_match_selected_edge ... FAILED
+
+failures:
+
+failures:
+    e1_matching_sequence_on_wrong_strand_is_rejected
+    e6_backward_reciprocal_support_must_match_selected_edge
+    e7_direct_validator_rejects_lower_support_edge
+    e7_direct_validator_rejects_tied_overlaps
+
+test result: FAILED. 1 passed; 4 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+error: test failed, to rerun pass `--test test_c0_02r_edge_gate`

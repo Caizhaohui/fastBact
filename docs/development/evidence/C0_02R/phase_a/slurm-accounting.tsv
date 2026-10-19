@@ -1,0 +1,16 @@
+JobID|JobName|State|ExitCode|NodeList|AllocCPUS|ReqMem|Elapsed
+2978126|c002r-a-red|COMPLETED|0:0|vnode1|8|12G|00:00:37
+2978126.batch|batch|COMPLETED|0:0|vnode1|8||00:00:37
+2978126.extern|extern|COMPLETED|0:0|vnode1|8||00:00:37
+2978127|c002r-a-base|COMPLETED|0:0|vnode1|8|12G|00:00:02
+2978127.batch|batch|COMPLETED|0:0|vnode1|8||00:00:02
+2978127.extern|extern|COMPLETED|0:0|vnode1|8||00:00:02
+2978130|c002r-a-green|COMPLETED|0:0|vnode1|8|12G|00:00:14
+2978130.batch|batch|COMPLETED|0:0|vnode1|8||00:00:14
+2978130.extern|extern|COMPLETED|0:0|vnode1|8||00:00:14
+2978131|c002r-a-base|COMPLETED|0:0|vnode1|8|12G|00:00:02
+2978131.batch|batch|COMPLETED|0:0|vnode1|8||00:00:02
+2978131.extern|extern|COMPLETED|0:0|vnode1|8||00:00:02
+2978132|c002r-a-green|COMPLETED|0:0|vnode1|8|12G|00:00:02
+2978132.batch|batch|COMPLETED|0:0|vnode1|8||00:00:02
+2978132.extern|extern|COMPLETED|0:0|vnode1|8||00:00:02

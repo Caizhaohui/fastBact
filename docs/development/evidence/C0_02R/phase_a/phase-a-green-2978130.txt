@@ -1,0 +1,109 @@
+job=2978130 node=vnode1 cpus=8 memory=12288
+cbf5c1a328ee71fad865da51165a7dceb353e106
+fef5b3e16b51965c51dfe80657ed65cc6c630042
+ M src/resolve/exspander.rs
+ M tests/test_c0_02r_directed_edge_identity.rs
+?? tests/test_c0_02r_edge_gate.rs
+d07d63d67c61b345f1c604e337ef9dff381820c800434d7879a9c8d52bec70cd  src/resolve/exspander.rs
+c267886faca9f774f79c157a27f48647f2cb8066c255b6b2caf85fc4923cbc3c  tests/test_c0_02r_directed_edge_identity.rs
+273982dca70ef92a00b0248496cafd157c6ead34aa7eed7d802ad67757cab0c5  tests/test_c0_02r_edge_gate.rs
+rustc 1.89.0 (29483883e 2025-08-04)
+cargo 1.89.0 (c24e10642 2025-06-23)
+COMMAND: rustfmt --edition 2021 tests/test_c0_02r_edge_gate.rs
+COMMAND: cargo test --locked --offline --test test_c0_02r_edge_gate --test test_c0_02r_directed_edge_identity --test test_c0_02_junction_overlap --test test_c0_01_polish_orientation -- --nocapture
+targeted_exit=0
+   Compiling fastBact v0.1.0 (/hpcfs/fhome/caizhh/.local/state/codex-with-chatgpt/fastbact-preflight-69HE09JF/phase-a)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 7.06s
+     Running tests/test_c0_01_polish_orientation.rs (/hpcfs/fhome/caizhh/.local/state/codex-with-chatgpt/fastbact-preflight-69HE09JF/target-inherited/debug/deps/test_c0_01_polish_orientation-29285f31a96be7fe)
+
+running 29 tests
+test test_matrix_len075_offset30_mixed ... ok
+test test_matrix_len100_offset00_mixed ... ok
+test test_matrix_len075_offset00_fwd ... ok
+test test_matrix_len075_offset00_rev ... ok
+test test_matrix_len075_offset30_fwd ... ok
+test test_matrix_len075_offset30_rev ... ok
+test test_matrix_len100_offset00_fwd ... ok
+test test_matrix_len075_offset00_mixed ... ok
+test test_matrix_len100_offset00_rev ... ok
+test test_matrix_len100_offset30_fwd ... ok
+test test_matrix_len100_offset60_fwd ... ok
+test test_matrix_len150_offset00_fwd ... ok
+test test_matrix_len100_offset60_rev ... ok
+test test_matrix_len100_offset30_mixed ... ok
+test test_matrix_len100_offset60_mixed ... ok
+test test_matrix_len150_offset00_mixed ... ok
+test test_matrix_len100_offset30_rev ... ok
+test test_matrix_len150_offset30_mixed ... ok
+test test_matrix_len150_offset30_rev ... ok
+test test_matrix_len150_offset00_rev ... ok
+test test_matrix_len150_offset30_fwd ... ok
+test test_reverse_coordinate_repro_minimal_failure ... ok
+test test_matrix_len150_offset60_rev ... ok
+test test_matrix_len150_offset60_mixed ... ok
+test test_matrix_len150_offset60_fwd ... ok
+test test_reverse_reads_with_small_sequencing_errors ... ok
+test test_repeated_seed_and_unanchored_reads ... ok
+test test_reverse_snv_correction ... ok
+test test_unknown_orientation_rejected ... ok
+
+test result: ok. 29 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/test_c0_02_junction_overlap.rs (/hpcfs/fhome/caizhh/.local/state/codex-with-chatgpt/fastbact-preflight-69HE09JF/target-inherited/debug/deps/test_c0_02_junction_overlap-f54587ced662c4ee)
+
+running 10 tests
+test test_t7_no_valid_connection_rejects_splicing ... ok
+test test_t4_reverse_complement_orientation ... ok
+test test_t6_edge_overlap_mismatches_actual_sequence ... ok
+test test_t10_backward_path_reversal_references_correct_edge_and_overlap ... ok
+test test_t1_two_unitigs_valid_overlap_k_minus_1 ... ok
+test test_t3_same_directed_pair_both_k_and_k_minus_1_edges ... ok
+test test_t2_two_unitigs_valid_overlap_k ... ok
+test test_t8_failure_preserves_graph_state_atomically ... ok
+test test_t5_three_unitigs_mixing_k_and_k_minus_1 ... ok
+test test_t9_multiple_overlap_edges_explicit_selection_and_ambiguity_rejection ... ok
+
+test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/test_c0_02r_directed_edge_identity.rs (/hpcfs/fhome/caizhh/.local/state/codex-with-chatgpt/fastbact-preflight-69HE09JF/target-inherited/debug/deps/test_c0_02r_directed_edge_identity-7ef43e95951a64a9)
+
+running 8 tests
+test test_e2_none_incoming_edge_on_non_first_step_rejected ... ok
+test test_e1_nonexistent_edge_matching_sequence_rejected ... ok
+test test_e5_forged_support_metadata_rejected ... ok
+test test_e3_incoming_edge_target_mismatch_rejected ... ok
+test test_e4_incoming_edge_overlap_mismatch_rejected ... ok
+test test_e6_backward_path_missing_reciprocal_edge_rejected ... ok
+test test_e7_multiple_overlap_candidates_tied_support_ambiguous_rejected ... ok
+test test_e8_valid_mixed_k_and_k_minus_1_path_succeeds ... ok
+
+test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/test_c0_02r_edge_gate.rs (/hpcfs/fhome/caizhh/.local/state/codex-with-chatgpt/fastbact-preflight-69HE09JF/target-inherited/debug/deps/test_c0_02r_edge_gate-7cc5068585f0124a)
+
+running 5 tests
+test e1_matching_sequence_on_wrong_strand_is_rejected ... ok
+test e7_direct_validator_rejects_lower_support_edge ... ok
+test e7_direct_validator_accepts_selected_edge ... ok
+test e7_direct_validator_rejects_tied_overlaps ... ok
+test e6_backward_reciprocal_support_must_match_selected_edge ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+COMMAND: cargo check --locked --offline --all-targets
+check_exit=0
+    Checking rustix v1.1.5
+    Checking clap v4.6.7
+    Checking getrandom v0.2.17
+    Checking getrandom v0.4.3
+    Checking matchers v0.2.0
+    Checking tracing-subscriber v0.3.23
+    Checking rand_core v0.6.4
+    Checking tempfile v3.27.0
+    Checking ahash v0.8.12
+    Checking ppv-lite86 v0.2.21
+    Checking hashbrown v0.14.5
+    Checking rand_chacha v0.3.1
+    Checking rand v0.8.8
+    Checking fastBact v0.1.0 (/hpcfs/fhome/caizhh/.local/state/codex-with-chatgpt/fastbact-preflight-69HE09JF/phase-a)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 6.18s

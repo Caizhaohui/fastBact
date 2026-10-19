@@ -1,20 +1,14 @@
-test_id	test_description	expected_outcome	rejection_reason	verified_dna_length	status
-T1	Two unitigs with valid overlap k-1 (30 bp)	SUCCESS	None	1170 bp	PASS
-T2	Two unitigs with valid overlap k (31 bp)	SUCCESS	None	1169 bp	PASS
-T3	Same directed pair both k and k-1 edges; higher support on k=31	SUCCESS	None	1169 bp	PASS
-T4	Reverse-complement orientation	SUCCESS	None	1169 bp	PASS
-T5	Three unitigs mixing k (31 bp) and k-1 (30 bp)	SUCCESS	None	1739 bp	PASS
-T6	Edge recorded overlap mismatches actual sequence suffix/prefix	REJECT	Sequence overlap mismatch at junction	NA	PASS
-T7	Candidate path without valid connection in graph	REJECT	No connection	NA	PASS
-T8	Failure preserves graph state atomically (nodes/edges unchanged)	REJECT	Sequence mismatch (atomic rollback)	NA	PASS
-T9A	Multiple overlap edges; higher support on k-1 selects k-1	SUCCESS	None	1170 bp	PASS
-T9B	Multiple overlap edges; equal support on k and k-1	REJECT	Ambiguous tied support	NA	PASS
-T10	Backward path reversal and twin conversion preserves edge and overlap	SUCCESS	None	1219 bp	PASS
-E1	Suffix/prefix match but no authentic directed edge exists in graph	REJECT	Incoming edge does not exist in predecessor outgoing edges	1169 bp (counterfactual)	PASS
-E2	incoming_edge=None on non-first step	REJECT	Non-initial step missing incoming edge	NA	PASS
-E3	incoming_edge.target does not match step.dir	REJECT	Incoming edge target does not match step dir	NA	PASS
-E4	incoming_edge.overlap_k inconsistent with step.overlap	REJECT	Incoming edge overlap_k does not match step overlap	NA	PASS
-E5	Forged support field or copied edge metadata	REJECT	Incoming edge support does not match graph edge support	NA	PASS
-E6	Backward path with missing reciprocal edge in graph	REJECT	Missing reciprocal edge from source to target	NA	PASS
-E7	Multiple overlap candidates have identical support (tied)	REJECT	Ambiguous candidate edges	NA	PASS
-E8	Normal path with correct k and k-1 overlaps still passes	SUCCESS	None	1739 bp	PASS
+test_name	baseline_b9727c3	inherited_cbf5c1a	phase_a	fixed_job
+test_e5_forged_support_metadata_rejected	FAILED	ok	ok	2978132
+test_e4_incoming_edge_overlap_mismatch_rejected	FAILED	ok	ok	2978132
+test_e2_none_incoming_edge_on_non_first_step_rejected	FAILED	ok	ok	2978132
+test_e1_nonexistent_edge_matching_sequence_rejected	FAILED	ok	ok	2978132
+test_e3_incoming_edge_target_mismatch_rejected	FAILED	ok	ok	2978132
+test_e6_backward_path_missing_reciprocal_edge_rejected	FAILED	ok	ok	2978132
+test_e7_multiple_overlap_candidates_tied_support_ambiguous_rejected	ok	ok	ok	2978132
+test_e8_valid_mixed_k_and_k_minus_1_path_succeeds	ok	ok	ok	2978132
+e1_matching_sequence_on_wrong_strand_is_rejected	FAILED	ok	ok	2978132
+e7_direct_validator_rejects_lower_support_edge	FAILED	FAILED	ok	2978132
+e7_direct_validator_rejects_tied_overlaps	FAILED	FAILED	ok	2978132
+e7_direct_validator_accepts_selected_edge	ok	ok	ok	2978132
+e6_backward_reciprocal_support_must_match_selected_edge	FAILED	FAILED	ok	2978132
