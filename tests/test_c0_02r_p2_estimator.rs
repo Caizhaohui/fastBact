@@ -1,7 +1,7 @@
 use fastbact::common::bitseq::{reverse_complement_ascii, ReadBank};
 use fastbact::common::sketch::splitmix64;
 use fastbact::graph::cdbg::{CdbgGraph, UnitigNode};
-use fastbact::resolve::mapper::map_paired_reads;
+use fastbact::resolve::mapper::{index_terminal_kmers, map_paired_reads};
 
 fn make_deterministic_dna(seed: u64, len: usize) -> Vec<u8> {
     let alphabet = [b'A', b'C', b'G', b'T'];
@@ -183,4 +183,34 @@ fn test_different_read_lengths() {
         "Different read lengths must accurately yield span 400, got {}",
         dist.median
     );
+}
+
+#[test]
+fn test_terminal_kmer_index_overlap_fix_f1_p2_002() {
+    let k = 31;
+
+    // Test cases: (unitig_length, expected_indexed_kmers)
+    // For len <= 2000 + k - 1 (total_kmers <= 2000): all total_kmers must be indexed.
+    // For total_kmers > 2000: exactly 2000 terminal k-mers (1000 from 5', 1000 from 3') must be indexed.
+    let test_cases = [
+        (100, 70),       // Short unitig: 100 - 31 + 1 = 70
+        (1031, 1001),    // Boundary: 1000 + 31 = 1031 -> 1001 kmers
+        (1032, 1002),    // Catastrophic overlap boundary in unpatched code!
+        (1500, 1470),    // Mid-range unitig: 1500 - 31 + 1 = 1470 kmers
+        (2000, 1970),    // 2000 - 31 + 1 = 1970 kmers
+        (2500, 2000),    // Long unitig: 1000 from 5' + 1000 from 3' = 2000 kmers
+    ];
+
+    for &(len, expected_kmers) in &test_cases {
+        let (graph, _seq) = setup_single_unitig_graph(len);
+        let index = index_terminal_kmers::<u64>(&graph, k);
+        assert_eq!(
+            index.len(),
+            expected_kmers,
+            "Failed for unitig len {}: expected {} unique indexed k-mers, got {}",
+            len,
+            expected_kmers,
+            index.len()
+        );
+    }
 }

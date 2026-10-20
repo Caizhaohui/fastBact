@@ -115,3 +115,47 @@ fn repeat_within_insert_size_is_resolved_with_exact_sequence() {
     assert_eq!(merged.len(), 1);
     assert_eq!(graph.get_unitig_seq(merged[0].id), expected);
 }
+
+#[test]
+fn test_short_repeat_cycle_terminates_without_looping_f1_p2_003() {
+    let mut graph = CdbgGraph::new(31);
+    let ov = dna(0x999, 30);
+
+    // S is a long seed unitig (600 bp >= 500 bp)
+    let mut s_seq = dna(0x101, 570);
+    s_seq.extend_from_slice(&ov);
+    let s_id = add_node(&mut graph, &s_seq);
+
+    // R1 is a short repeat (100 bp < 500 bp)
+    let mut r1_seq = ov.clone();
+    r1_seq.extend_from_slice(&dna(0x202, 40));
+    r1_seq.extend_from_slice(&ov);
+    let r1_id = add_node(&mut graph, &r1_seq);
+
+    // R2 is a short repeat (100 bp < 500 bp)
+    let mut r2_seq = ov.clone();
+    r2_seq.extend_from_slice(&dna(0x303, 40));
+    r2_seq.extend_from_slice(&ov);
+    let r2_id = add_node(&mut graph, &r2_seq);
+
+    // Edges forming S -> R1 -> R2 -> R1 (unbranched cycle of short nodes)
+    add_edge(&mut graph, s_id, r1_id, 30);
+    add_edge(&mut graph, r1_id, r2_id, 30);
+    add_edge(&mut graph, r2_id, r1_id, 30);
+
+    let matrix = PairLinkMatrix::new();
+    let stats = resolve_repeats_exspander_with_stats(
+        &mut graph,
+        &matrix,
+        &InsertSizeDist::default(),
+        ExspanderParams::default(),
+    );
+
+    // The repeat cycle must terminate deterministically without infinite loop!
+    // Path validation may reject splicing or terminate cleanly.
+    // Graph must remain in a valid state.
+    assert!(
+        stats.valid_k_joins + stats.valid_k_minus_1_joins + stats.valid_other_joins <= 2,
+        "Short repeat cycle must not produce infinite joins"
+    );
+}

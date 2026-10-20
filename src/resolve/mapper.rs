@@ -107,26 +107,25 @@ pub fn index_terminal_kmers<K: KmerInt>(
             continue;
         }
 
-        let terminal_len = 1000.min(len - k + 1);
-
-        // Index 5' terminal region
-        for i in 0..terminal_len {
+        let total_kmers = len - k + 1;
+        let mut index_kmer = |i: usize| {
             let kmer = K::from_ascii(&seq[i..i + k]);
             let (can, is_rc) = kmer.canonical(k);
             let h = can.to_u64();
             *kmer_counts.entry(h).or_insert(0) += 1;
             kmer_pos.insert(h, (DirUnitigId::new(id, is_rc), i as u32));
-        }
+        };
 
-        // Index 3' terminal region
-        if len > 1000 + k {
-            let start = len - 1000;
-            for i in start..=len - k {
-                let kmer = K::from_ascii(&seq[i..i + k]);
-                let (can, is_rc) = kmer.canonical(k);
-                let h = can.to_u64();
-                *kmer_counts.entry(h).or_insert(0) += 1;
-                kmer_pos.insert(h, (DirUnitigId::new(id, is_rc), i as u32));
+        if total_kmers <= 2000 {
+            for i in 0..total_kmers {
+                index_kmer(i);
+            }
+        } else {
+            for i in 0..1000 {
+                index_kmer(i);
+            }
+            for i in (total_kmers - 1000)..total_kmers {
+                index_kmer(i);
             }
         }
     }
