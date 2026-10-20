@@ -29,11 +29,26 @@ impl Default for InsertSizeDist {
     }
 }
 
-/// Sparse matrix recording observed paired-end links between unitigs.
+/// Compact, coordinate-faithful evidence of an authentic paired-end read fragment.
+#[derive(Copy, Clone, Debug, Default, PartialEq, Eq)]
+pub struct ReadPairEvidence {
+    /// 32-bit unique read pair index in ReadBank (enables strict deduplication)
+    pub pair_id: u32,
+    /// Distance in bp from R1 5' start to u1 3' exit: len(u1) - s1
+    pub dist_u1_exit: u32,
+    /// Distance in bp from u2 5' entry to R2 3' end: e2
+    pub dist_u2_entry: u32,
+    /// Read 1 physical length in bp (u16)
+    pub r1_len: u16,
+    /// Read 2 physical length in bp (u16)
+    pub r2_len: u16,
+}
+
+/// Sparse matrix recording observed paired-end links and coordinate evidence between unitigs.
 #[derive(Clone, Debug, Default)]
 pub struct PairLinkMatrix {
-    /// Number of read pairs linking (u1 -> u2)
-    pub links: FxHashMap<(DirUnitigId, DirUnitigId), u32>,
+    /// Directed unitig pair links with exact coordinate evidence
+    pub links: FxHashMap<(DirUnitigId, DirUnitigId), Vec<ReadPairEvidence>>,
 }
 
 impl PairLinkMatrix {
@@ -41,12 +56,32 @@ impl PairLinkMatrix {
         Self::default()
     }
 
+    /// Adds a synthetic link with default coordinates for testing.
     pub fn add_link(&mut self, u1: DirUnitigId, u2: DirUnitigId) {
-        *self.links.entry((u1, u2)).or_insert(0) += 1;
+        let pair_id = self.links.get(&(u1, u2)).map_or(0, |v| v.len() as u32);
+        self.add_evidence(
+            u1,
+            u2,
+            ReadPairEvidence {
+                pair_id,
+                dist_u1_exit: 120,
+                dist_u2_entry: 120,
+                r1_len: 150,
+                r2_len: 150,
+            },
+        );
+    }
+
+    pub fn add_evidence(&mut self, u1: DirUnitigId, u2: DirUnitigId, ev: ReadPairEvidence) {
+        self.links.entry((u1, u2)).or_default().push(ev);
     }
 
     pub fn get_support(&self, u1: DirUnitigId, u2: DirUnitigId) -> u32 {
-        *self.links.get(&(u1, u2)).unwrap_or(&0)
+        self.links.get(&(u1, u2)).map_or(0, |v| v.len() as u32)
+    }
+
+    pub fn get_evidence(&self, u1: DirUnitigId, u2: DirUnitigId) -> Option<&Vec<ReadPairEvidence>> {
+        self.links.get(&(u1, u2))
     }
 }
 
@@ -172,9 +207,51 @@ pub fn map_paired_reads<K: KmerInt>(
                     }
                 }
             } else {
-                // Inter-unitig pair: record links
-                matrix.add_link(u1, u2_forward);
-                matrix.add_link(u2_forward.twin(), u1.twin());
+                // Inter-unitig pair: record links with coordinate evidence
+                let node1_len = graph.nodes[u1.id() as usize].seq_len as i64;
+                let node2_len = graph.nodes[u2.id() as usize].seq_len as i64;
+
+                let d1: i64 = if u1.is_rc() {
+                    pos1 as i64 + k as i64 + step1 as i64
+                } else {
+                    node1_len - (pos1 as i64 - step1 as i64)
+                };
+
+                let d2: i64 = if u2_forward.is_rc() {
+                    node2_len - (pos2 as i64 - step2 as i64)
+                } else {
+                    pos2 as i64 + k as i64 + step2 as i64
+                };
+
+                if let (Ok(d1_u32), Ok(d2_u32), Ok(r1_len_u16), Ok(r2_len_u16)) = (
+                    u32::try_from(d1.max(0)),
+                    u32::try_from(d2.max(0)),
+                    u16::try_from(r1.len()),
+                    u16::try_from(r2.len()),
+                ) {
+                    matrix.add_evidence(
+                        u1,
+                        u2_forward,
+                        ReadPairEvidence {
+                            pair_id: i,
+                            dist_u1_exit: d1_u32,
+                            dist_u2_entry: d2_u32,
+                            r1_len: r1_len_u16,
+                            r2_len: r2_len_u16,
+                        },
+                    );
+                    matrix.add_evidence(
+                        u2_forward.twin(),
+                        u1.twin(),
+                        ReadPairEvidence {
+                            pair_id: i,
+                            dist_u1_exit: d2_u32,
+                            dist_u2_entry: d1_u32,
+                            r1_len: r2_len_u16,
+                            r2_len: r1_len_u16,
+                        },
+                    );
+                }
             }
         }
     }

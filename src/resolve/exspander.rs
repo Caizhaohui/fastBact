@@ -127,6 +127,45 @@ pub fn resolve_edge_between(
     }
 }
 
+/// Evaluates candidate-specific paired-end support for a path between `u1` and `u2` with known `path_separation`.
+///
+/// Span(p, P) = dist_u1_exit + path_separation + dist_u2_entry
+/// A read pair is valid if Span in [min_insert, max_insert].
+/// Normalized score Z = |Span - median| / (1.4826 * MAD).
+/// Gaussian kernel weight w = exp(-0.5 * Z^2).
+///
+/// Returns (valid_count, total_weight).
+pub fn score_candidate_path(
+    matrix: &PairLinkMatrix,
+    dist: &InsertSizeDist,
+    u1: DirUnitigId,
+    u2: DirUnitigId,
+    path_separation: i64,
+) -> (u32, f64) {
+    let evidences = match matrix.get_evidence(u1, u2) {
+        Some(evs) => evs,
+        None => return (0, 0.0),
+    };
+
+    let mut valid_count = 0u32;
+    let mut total_weight = 0.0f64;
+
+    let mad = if dist.mad > 1.0 { dist.mad } else { 1.0 };
+    let norm_factor = 1.4826 * mad;
+
+    for ev in evidences {
+        let span = ev.dist_u1_exit as i64 + path_separation + ev.dist_u2_entry as i64;
+        if span >= dist.min_insert as i64 && span <= dist.max_insert as i64 {
+            let z = (span as f64 - dist.median).abs() / norm_factor;
+            let w = (-0.5 * z * z).exp();
+            valid_count += 1;
+            total_weight += w;
+        }
+    }
+
+    (valid_count, total_weight)
+}
+
 /// Extends path from `curr_dir` in one direction using paired-end read constraints
 /// while recording the exact `PathStep` for every transition.
 fn extend_one_direction(
@@ -215,50 +254,55 @@ fn extend_one_direction(
 
             if next_continuations.len() > 1 {
                 // Target is a branching repeat node! Evaluate candidates exiting the repeat
-                let mut best_cand: Option<(DirUnitigId, GraphEdge)> = None;
-                let mut best_support = 0u32;
-                let mut second_support = 0u32;
+                let mut cand_scores: Vec<(DirUnitigId, GraphEdge, u32, f64)> =
+                    Vec::with_capacity(next_continuations.len());
 
-                for &(cand, edge) in &next_continuations {
-                    let supp = matrix.get_support(curr_dir, cand);
-                    if supp > best_support {
-                        second_support = best_support;
-                        best_support = supp;
-                        best_cand = Some((cand, edge));
-                    } else if supp > second_support {
-                        second_support = supp;
-                    }
-                }
-
-                if let Some((cand, edge_target_to_cand)) = best_cand {
-                    let ratio = if second_support > 0 {
-                        (best_support as f64) / (second_support as f64)
-                    } else {
-                        100.0
-                    };
-
-                    // A pair linking curr_dir to cand cannot span a repeat wider than the insert size.
-                    let gap = target_node.seq_len as i64
+                for &(cand, edge_target_to_cand) in &next_continuations {
+                    let path_separation = target_node.seq_len as i64
                         - edge_to_target.overlap_k as i64
                         - edge_target_to_cand.overlap_k as i64;
-                    if best_support >= params.min_support && ratio >= params.decision_threshold && gap <= dist.max_insert as i64 {
-                        if !used_unique.contains(&cand.id()) && !graph.nodes[cand.id() as usize].is_deleted {
-                            used_unique.insert(cand.id());
-                            ext.push(PathStep {
-                                dir: target,
-                                incoming_edge: Some(edge_to_target),
-                                overlap: edge_to_target.overlap_k as usize,
-                                support: edge_to_target.support as u32,
-                            });
-                            ext.push(PathStep {
-                                dir: cand,
-                                incoming_edge: Some(edge_target_to_cand),
-                                overlap: edge_target_to_cand.overlap_k as usize,
-                                support: best_support,
-                            });
-                            curr_dir = cand;
-                            continue;
-                        }
+
+                    let (count, weight) = score_candidate_path(matrix, dist, curr_dir, cand, path_separation);
+                    cand_scores.push((cand, edge_target_to_cand, count, weight));
+                }
+
+                cand_scores.sort_by(|a, b| {
+                    b.3.partial_cmp(&a.3)
+                        .unwrap_or(std::cmp::Ordering::Equal)
+                        .then_with(|| b.2.cmp(&a.2))
+                });
+
+                let (best_cand, best_edge, best_count, best_weight) = cand_scores[0];
+                let second_count = if cand_scores.len() > 1 { cand_scores[1].2 } else { 0 };
+                let second_weight = if cand_scores.len() > 1 { cand_scores[1].3 } else { 0.0 };
+
+                let is_decision_valid = if best_count < params.min_support {
+                    false
+                } else if second_count == 0 {
+                    true
+                } else {
+                    (best_weight / second_weight.max(1e-9)) >= params.decision_threshold
+                };
+
+                if is_decision_valid {
+                    let cand = best_cand;
+                    let edge_target_to_cand = best_edge;
+                    if !used_unique.contains(&cand.id()) && !graph.nodes[cand.id() as usize].is_deleted {
+                        used_unique.insert(cand.id());
+                        ext.push(PathStep {
+                            dir: target,
+                            incoming_edge: Some(edge_to_target),
+                            overlap: edge_to_target.overlap_k as usize,
+                            support: edge_to_target.support as u32,
+                        });
+                        ext.push(PathStep {
+                            dir: cand,
+                            incoming_edge: Some(edge_target_to_cand),
+                            overlap: edge_target_to_cand.overlap_k as usize,
+                            support: best_count,
+                        });
+                        curr_dir = cand;
+                        continue;
                     }
                 }
                 // Exit repeat decision failed: protect target and candidate exit nodes
@@ -296,42 +340,48 @@ fn extend_one_direction(
         }
 
         // Case B: multiple outgoing edges directly from curr_dir
-        let mut best_cand: Option<(DirUnitigId, GraphEdge)> = None;
-        let mut best_support = 0u32;
-        let mut second_support = 0u32;
+        let mut cand_scores: Vec<(DirUnitigId, GraphEdge, u32, f64)> =
+            Vec::with_capacity(valid_continuations.len());
 
-        for &(cand, edge) in &valid_continuations {
-            let supp = matrix.get_support(curr_dir, cand);
-            if supp > best_support {
-                second_support = best_support;
-                best_support = supp;
-                best_cand = Some((cand, edge));
-            } else if supp > second_support {
-                second_support = supp;
-            }
+        for &(cand, edge_to_cand) in &valid_continuations {
+            let path_separation = -(edge_to_cand.overlap_k as i64);
+            let (count, weight) = score_candidate_path(matrix, dist, curr_dir, cand, path_separation);
+            cand_scores.push((cand, edge_to_cand, count, weight));
         }
 
-        if let Some((cand, edge_to_cand)) = best_cand {
-            let ratio = if second_support > 0 {
-                (best_support as f64) / (second_support as f64)
-            } else {
-                100.0
-            };
+        cand_scores.sort_by(|a, b| {
+            b.3.partial_cmp(&a.3)
+                .unwrap_or(std::cmp::Ordering::Equal)
+                .then_with(|| b.2.cmp(&a.2))
+        });
 
-            if best_support >= params.min_support && ratio >= params.decision_threshold {
-                if !used_unique.contains(&cand.id()) && !graph.nodes[cand.id() as usize].is_deleted {
-                    if graph.nodes[cand.id() as usize].seq_len >= 500 {
-                        used_unique.insert(cand.id());
-                    }
-                    ext.push(PathStep {
-                        dir: cand,
-                        incoming_edge: Some(edge_to_cand),
-                        overlap: edge_to_cand.overlap_k as usize,
-                        support: best_support,
-                    });
-                    curr_dir = cand;
-                    continue;
+        let (best_cand, best_edge, best_count, best_weight) = cand_scores[0];
+        let second_count = if cand_scores.len() > 1 { cand_scores[1].2 } else { 0 };
+        let second_weight = if cand_scores.len() > 1 { cand_scores[1].3 } else { 0.0 };
+
+        let is_decision_valid = if best_count < params.min_support {
+            false
+        } else if second_count == 0 {
+            true
+        } else {
+            (best_weight / second_weight.max(1e-9)) >= params.decision_threshold
+        };
+
+        if is_decision_valid {
+            let cand = best_cand;
+            let edge_to_cand = best_edge;
+            if !used_unique.contains(&cand.id()) && !graph.nodes[cand.id() as usize].is_deleted {
+                if graph.nodes[cand.id() as usize].seq_len >= 500 {
+                    used_unique.insert(cand.id());
                 }
+                ext.push(PathStep {
+                    dir: cand,
+                    incoming_edge: Some(edge_to_cand),
+                    overlap: edge_to_cand.overlap_k as usize,
+                    support: best_count,
+                });
+                curr_dir = cand;
+                continue;
             }
         }
 

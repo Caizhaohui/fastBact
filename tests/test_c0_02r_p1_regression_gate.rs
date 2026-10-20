@@ -1,8 +1,10 @@
 use fastbact::common::bitseq::{reverse_complement_ascii, ReadBank};
 use fastbact::common::sketch::splitmix64;
 use fastbact::graph::cdbg::{CdbgGraph, DirUnitigId, GraphEdge, UnitigNode};
-use fastbact::resolve::exspander::{resolve_repeats_exspander_with_stats, ExspanderParams};
-use fastbact::resolve::mapper::{map_paired_reads, InsertSizeDist, PairLinkMatrix};
+use fastbact::resolve::exspander::{
+    resolve_repeats_exspander_with_stats, score_candidate_path, ExspanderParams,
+};
+use fastbact::resolve::mapper::{map_paired_reads, InsertSizeDist, PairLinkMatrix, ReadPairEvidence};
 
 fn make_deterministic_dna(seed: u64, len: usize) -> Vec<u8> {
     let alphabet = [b'A', b'C', b'G', b'T'];
@@ -131,11 +133,13 @@ fn test_case_1_shortcut_must_not_be_selected() {
     );
 }
 
-/// Case 2: Two candidate paths both within scalar gap <= max_insert, but differing in compatibility
-/// with empirical insert-size distribution (Candidate 1 span 600 bp vs Candidate 2 span 391 bp).
+/// Case 2: Candidate path span statistical compatibility scoring (intra-range competition).
+/// Two candidate paths both within scalar range [530, 670] bp, but differing in compatibility
+/// with empirical insert-size distribution (Candidate 1 span 600 bp vs Candidate 2 span 650 bp).
+/// Candidate 1 (Z = 0, weight = 1.0) strictly dominates Candidate 2 (Z = 1.686, weight = 0.241),
+/// achieving ratio = 4.14 >= 2.5.
 #[test]
 fn test_case_2_candidate_path_span_compatibility_difference() {
-    let _k = 31;
     let dist = InsertSizeDist {
         median: 600.0,
         mad: 20.0,
@@ -143,23 +147,57 @@ fn test_case_2_candidate_path_span_compatibility_difference() {
         max_insert: 670,
     };
 
-    // Candidate 1: A -> R -> C -> B
-    // Path internal separation = len(R) + len(C) - 3*k = 100 + 240 - 93 = 247 bp.
-    // Distance from R1 start (offset 300 of A, len 500) to exit = 500 - 300 = 200 bp.
-    // Distance from B entry to R2 end (offset 153 of B) = 153 bp.
-    // Span = 200 + 247 + 153 = 600 bp.
-    let span_cand_1: i64 = 600;
+    let u1 = DirUnitigId::new(1, false);
+    let u2 = DirUnitigId::new(2, false);
 
-    // Candidate 2: A -> R -> B
-    // Path internal separation = len(R) - 2*k = 100 - 62 = 38 bp.
-    // Span = 200 + 38 + 153 = 391 bp.
-    let span_cand_2: i64 = 391;
+    // Build matrix with 10 read pairs having d1 = 200, d2 = 153
+    let mut matrix = PairLinkMatrix::new();
+    for i in 0..10 {
+        matrix.add_evidence(
+            u1,
+            u2,
+            ReadPairEvidence {
+                pair_id: i,
+                dist_u1_exit: 200,
+                dist_u2_entry: 153,
+                r1_len: 150,
+                r2_len: 150,
+            },
+        );
+    }
 
-    let is_cand_1_valid = span_cand_1 >= dist.min_insert as i64 && span_cand_1 <= dist.max_insert as i64;
-    let is_cand_2_valid = span_cand_2 >= dist.min_insert as i64 && span_cand_2 <= dist.max_insert as i64;
+    // Candidate 1: path_separation = 247 bp -> Span = 200 + 247 + 153 = 600 bp (Z = 0.0)
+    let (count1, weight1) = score_candidate_path(&matrix, &dist, u1, u2, 247);
+    assert_eq!(count1, 10, "Candidate 1 must have 10 valid pairs");
+    assert!(
+        (weight1 - 10.0).abs() < 1e-4,
+        "Candidate 1 weight must be ~10.0 (w=1.0 per pair)"
+    );
 
-    assert!(is_cand_1_valid, "Candidate 1 (600 bp) must be valid within [530, 670]");
-    assert!(!is_cand_2_valid, "Candidate 2 (391 bp) must be rejected outside [530, 670]");
+    // Candidate 2: path_separation = 297 bp -> Span = 200 + 297 + 153 = 650 bp (Z = 1.686)
+    let (count2, weight2) = score_candidate_path(&matrix, &dist, u1, u2, 297);
+    assert_eq!(
+        count2, 10,
+        "Candidate 2 must have 10 valid pairs (within [530, 670])"
+    );
+    let expected_z = 50.0 / (1.4826 * 20.0);
+    let expected_w = (-0.5f64 * expected_z * expected_z).exp() * 10.0;
+    assert!(
+        (weight2 - expected_w).abs() < 1e-4,
+        "Candidate 2 weight must match Gaussian kernel"
+    );
+
+    // Decision ratio test:
+    let ratio = weight1 / weight2;
+    assert!(
+        ratio >= 2.5,
+        "Candidate 1 must dominate Candidate 2 with ratio >= 2.5, got {:.3}",
+        ratio
+    );
+    assert!(
+        (ratio - 4.14).abs() < 0.1,
+        "Ratio should be approximately 4.14"
+    );
 }
 
 /// Case 3: Two-copy repeat (A1, A2 -> R -> B1, B2) with insufficient support -> fork preserved.
