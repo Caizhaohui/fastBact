@@ -324,3 +324,124 @@ fn test_case_5_large_coordinates_no_overflow() {
         "Long unitig insert size must accurately estimate 450 bp without overflow"
     );
 }
+
+/// Case 6: Short Intermediate Unitig C (100 bp) -> Shortcut Span 531 bp within [530, 670] (F1-P1-001).
+/// True Fragment Span = 600 bp (Z = 0, weight = 1.0 per pair, total 25.0).
+/// Shortcut Fragment Span = 531 bp (Z = 2.327, weight = 0.0667 per pair, total 1.668).
+/// On unpatched code, Candidate C has 0 direct pairs for (A, C), so Candidate B (shortcut)
+/// is falsely committed via `second_count == 0`!
+/// Expected behavior: exSPAnder MUST NOT commit the 531 bp shortcut (len 1038 bp).
+/// It must evaluate complete candidate routes and assemble the authentic path A -> R -> C -> B (len 1107 bp).
+#[test]
+fn test_case_6_short_c_shortcut_must_not_be_selected_f1_p1_001() {
+    let k = 31;
+    let mut graph = CdbgGraph::new(k);
+
+    // Calibration unitig of 3000 bp
+    let calib_seq = make_deterministic_dna(0x1111_0001, 3000);
+    let calib_sid = graph.arena.push_seq(&calib_seq);
+    graph
+        .nodes
+        .push(UnitigNode::new(0, calib_sid, calib_seq.len() as u32, 30.0));
+
+    let k1 = make_deterministic_dna(0xAAAA_0001, k);
+    let k2 = make_deterministic_dna(0xBBBB_0002, k);
+
+    let mut a_seq = make_deterministic_dna(0xA111_0001, 500 - k);
+    a_seq.extend_from_slice(&k1); // len 500, ends with k1
+
+    let mut r_seq = k1.clone();
+    r_seq.extend_from_slice(&make_deterministic_dna(0x7111_0001, 100 - 2 * k));
+    r_seq.extend_from_slice(&k2); // len 100, starts with k1, ends with k2
+
+    // Intermediate unitig C is 100 bp (instead of 240 bp)
+    let mut c_seq = k2.clone();
+    c_seq.extend_from_slice(&make_deterministic_dna(0xC111_0001, 100 - 2 * k));
+    c_seq.extend_from_slice(&k2); // len 100, starts with k2, ends with k2
+
+    let mut b_seq = k2.clone();
+    b_seq.extend_from_slice(&make_deterministic_dna(0xB111_0001, 500 - k)); // len 500, starts with k2
+
+    let a_id = 1u32;
+    let r_id = 2u32;
+    let c_id = 3u32;
+    let b_id = 4u32;
+
+    let a_sid = graph.arena.push_seq(&a_seq);
+    let r_sid = graph.arena.push_seq(&r_seq);
+    let c_sid = graph.arena.push_seq(&c_seq);
+    let b_sid = graph.arena.push_seq(&b_seq);
+
+    graph.nodes.push(UnitigNode::new(a_id, a_sid, a_seq.len() as u32, 30.0));
+    graph.nodes.push(UnitigNode::new(r_id, r_sid, r_seq.len() as u32, 30.0));
+    graph.nodes.push(UnitigNode::new(c_id, c_sid, c_seq.len() as u32, 30.0));
+    graph.nodes.push(UnitigNode::new(b_id, b_sid, b_seq.len() as u32, 30.0));
+
+    // Edges with reciprocal edges
+    // A -> R
+    graph.nodes[a_id as usize].add_edge(false, GraphEdge::new(DirUnitigId::new(r_id, false), k as u8, 10));
+    graph.nodes[r_id as usize].add_edge(true, GraphEdge::new(DirUnitigId::new(a_id, true), k as u8, 10));
+
+    // R -> B (erroneous shortcut)
+    graph.nodes[r_id as usize].add_edge(false, GraphEdge::new(DirUnitigId::new(b_id, false), k as u8, 10));
+    graph.nodes[b_id as usize].add_edge(true, GraphEdge::new(DirUnitigId::new(r_id, true), k as u8, 10));
+
+    // R -> C (true path step 1)
+    graph.nodes[r_id as usize].add_edge(false, GraphEdge::new(DirUnitigId::new(c_id, false), k as u8, 10));
+    graph.nodes[c_id as usize].add_edge(true, GraphEdge::new(DirUnitigId::new(r_id, true), k as u8, 10));
+
+    // C -> B (true path step 2)
+    graph.nodes[c_id as usize].add_edge(false, GraphEdge::new(DirUnitigId::new(b_id, false), k as u8, 10));
+    graph.nodes[b_id as usize].add_edge(true, GraphEdge::new(DirUnitigId::new(c_id, true), k as u8, 10));
+
+    // True genome sequence: A -> R -> C -> B (len 500 + 69 + 69 + 469 = 1107 bp)
+    let mut true_genome = Vec::new();
+    true_genome.extend_from_slice(&a_seq);
+    true_genome.extend_from_slice(&r_seq[k..]);
+    true_genome.extend_from_slice(&c_seq[k..]);
+    true_genome.extend_from_slice(&b_seq[k..]);
+
+    let mut bank = ReadBank::new();
+
+    // 30 calibration read pairs on calib_seq (insert size 600 bp)
+    for i in 0..30 {
+        let start = 200 + i * 10;
+        let r1 = calib_seq[start..start + 150].to_vec();
+        let r2 = reverse_complement_ascii(&calib_seq[start + 600 - 150..start + 600]);
+        bank.pe_forward.push_seq(&r1);
+        bank.pe_reverse.push_seq(&r2);
+    }
+
+    // 25 read pairs from true_genome spanning A -> R -> C -> B (span = 600 bp)
+    for i in 0..25 {
+        let frag_start = 300 + i * 2;
+        let frag_end = frag_start + 600;
+        let r1 = true_genome[frag_start..frag_start + 150].to_vec();
+        let r2 = reverse_complement_ascii(&true_genome[frag_end - 150..frag_end]);
+        bank.pe_forward.push_seq(&r1);
+        bank.pe_reverse.push_seq(&r2);
+    }
+
+    let (matrix, dist) = map_paired_reads::<u64>(&graph, &bank, k);
+    let params = ExspanderParams {
+        min_support: 5,
+        decision_threshold: 2.0,
+    };
+    resolve_repeats_exspander_with_stats(&mut graph, &matrix, &dist, params);
+
+    // REGRESSION GATE ASSERTION:
+    // 1. Erroneous shortcut A -> R -> B (len 1038 bp) must NOT be committed!
+    let shortcut_node = graph.nodes.iter().find(|n| !n.is_deleted && n.id != 0 && n.seq_len == 1038);
+    assert!(
+        shortcut_node.is_none(),
+        "REGRESSION FAILURE (F1-P1-001): exSPAnder falsely committed shortcut A->R->B (len 1038 bp) \
+         because shortcut span 531 bp was within [530, 670] and second_count was 0!"
+    );
+
+    // 2. The authentic path A -> R -> C -> B (len 1107 bp) must be assembled!
+    let true_node = graph.nodes.iter().find(|n| !n.is_deleted && n.id != 0 && n.seq_len == 1107);
+    assert!(
+        true_node.is_some(),
+        "Production exSPAnder must assemble true path A->R->C->B (len 1107 bp) when supported by 25 read pairs!"
+    );
+}
