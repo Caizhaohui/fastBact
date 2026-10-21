@@ -18,6 +18,14 @@
 //! the chosen route (`zip` of steps finds a different directed target) and
 //! `best.total_weight < threshold * shadow.total_weight`. A shadow that merely
 //! continues the chosen route is the same exit and must not block (T4).
+//!
+//! Phase F11 RED gates on the F9 resolver (`32fd7ff`):
+//! - T14 (F10-P1-002): pruning the tandem hop `R → R` still reports a complete
+//!   search, so the weak decoy commits.
+//! - T15 (F10-P0-001): `cleanup_protected_nodes` is call-local. A second
+//!   invocation deletes Case A's preserved side branch.
+//! - T16 (F10-P1-001): `consumed_nodes` is call-local. A second invocation
+//!   forgets the consumed shadow and commits T3's decoy.
 
 use std::collections::BTreeSet;
 
@@ -194,6 +202,19 @@ fn add_pairs(
     dist2: u32,
     id_base: u32,
 ) {
+    add_pairs_len(matrix, from, to, n, dist1, dist2, id_base, 150);
+}
+
+fn add_pairs_len(
+    matrix: &mut PairLinkMatrix,
+    from: DirUnitigId,
+    to: DirUnitigId,
+    n: u32,
+    dist1: u32,
+    dist2: u32,
+    id_base: u32,
+    read_len: u16,
+) {
     for offset in 0..n {
         matrix.add_evidence(
             from,
@@ -202,11 +223,20 @@ fn add_pairs(
                 pair_id: id_base + offset,
                 dist_u1_exit: dist1,
                 dist_u2_entry: dist2,
-                r1_len: 150,
-                r2_len: 150,
+                r1_len: read_len,
+                r2_len: read_len,
             },
         );
     }
+}
+
+/// A read of `read_len` bp ending `dist` bp from the unitig boundary lies fully
+/// inside a unitig of `unitig_len` bp.
+fn assert_read_inside(unitig_len: usize, dist: u32, read_len: u32) {
+    assert!(
+        read_len <= dist && (dist as usize) <= unitig_len,
+        "read of {read_len} bp at distance {dist} does not sit inside {unitig_len} bp"
+    );
 }
 
 fn add_pairs_bio(
@@ -1879,4 +1909,232 @@ fn test_t8_canonical_helper_is_orientation_independent() {
     seen.insert(canonical(&seq));
     seen.insert(canonical(&rc));
     assert_eq!(seen.len(), 1);
+}
+
+/// T14 / F10-P1-002. Tandem repeat `R → R` must stay in the candidate search.
+///
+/// ```text
+/// S(700) → Q(100) → D(300)
+///             └──→ R(120) → X(300)
+///                    ↺
+/// ```
+///
+/// Overlaps are 31 bp. R is shorter than 500 bp and not circular; its 3' junction
+/// equals its 5' junction, so the self-loop is sequence-valid and the internal
+/// bases differ. Inserts are centered at 450 bp with MAD 20, inside [380, 520].
+///
+/// S→Q→D has separation 38 and span 450 (5 pairs, weight 5). One copy of R reaches
+/// X at separation 127 and span 361, outside the window. The tandem hop reaches X
+/// at separation 216 and span 450 (20 pairs, weight 20), which beats D by 4.0.
+/// That route is three hops from Q, inside the depth cap, and inside max_insert.
+///
+/// ON UNPATCHED CODE THIS FAILS: `visited` drops `R → R` without marking the
+/// search truncated. X then has no in-range pair, D is the only candidate, and
+/// 5.0/5 >= 0.05 commits the misassembly S→Q→D.
+#[test]
+fn test_t14_tandem_repeat_cycle_must_not_allow_decoy() {
+    let mut graph = CdbgGraph::new(31);
+    let j_sq = junction(0xE14_0001);
+    let j_loop = junction(0xE14_0002);
+    assert_junctions_distinct(&[j_sq.clone(), j_loop.clone()]);
+
+    let s_seq = span_node(&[], 0xE14_0101, 700, &j_sq);
+    let q_seq = span_node(&j_sq, 0xE14_0102, 100, &j_loop);
+    let d_seq = span_node(&j_loop, 0xE14_0103, 300, &[]);
+    let r_seq = span_node(&j_loop, 0xE14_0104, 120, &j_loop);
+    let x_seq = span_node(&j_loop, 0xE14_0105, 300, &[]);
+    assert_eq!(
+        (
+            s_seq.len(),
+            q_seq.len(),
+            d_seq.len(),
+            r_seq.len(),
+            x_seq.len()
+        ),
+        (700, 100, 300, 120, 300)
+    );
+    assert!(q_seq.len() < 500 && d_seq.len() < 500 && r_seq.len() < 500 && x_seq.len() < 500);
+    assert_eq!(&r_seq[..OV], &r_seq[r_seq.len() - OV..]);
+    assert_ne!(
+        &r_seq[OV..OV + OV],
+        &r_seq[..OV],
+        "R's interior must differ from its junction"
+    );
+    assert_ne!(d_seq, x_seq);
+    assert_ne!(&d_seq[OV..], &x_seq[OV..]);
+
+    let s_id = add_node(&mut graph, &s_seq);
+    let q_id = add_node(&mut graph, &q_seq);
+    let d_id = add_node(&mut graph, &d_seq);
+    let r_id = add_node(&mut graph, &r_seq);
+    let x_id = add_node(&mut graph, &x_seq);
+    assert_eq!(
+        (s_id.id(), q_id.id(), d_id.id(), r_id.id(), x_id.id()),
+        (0, 1, 2, 3, 4)
+    );
+    assert!(!graph.nodes[r_id.id() as usize].is_circular);
+
+    for (from, to) in [
+        (s_id, q_id),
+        (q_id, d_id),
+        (q_id, r_id),
+        (r_id, r_id),
+        (r_id, x_id),
+    ] {
+        add_edge(&mut graph, from, to, OV as u8);
+        assert_valid_edge(&graph, from, to, OV as u8);
+    }
+    assert_eq!(graph.nodes[q_id.id() as usize].edges_fwd.len(), 2);
+    assert_eq!(graph.nodes[r_id.id() as usize].edges_fwd.len(), 2);
+
+    // Q's suffix is the shared loop junction, so both arms leave Q at the same overlap.
+    let sep_d = q_seq.len() as i64 - OV as i64 - OV as i64;
+    let sep_single = sep_d + r_seq.len() as i64 - OV as i64;
+    let sep_tandem = sep_single + r_seq.len() as i64 - OV as i64;
+    assert_eq!((sep_d, sep_single, sep_tandem), (38, 127, 216));
+    assert!(sep_tandem <= 520);
+
+    const READ: u32 = 75;
+    assert_read_inside(s_seq.len(), 200, READ);
+    assert_read_inside(d_seq.len(), 212, READ);
+    assert_read_inside(s_seq.len(), 117, READ);
+    assert_read_inside(x_seq.len(), 117, READ);
+
+    let dist = InsertSizeDist {
+        median: 450.0,
+        mad: 20.0,
+        min_insert: 380,
+        max_insert: 520,
+    };
+    let mut matrix = PairLinkMatrix::new();
+    add_pairs_len(&mut matrix, s_id, d_id, 5, 200, 212, 14_100, READ as u16);
+    add_pairs_len(&mut matrix, s_id, x_id, 20, 117, 117, 14_200, READ as u16);
+
+    let d_weight = assert_score(&matrix, &dist, s_id, d_id, sep_d, 5);
+    let (single_count, single_weight) =
+        score_candidate_path(&matrix, &dist, s_id, x_id, sep_single);
+    assert_eq!(
+        (single_count, single_weight),
+        (0, 0.0),
+        "one copy of R must leave S→X outside [380, 520]"
+    );
+    let tandem_weight = assert_score(&matrix, &dist, s_id, x_id, sep_tandem, 20);
+    assert!(
+        (d_weight / f64::from(5) - 1.0).abs() < 1e-6,
+        "D's five pairs are centered and pass the single-candidate rule on their own"
+    );
+    assert!(
+        tandem_weight / d_weight >= 2.5,
+        "the tandem route must be strong enough to defeat D"
+    );
+
+    let misassembly = splice(&[&s_seq, &q_seq, &d_seq], &[OV, OV]);
+    resolve_repeats_exspander_with_stats(&mut graph, &matrix, &dist, params());
+
+    let d_node = d_id.id() as usize;
+    assert!(
+        !graph.nodes[d_node].is_deleted,
+        "D must not be consumed by a misassembly commit"
+    );
+    assert!(
+        !has_active_seq(&graph, &misassembly),
+        "Misassembled contig S-Q-D must not be created"
+    );
+}
+
+/// T15 / F10-P0-001. Case A's protected side branch must survive a second call.
+///
+/// S(700) → R(169) and X(100) → R, overlap 31 bp. X carries 69 bp that S and R
+/// do not. The first call commits S→R, deletes S and R, and protects X. The
+/// second call starts with an empty `cleanup_protected_nodes`. X is short, its
+/// only edge targets deleted R, and Stage 5 would prune it as an orphan.
+///
+/// ON UNPATCHED CODE THIS FAILS at the second assertion.
+#[test]
+fn test_t15_reentry_cleanup_must_not_delete_protected_side_branch() {
+    let mut graph = CdbgGraph::new(31);
+    let junction = dna(0xA001, 31);
+    let mut s_seq = dna(0xA002, 669);
+    s_seq.extend_from_slice(&junction);
+    let mut r_seq = junction.clone();
+    r_seq.extend(dna(0xA003, 138));
+    let unique = dna(0xA004, 69);
+    let mut x_seq = unique.clone();
+    x_seq.extend_from_slice(&junction);
+    assert_eq!((s_seq.len(), r_seq.len(), x_seq.len()), (700, 169, 100));
+    assert_not_homopolymer(&x_seq);
+    assert!(!contains(&s_seq, &unique) && !contains(&r_seq, &unique));
+
+    let s_dir = add_node(&mut graph, &s_seq);
+    let r_dir = add_node(&mut graph, &r_seq);
+    let x_dir = add_node(&mut graph, &x_seq);
+    let s_id = s_dir.id();
+    let r_id = r_dir.id();
+    let x_id = x_dir.id();
+    add_edge(&mut graph, s_dir, r_dir, 31);
+    add_edge(&mut graph, x_dir, r_dir, 31);
+    assert_valid_edge(&graph, s_dir, r_dir, 31);
+    assert_valid_edge(&graph, x_dir, r_dir, 31);
+    let spliced = splice(&[&s_seq, &r_seq], &[31]);
+
+    let matrix = PairLinkMatrix::new();
+    let dist = InsertSizeDist::default();
+    resolve_repeats_exspander_with_stats(&mut graph, &matrix, &dist, params());
+
+    assert!(
+        has_active_seq(&graph, &spliced)
+            && graph.nodes[s_id as usize].is_deleted
+            && graph.nodes[r_id as usize].is_deleted,
+        "fixture: pass 1 must commit S→R before the re-entry cleanup check, active=[{}]",
+        active_summary(&graph)
+    );
+    assert!(!graph.nodes[x_id as usize].is_deleted);
+    assert!(contains(&graph.get_unitig_seq(x_id), &unique));
+
+    resolve_repeats_exspander_with_stats(&mut graph, &matrix, &dist, params());
+    assert!(
+        !graph.nodes[x_id as usize].is_deleted,
+        "X must not be deleted by cleanup on second resolver call"
+    );
+}
+
+/// T16 / F10-P1-001. Consumed-node provenance must survive a second call.
+///
+/// Recreates T3: S1(900) → R(169) commits on the first call and R's 20 pairs
+/// block S2(700) → Q(100) → D(300) (5 pairs). The same graph and the same
+/// coordinate-valid matrix are resolved again. R is still deleted, but a fresh
+/// `consumed_nodes` set no longer treats it as a shadow, so D becomes the only
+/// scored candidate and the single-candidate rule accepts it.
+///
+/// ON UNPATCHED CODE THIS FAILS at the second-call assertion.
+#[test]
+fn test_t16_reentry_consumed_must_not_allow_decoy() {
+    let mut fx = build_ce3(false);
+    assert_eq!(fx.sep, 38);
+    let d_id = fx.d_id;
+
+    resolve_repeats_exspander_with_stats(&mut fx.graph, &fx.matrix, &fx.dist, params());
+
+    assert!(
+        has_active_seq(&fx.graph, &fx.s1_contig) && !alive(&fx.graph, fx.r_id),
+        "fixture: pass 1 must consume R, active=[{}]",
+        active_summary(&fx.graph)
+    );
+    assert!(
+        alive(&fx.graph, d_id) && alive(&fx.graph, fx.q_id) && !has_active_seq(&fx.graph, &fx.bad),
+        "fixture: pass 1 must keep the S2 fork unresolved, active=[{}]",
+        active_summary(&fx.graph)
+    );
+    let r_weight = assert_score(&fx.matrix, &fx.dist, fx.anchor, fx.r_dir, fx.sep, 20);
+    let d_weight = assert_score(&fx.matrix, &fx.dist, fx.anchor, fx.d_dir, fx.sep, 5);
+    assert!(
+        d_weight < 2.5 * r_weight,
+        "fixture: retained S2→R evidence must still be strong enough to block D"
+    );
+
+    resolve_repeats_exspander_with_stats(&mut fx.graph, &fx.matrix, &fx.dist, params());
+    assert!(
+        !fx.graph.nodes[d_id as usize].is_deleted,
+        "D must not be committed on second resolver call"
+    );
 }
