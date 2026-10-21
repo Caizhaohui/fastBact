@@ -445,3 +445,275 @@ fn test_case_6_short_c_shortcut_must_not_be_selected_f1_p1_001() {
         "Production exSPAnder must assemble true path A->R->C->B (len 1107 bp) when supported by 25 read pairs!"
     );
 }
+
+fn push_node(graph: &mut CdbgGraph, seq: &[u8]) -> u32 {
+    let id = graph.nodes.len() as u32;
+    let seq_id = graph.arena.push_seq(seq);
+    graph
+        .nodes
+        .push(UnitigNode::new(id, seq_id, seq.len() as u32, 30.0));
+    id
+}
+
+fn add_reciprocal(graph: &mut CdbgGraph, from: u32, to: u32, overlap: u8) {
+    graph.nodes[from as usize].add_edge(
+        false,
+        GraphEdge::new(DirUnitigId::new(to, false), overlap, 10),
+    );
+    graph.nodes[to as usize].add_edge(
+        true,
+        GraphEdge::new(DirUnitigId::new(from, true), overlap, 10),
+    );
+}
+
+/// Case 7: Depth-5 authentic route dropped at MAX_CANDIDATE_DEPTH (F3-P1-001).
+///
+/// Topology, overlap 31 bp:
+///   true route  A(501) -> R(100) -> C1(100) -> C2(100) -> C3(100) -> C4(100) -> B(500)
+///   shortcut    A(501) -> R(100) -> B(500)
+///
+/// Candidate search starts at fork R. Reaching B on the true route takes 5 steps
+/// (C1, C2, C3, C4, B). The walk records C4 at steps.len() == 4 and does not expand
+/// further, and it does not set SearchStatus::Truncated. Only the shortcut remains,
+/// so second_count == 0.
+///
+/// Library: median 700 bp, MAD 100 bp, insert interval [350, 1050].
+/// True span = 200 + 314 + 186 = 700 bp, weight = 25.0.
+/// Shortcut span = 200 + 38 + 186 = 424 bp, Z ≈ 1.86, weight ≈ 4.42, W/C ≈ 0.177 >= 0.05.
+/// Head-to-head, the true route would win. Unpatched code never sees it and commits
+/// the shortcut contig of length 501 + 69 + 469 = 1039 bp.
+///
+/// Oracle: that 1039 bp shortcut is absent, and either the 1315 bp authentic contig
+/// is assembled or the original fork nodes and both exits from R stay in the graph.
+///
+/// ON UNPATCHED PRODUCTION CODE: This test FAILS (RED) at the shortcut assertion.
+#[test]
+fn test_case_7_depth_limit_must_not_commit_shortcut_f3_p1_001() {
+    let k = 31usize;
+    let mut graph = CdbgGraph::new(k);
+
+    // Length 2000 keeps every k-mer indexed (total k-mers <= 2000) and is long
+    // enough (>= 1500) for insert-size estimation.
+    let calib_seq = make_deterministic_dna(0xC0DE_7001, 2000);
+    let _calib_id = push_node(&mut graph, &calib_seq);
+
+    let k_ar = make_deterministic_dna(0xA0A0_0001, k);
+    let k_join = make_deterministic_dna(0xB0B0_0002, k);
+    let k_12 = make_deterministic_dna(0xC0C0_0003, k);
+    let k_23 = make_deterministic_dna(0xD0D0_0004, k);
+    let k_34 = make_deterministic_dna(0xE0E0_0005, k);
+    let junctions = [&k_ar, &k_join, &k_12, &k_23, &k_34];
+    for i in 0..junctions.len() {
+        for j in (i + 1)..junctions.len() {
+            assert_ne!(junctions[i], junctions[j], "junction k-mers must be distinct");
+        }
+    }
+
+    let mut a_seq = make_deterministic_dna(0xA111_0001, 501 - k);
+    a_seq.extend_from_slice(&k_ar);
+    let mut r_seq = k_ar.clone();
+    r_seq.extend(make_deterministic_dna(0x7111_0001, 100 - 2 * k));
+    r_seq.extend_from_slice(&k_join);
+    let mut c1_seq = k_join.clone();
+    c1_seq.extend(make_deterministic_dna(0xC111_0001, 100 - 2 * k));
+    c1_seq.extend_from_slice(&k_12);
+    let mut c2_seq = k_12.clone();
+    c2_seq.extend(make_deterministic_dna(0xC222_0002, 100 - 2 * k));
+    c2_seq.extend_from_slice(&k_23);
+    let mut c3_seq = k_23.clone();
+    c3_seq.extend(make_deterministic_dna(0xC333_0003, 100 - 2 * k));
+    c3_seq.extend_from_slice(&k_34);
+    let mut c4_seq = k_34.clone();
+    c4_seq.extend(make_deterministic_dna(0xC444_0004, 100 - 2 * k));
+    c4_seq.extend_from_slice(&k_join);
+    let mut b_seq = k_join.clone();
+    b_seq.extend(make_deterministic_dna(0xB111_0001, 500 - k));
+
+    assert_eq!(a_seq.len(), 501);
+    assert_eq!(r_seq.len(), 100);
+    assert_eq!(c1_seq.len(), 100);
+    assert_eq!(c2_seq.len(), 100);
+    assert_eq!(c3_seq.len(), 100);
+    assert_eq!(c4_seq.len(), 100);
+    assert_eq!(b_seq.len(), 500);
+
+    let a_id = push_node(&mut graph, &a_seq);
+    let r_id = push_node(&mut graph, &r_seq);
+    let c1_id = push_node(&mut graph, &c1_seq);
+    let c2_id = push_node(&mut graph, &c2_seq);
+    let c3_id = push_node(&mut graph, &c3_seq);
+    let c4_id = push_node(&mut graph, &c4_seq);
+    let b_id = push_node(&mut graph, &b_seq);
+    assert_eq!((a_id, r_id, c1_id, c2_id, c3_id, c4_id, b_id), (1, 2, 3, 4, 5, 6, 7));
+
+    let overlap = k as u8;
+    add_reciprocal(&mut graph, a_id, r_id, overlap);
+    add_reciprocal(&mut graph, r_id, b_id, overlap);
+    add_reciprocal(&mut graph, r_id, c1_id, overlap);
+    add_reciprocal(&mut graph, c1_id, c2_id, overlap);
+    add_reciprocal(&mut graph, c2_id, c3_id, overlap);
+    add_reciprocal(&mut graph, c3_id, c4_id, overlap);
+    add_reciprocal(&mut graph, c4_id, b_id, overlap);
+
+    let mut true_genome = Vec::new();
+    true_genome.extend_from_slice(&a_seq);
+    true_genome.extend_from_slice(&r_seq[k..]);
+    true_genome.extend_from_slice(&c1_seq[k..]);
+    true_genome.extend_from_slice(&c2_seq[k..]);
+    true_genome.extend_from_slice(&c3_seq[k..]);
+    true_genome.extend_from_slice(&c4_seq[k..]);
+    true_genome.extend_from_slice(&b_seq[k..]);
+
+    let b_origin = true_genome.len() - b_seq.len();
+    assert_eq!(&true_genome[b_origin..], b_seq.as_slice(), "B must occupy a known genome interval");
+    assert_eq!(b_origin - a_seq.len(), 314, "true A-exit to B-entry separation");
+    assert_eq!(r_seq.len() - 2 * k, 38, "shortcut separation across R");
+    let shortcut_len = a_seq.len() + (r_seq.len() - k) + (b_seq.len() - k);
+    assert_eq!(shortcut_len, 1039);
+    assert_eq!(true_genome.len(), 1315);
+
+    let r1_start = a_seq.len() - 200;
+    let r2_end = b_origin + 186;
+    assert_eq!(r2_end - r1_start, 700, "true fragment span");
+    assert!(r1_start + 150 <= a_seq.len() - k, "R1 must stay inside A's unique prefix");
+    assert!(r2_end - 150 >= b_origin + k, "R2 must stay inside B's unique suffix");
+    assert!(r2_end <= true_genome.len());
+
+    let mut bank = ReadBank::new();
+
+    // 15 x 600, 11 x 700, 15 x 800 -> median 700, MAD 100, interval [350, 1050].
+    let mut library_inserts = Vec::with_capacity(41);
+    library_inserts.extend(std::iter::repeat(600usize).take(15));
+    library_inserts.extend(std::iter::repeat(700usize).take(11));
+    library_inserts.extend(std::iter::repeat(800usize).take(15));
+    assert_eq!(library_inserts.len(), 41);
+    for (i, &ins) in library_inserts.iter().enumerate() {
+        let start = 100 + i * 2;
+        assert!(start + ins <= calib_seq.len());
+        let r1 = calib_seq[start..start + 150].to_vec();
+        let r2 = reverse_complement_ascii(&calib_seq[start + ins - 150..start + ins]);
+        bank.pe_forward.push_seq(&r1);
+        bank.pe_reverse.push_seq(&r2);
+    }
+
+    for _ in 0..25 {
+        let r1 = true_genome[r1_start..r1_start + 150].to_vec();
+        let r2 = reverse_complement_ascii(&true_genome[r2_end - 150..r2_end]);
+        bank.pe_forward.push_seq(&r1);
+        bank.pe_reverse.push_seq(&r2);
+    }
+
+    let (matrix, dist) = map_paired_reads::<u64>(&graph, &bank, k);
+    assert!(
+        (dist.median - 700.0).abs() < 1e-9,
+        "precondition: median {}, want 700",
+        dist.median
+    );
+    assert!(
+        (dist.mad - 100.0).abs() < 1e-9,
+        "precondition: MAD {}, want 100",
+        dist.mad
+    );
+    assert_eq!(dist.min_insert, 350);
+    assert_eq!(dist.max_insert, 1050);
+
+    let a_dir = DirUnitigId::new(a_id, false);
+    let b_dir = DirUnitigId::new(b_id, false);
+    let evidences = matrix.get_evidence(a_dir, b_dir).expect("A->B evidence");
+    assert!(
+        evidences.len() == 25
+            && evidences
+                .iter()
+                .all(|ev| ev.dist_u1_exit == 200 && ev.dist_u2_entry == 186),
+        "precondition: 25 pairs at (dist_u1_exit, dist_u2_entry) = (200, 186), got {:?}",
+        evidences
+            .iter()
+            .map(|ev| (ev.pair_id, ev.dist_u1_exit, ev.dist_u2_entry))
+            .collect::<Vec<_>>()
+    );
+    for cid in [c1_id, c2_id, c3_id, c4_id] {
+        assert_eq!(
+            matrix.get_support(a_dir, DirUnitigId::new(cid, false)),
+            0,
+            "precondition: intermediate node {} must not be a paired-end endpoint",
+            cid
+        );
+    }
+
+    let (true_count, true_weight) = score_candidate_path(&matrix, &dist, a_dir, b_dir, 314);
+    assert_eq!(true_count, 25);
+    assert!(
+        (true_weight - 25.0).abs() < 1e-6,
+        "true-route weight {}, want 25",
+        true_weight
+    );
+
+    let (short_count, short_weight) = score_candidate_path(&matrix, &dist, a_dir, b_dir, 38);
+    assert_eq!(short_count, 25);
+    let z = (424.0_f64 - dist.median).abs() / (1.4826 * dist.mad);
+    assert!((z - 1.86).abs() < 0.01, "shortcut Z {}, want ~1.86", z);
+    let expected_short = 25.0 * (-0.5 * z * z).exp();
+    assert!(
+        (short_weight - expected_short).abs() < 1e-4,
+        "shortcut weight {}, formula {}",
+        short_weight,
+        expected_short
+    );
+    let mean_w = short_weight / short_count as f64;
+    assert!(
+        (mean_w - 0.177).abs() < 0.002 && mean_w >= 0.05,
+        "shortcut mean weight {}, want ~0.177 and >= 0.05",
+        mean_w
+    );
+    assert!(
+        true_weight / short_weight >= 2.5,
+        "true route must dominate the shortcut when both are scored, ratio {}",
+        true_weight / short_weight
+    );
+
+    let params = ExspanderParams {
+        min_support: 5,
+        decision_threshold: 2.0,
+    };
+    resolve_repeats_exspander_with_stats(&mut graph, &matrix, &dist, params);
+
+    let shortcut_committed = graph
+        .nodes
+        .iter()
+        .any(|n| !n.is_deleted && n.seq_len == shortcut_len as u32);
+    assert!(
+        !shortcut_committed,
+        "REGRESSION FAILURE (F3-P1-001): exSPAnder falsely committed shortcut A->R->B (len {} bp). \
+         The authentic exit R->C1->C2->C3->C4->B is 5 steps past fork R, MAX_CANDIDATE_DEPTH is 4, \
+         and the truncated branch is not marked Truncated, so second_count==0 accepts the shortcut \
+         (span 424 bp, mean weight >= 0.05) without competing against the span-700 route.",
+        shortcut_len
+    );
+
+    let authentic_assembled = graph
+        .nodes
+        .iter()
+        .any(|n| !n.is_deleted && n.seq_len == true_genome.len() as u32);
+    let fork_ids = [a_id, r_id, c1_id, c2_id, c3_id, c4_id, b_id];
+    let nodes_intact = fork_ids.iter().all(|&id| {
+        graph
+            .nodes
+            .get(id as usize)
+            .is_some_and(|n| !n.is_deleted && n.id == id)
+    });
+    let both_exits_kept = graph.nodes[r_id as usize]
+        .edges_fwd
+        .iter()
+        .filter(|edge| edge.target.id() == c1_id || edge.target.id() == b_id)
+        .count()
+        == 2;
+    assert!(
+        authentic_assembled || (nodes_intact && both_exits_kept),
+        "F3-P1-001: depth exhaustion must assemble the authentic {} bp route or preserve the fork. \
+         authentic_assembled={}, nodes_intact={}, both_exits_kept={}",
+        true_genome.len(),
+        authentic_assembled,
+        nodes_intact,
+        both_exits_kept
+    );
+}
