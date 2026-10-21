@@ -277,28 +277,27 @@ fn find_candidate_paths(
         // Recurse to outgoing neighbors if within depth and separation bounds.
         // At the depth bound, an admissible continuation means the search is incomplete:
         // committing a shallower shortcut would ignore that unseen route.
+        // The budget is the overlap-adjusted exit, not sep_u + len(u) alone.
         if steps.len() < MAX_CANDIDATE_DEPTH {
-            let sep_u_exit = sep_u + u_node.seq_len as i64;
-            if sep_u_exit <= max_separation {
-                let outgoing = u_node.edges(u.is_rc());
-                let mut next_targets = Vec::new();
-                for e in outgoing {
-                    if !next_targets.contains(&e.target) {
-                        next_targets.push(e.target);
-                    }
+            let outgoing = u_node.edges(u.is_rc());
+            let mut next_targets = Vec::new();
+            for e in outgoing {
+                if !next_targets.contains(&e.target) {
+                    next_targets.push(e.target);
                 }
+            }
 
-                for next_target in next_targets {
-                    if visited.contains(&next_target.id()) {
-                        continue;
-                    }
-                    if let EdgeResolveResult::Valid(edge) = resolve_edge_between(graph, u, next_target) {
-                        let sep_next = sep_u_exit - edge.overlap_k as i64;
-                        if sep_next <= max_separation {
-                            let mut next_steps = steps.clone();
-                            next_steps.push((next_target, edge));
-                            queue.push_back((next_target, sep_next, next_steps, visited.clone()));
-                        }
+            for next_target in next_targets {
+                if visited.contains(&next_target.id()) {
+                    continue;
+                }
+                if let EdgeResolveResult::Valid(edge) = resolve_edge_between(graph, u, next_target)
+                {
+                    let sep_next = sep_u + u_node.seq_len as i64 - edge.overlap_k as i64;
+                    if sep_next <= max_separation {
+                        let mut next_steps = steps.clone();
+                        next_steps.push((next_target, edge));
+                        queue.push_back((next_target, sep_next, next_steps, visited.clone()));
                     }
                 }
             }
@@ -323,10 +322,6 @@ fn depth_limit_hides_continuation(
     max_separation: i64,
 ) -> bool {
     let u_node = &graph.nodes[u.id() as usize];
-    let sep_u_exit = sep_u + u_node.seq_len as i64;
-    if sep_u_exit > max_separation {
-        return false;
-    }
 
     let mut next_targets = Vec::new();
     for edge in u_node.edges(u.is_rc()) {
@@ -340,7 +335,7 @@ fn depth_limit_hides_continuation(
             continue;
         }
         if let EdgeResolveResult::Valid(edge) = resolve_edge_between(graph, u, next_target) {
-            let sep_next = sep_u_exit - edge.overlap_k as i64;
+            let sep_next = sep_u + u_node.seq_len as i64 - edge.overlap_k as i64;
             if sep_next <= max_separation {
                 return true;
             }
@@ -969,6 +964,37 @@ pub fn resolve_repeats_exspander_with_stats(
                             stats.valid_k_minus_1_joins += 1;
                         } else {
                             stats.valid_other_joins += 1;
+                        }
+                    }
+
+                    // Protect every active neighbor that is not itself consumed.
+                    // Incoming side branches, intermediate joins, outgoing frontiers,
+                    // and reverse-orientation neighbors lose their edge into the path
+                    // once constituent nodes are deleted. Register them before that
+                    // deletion so Stage 5 orphan cleanup cannot drop their sequence.
+                    // Validation failure does not reach here, so external neighbors
+                    // stay out of `rejected_nodes` when the commit is rolled back.
+                    let mut consumed_nodes = HashSet::with_capacity(full_path.len());
+                    for step in &full_path {
+                        consumed_nodes.insert(step.dir.id());
+                    }
+                    for step in &full_path {
+                        let neighbor_ids: Vec<u32> = {
+                            let node = &graph.nodes[step.dir.id() as usize];
+                            node.edges_fwd
+                                .iter()
+                                .chain(node.edges_rev.iter())
+                                .map(|edge| edge.target.id())
+                                .collect()
+                        };
+                        for neighbor_id in neighbor_ids {
+                            if consumed_nodes.contains(&neighbor_id) {
+                                continue;
+                            }
+                            if graph.nodes[neighbor_id as usize].is_deleted {
+                                continue;
+                            }
+                            rejected_nodes.insert(neighbor_id);
                         }
                     }
 
