@@ -64,6 +64,24 @@ fn sha256_of_file<P: AsRef<Path>>(path: P) -> String {
     out_str.split_whitespace().next().unwrap_or("").to_string()
 }
 
+/// Mark every exact forward placement of `contig` on `reference`.
+/// Returns false when the contig is not an exact reference substring.
+fn mark_exact_reference_coverage(reference: &[u8], contig: &[u8], covered: &mut [bool]) -> bool {
+    if contig.is_empty() || contig.len() > reference.len() || covered.len() != reference.len() {
+        return false;
+    }
+    let mut found = false;
+    for start in 0..=reference.len() - contig.len() {
+        if &reference[start..start + contig.len()] == contig {
+            found = true;
+            for base in covered.iter_mut().take(start + contig.len()).skip(start) {
+                *base = true;
+            }
+        }
+    }
+    found
+}
+
 /// Case 8 Node count and Reference length verification.
 #[test]
 fn test_case_8_node_count_and_reference_audit() {
@@ -164,11 +182,43 @@ fn test_boundary_sweep_63_64_65_66_short_nodes() {
             let _unmerged_count = n_repeat - 64;
             let short_survivors = active_nodes.iter().filter(|n| n.seq_len == 100).count();
             // Note: R_{64} connects to R_{65}. When step cap 64 stops at R_{64},
-            // protect_unmerged_frontier protects R_{65}.
-            assert!(
-                short_survivors >= 1,
-                "At least frontier node R65 must survive cleanup"
-            );
+            // protect_unmerged_frontier protects R_{65}. At N=66, R66 stays
+            // connected to that surviving R65, so both short nodes must remain.
+            if n_repeat == 66 {
+                assert_eq!(
+                    short_survivors, 2,
+                    "N=66 must retain both unmerged short nodes R65 and R66, not merely one of them"
+                );
+                assert!(!graph.nodes[65].is_deleted, "R65 node identity must survive cleanup");
+                assert!(!graph.nodes[66].is_deleted, "R66 node identity must survive cleanup");
+                assert_eq!(
+                    graph.get_unitig_seq(65),
+                    repeat_seqs[64],
+                    "R65 sequence identity must be unchanged"
+                );
+                assert_eq!(
+                    graph.get_unitig_seq(66),
+                    repeat_seqs[65],
+                    "R66 sequence identity must be unchanged"
+                );
+                let r65_unique = &repeat_seqs[64][k..];
+                let r66_unique = &repeat_seqs[65][k..];
+                assert_eq!(r65_unique.len(), 69, "R65 contributes 69 bp beyond the 31 bp overlap");
+                assert_eq!(r66_unique.len(), 69, "R66 contributes 69 bp beyond the 31 bp overlap");
+                assert!(
+                    graph.get_unitig_seq(65).windows(69).any(|w| w == r65_unique),
+                    "R65 unique tail must survive in the graph"
+                );
+                assert!(
+                    graph.get_unitig_seq(66).windows(69).any(|w| w == r66_unique),
+                    "R66 unique tail must survive in the graph"
+                );
+            } else {
+                assert!(
+                    short_survivors >= 1,
+                    "At least frontier node R65 must survive cleanup"
+                );
+            }
         }
 
         // Level C: Contigs emitted into final FASTA
@@ -202,6 +252,39 @@ fn test_boundary_sweep_63_64_65_66_short_nodes() {
                 writeln!(f, ">contig_{} len={}", c.id, c.len).unwrap();
                 writeln!(f, "{}", std::str::from_utf8(&c.seq).unwrap()).unwrap();
             }
+        }
+
+        if n_repeat == 66 {
+            let r65_unique = &repeat_seqs[64][k..];
+            let r66_unique = &repeat_seqs[65][k..];
+            assert!(
+                contigs_raw.iter().any(|c| c.seq.windows(r65_unique.len()).any(|w| w == r65_unique)),
+                "R65 unique sequence must survive raw curation (min_len = 0)"
+            );
+            assert!(
+                contigs_raw.iter().any(|c| c.seq.windows(r66_unique.len()).any(|w| w == r66_unique)),
+                "R66 unique sequence must survive raw curation (min_len = 0)"
+            );
+
+            let mut covered = vec![false; ref_seq.len()];
+            for contig in &contigs_raw {
+                assert!(
+                    mark_exact_reference_coverage(&ref_seq, &contig.seq, &mut covered),
+                    "raw contig len {} must be an exact forward substring of the N=66 reference",
+                    contig.len
+                );
+            }
+            let covered_bp = covered.iter().filter(|&&base| base).count();
+            assert_eq!(
+                covered_bp, ref_seq.len(),
+                "N=66 raw contigs must union-cover 100.00% of the reference (covered {covered_bp} / {})",
+                ref_seq.len()
+            );
+            assert_eq!(
+                covered_bp * 10_000 / ref_seq.len(),
+                10_000,
+                "reference coverage union must be exactly 100.00%"
+            );
         }
 
         let default_sha = sha256_of_file(&default_fa_path);
