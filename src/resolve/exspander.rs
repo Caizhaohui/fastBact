@@ -302,7 +302,28 @@ fn find_candidate_paths(
             }
 
             for next_target in next_targets {
+                // BFS does not unroll cycles. A short node may still recur on a
+                // path the splicer accepts. Skipping that hop hides a competitor
+                // only when the re-entry can reach paired-end support inside the
+                // insert-size window; a return that dies outside the window does not.
                 if visited.contains(&next_target.id()) {
+                    if pruned_repeat_hides_supported_endpoint(
+                        graph,
+                        matrix,
+                        dist,
+                        curr_dir,
+                        u,
+                        next_target,
+                        sep_u,
+                        steps.len(),
+                        &visited,
+                        ext_nodes,
+                        max_separation,
+                        consumed_nodes,
+                    ) {
+                        search_status = SearchStatus::Truncated;
+                        break;
+                    }
                     continue;
                 }
                 if let EdgeResolveResult::Valid(edge) = resolve_edge_between(graph, u, next_target)
@@ -321,6 +342,9 @@ fn find_candidate_paths(
                     }
                 }
             }
+            if let SearchStatus::Truncated = search_status {
+                break;
+            }
         } else if depth_limit_hides_continuation(
             graph,
             u,
@@ -337,12 +361,155 @@ fn find_candidate_paths(
     (candidate_paths, search_status)
 }
 
+/// True when cycle pruning drops a repeat hop `validate_and_splice_path` would accept.
+///
+/// Nodes shorter than 500 bp may recur. A circular node is not a route. A node
+/// deleted upstream of this resolver is not a route; a node this resolver already
+/// spliced still is. The hop must also be sequence-valid and inside the
+/// overlap-adjusted insert-size budget, the same exit test used when enqueueing.
+fn admissible_repeat_continuation(
+    graph: &CdbgGraph,
+    from: DirUnitigId,
+    next_target: DirUnitigId,
+    sep_u: i64,
+    max_separation: i64,
+    consumed_nodes: &HashSet<u32>,
+) -> bool {
+    let next_id = next_target.id();
+    let next_node = &graph.nodes[next_id as usize];
+    if next_node.is_circular || next_node.seq_len >= 500 {
+        return false;
+    }
+    if next_node.is_deleted && !consumed_nodes.contains(&next_id) {
+        return false;
+    }
+    let from_len = graph.nodes[from.id() as usize].seq_len;
+    if let EdgeResolveResult::Valid(edge) = resolve_edge_between(graph, from, next_target) {
+        let sep_next = sep_u + from_len as i64 - edge.overlap_k as i64;
+        sep_next <= max_separation
+    } else {
+        false
+    }
+}
+
+/// True when allowing one re-entry of a pruned short repeat would score an
+/// endpoint the acyclic search cannot see.
+///
+/// The repeat itself, or a walk that leaves it without a second re-entry, must
+/// land inside the insert-size window with paired-end support from `curr_dir`.
+/// Reaching the depth cap with a still-admissible continuation is also incomplete:
+/// that is the same budget the main search would have refused to close.
+fn pruned_repeat_hides_supported_endpoint(
+    graph: &CdbgGraph,
+    matrix: &PairLinkMatrix,
+    dist: &InsertSizeDist,
+    curr_dir: DirUnitigId,
+    from: DirUnitigId,
+    next_target: DirUnitigId,
+    sep_u: i64,
+    steps_before: usize,
+    visited: &SmallVec<[u32; 8]>,
+    ext_nodes: &HashSet<u32>,
+    max_separation: i64,
+    consumed_nodes: &HashSet<u32>,
+) -> bool {
+    if !admissible_repeat_continuation(
+        graph,
+        from,
+        next_target,
+        sep_u,
+        max_separation,
+        consumed_nodes,
+    ) {
+        return false;
+    }
+    if next_target.id() == curr_dir.id() || ext_nodes.contains(&next_target.id()) {
+        return false;
+    }
+
+    let from_len = graph.nodes[from.id() as usize].seq_len;
+    let EdgeResolveResult::Valid(entry_edge) = resolve_edge_between(graph, from, next_target)
+    else {
+        return false;
+    };
+    let sep_entry = sep_u + from_len as i64 - entry_edge.overlap_k as i64;
+
+    let mut queue = VecDeque::new();
+    queue.push_back((next_target, sep_entry, steps_before + 1, visited.clone()));
+    let mut states = 0usize;
+
+    while let Some((node, sep, steps, mut node_visited)) = queue.pop_front() {
+        states += 1;
+        if states > MAX_DFS_STATES {
+            return true;
+        }
+
+        let node_ref = &graph.nodes[node.id() as usize];
+        if node_ref.is_circular {
+            continue;
+        }
+        if node_ref.is_deleted && !consumed_nodes.contains(&node.id()) {
+            continue;
+        }
+        if node.id() == curr_dir.id() || ext_nodes.contains(&node.id()) {
+            continue;
+        }
+        let node_len = node_ref.seq_len;
+        node_visited.push(node.id());
+
+        if matrix.get_support(curr_dir, node) > 0 {
+            let (count, _) = score_candidate_path(matrix, dist, curr_dir, node, sep);
+            if count > 0 {
+                return true;
+            }
+        }
+
+        if steps >= MAX_CANDIDATE_DEPTH {
+            if depth_limit_hides_continuation(
+                graph,
+                node,
+                sep,
+                &node_visited,
+                max_separation,
+                consumed_nodes,
+            ) {
+                return true;
+            }
+            continue;
+        }
+
+        let mut next_targets = Vec::new();
+        for edge in graph.nodes[node.id() as usize].edges(node.is_rc()) {
+            if !next_targets.contains(&edge.target) {
+                next_targets.push(edge.target);
+            }
+        }
+        for neighbor in next_targets {
+            if node_visited.contains(&neighbor.id()) {
+                continue;
+            }
+            let neighbor_node = &graph.nodes[neighbor.id() as usize];
+            if neighbor_node.is_deleted && !consumed_nodes.contains(&neighbor.id()) {
+                continue;
+            }
+            if let EdgeResolveResult::Valid(edge) = resolve_edge_between(graph, node, neighbor) {
+                let sep_next = sep + node_len as i64 - edge.overlap_k as i64;
+                if sep_next <= max_separation {
+                    queue.push_back((neighbor, sep_next, steps + 1, node_visited.clone()));
+                }
+            }
+        }
+    }
+    false
+}
+
 /// True when `u` still has a continuation the depth cap did not enqueue.
 ///
-/// Mirrors the enqueue filters: separation budget, unvisited target, and a
-/// sequence-valid edge. A node deleted upstream of this resolver is not a
-/// continuation. A node this resolver already spliced still is, so an unseen
-/// shadow hop leaves the search incomplete.
+/// Mirrors the enqueue filters: separation budget and a sequence-valid edge.
+/// An unvisited target is a continuation. A visited target is a continuation
+/// only when it is an admissible short repeat still inside the budget. A node
+/// deleted upstream of this resolver is not a continuation. A node this resolver
+/// already spliced still is, so an unseen shadow hop leaves the search incomplete.
 fn depth_limit_hides_continuation(
     graph: &CdbgGraph,
     u: DirUnitigId,
@@ -362,6 +529,16 @@ fn depth_limit_hides_continuation(
 
     for next_target in next_targets {
         if visited.contains(&next_target.id()) {
+            if admissible_repeat_continuation(
+                graph,
+                u,
+                next_target,
+                sep_u,
+                max_separation,
+                consumed_nodes,
+            ) {
+                return true;
+            }
             continue;
         }
         // Mirror dequeue: upstream deletions are not routes. A node spliced by
