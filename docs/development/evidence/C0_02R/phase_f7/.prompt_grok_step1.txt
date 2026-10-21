@@ -1,0 +1,58 @@
+# fastBact Phase F7 — Step 1: Construct Deterministic RED Tests
+
+You are the primary Rust developer for fastBact. You are operating in isolated Git worktree:
+`/hpcfs/fhome/caizhh/Desktop/03_Tool_Development/fastBact-phase-f7-grok-worktree`
+on branch `feature/c0-02r-phase-f7-grok`.
+
+In the Phase F6 independent Codex audit (`AUDIT-20261021-004`), three findings were identified:
+1. **F5-P1-001 (P1 Correctness / Incoming Unmerged Side-Branch Sequence Loss)**:
+   When a validated path $P$ is committed, all constituent nodes are deleted (`is_deleted = true`). If an incoming side branch ($X \to R$, where $R$ is in $P$ but $X$ is not) exists, $X$ loses its active connection to $R$. If $X < 500$ bp and was never added to `rejected_nodes`, Stage 5 cleanup deletes $X$ as an orphan! `protect_unmerged_frontier` only protected outgoing edges from the final extension node at the cap, leaving all incoming side branches and converging paths completely unprotected.
+2. **F5-P2-002 (P2 Robustness / Search Distance Budget Overlap Arithmetic)**:
+   In `find_candidate_paths` (line 282) and `depth_limit_hides_continuation` (line 327), the pre-check `sep_u_exit = sep_u + u_node.seq_len > max_separation` rejects paths before subtracting `edge.overlap_k`. Transitions where $sep_u + len(u) > max\_separation$ but $sep_u + len(u) - overlap \le max\_separation$ are prematurely rejected.
+3. **F5-P2-003 (P2 Test Rigor / Strengthen 66-Step Boundary Gate)**:
+   In `tests/test_c0_02r_frontier_preservation_gate.rs`, the $N=66$ test used a weak assertion `short_survivors >= 1`. It must strictly assert `short_survivors == 2`, verify the exact identities and sequence of both $R_{65}$ and $R_{66}$, and assert 100.00% reference coverage union.
+
+## Your Task in Step 1
+
+**DO NOT MODIFY PRODUCTION CODE IN `src/` YET.** (Production fixes will be implemented in Step 2).
+Your task now is ONLY to write deterministic test cases that FAIL (RED) on the current unpatched code (`0e513a3`):
+
+### 1. F7-A Test Suite: Incoming Side-Branch Sequence Preservation
+Add a dedicated test file `tests/test_c0_02r_incoming_side_branch_gate.rs` covering Cases A–G:
+- **Case A (Classic Incoming Side Branch)**:
+  $S(700\text{ bp}) \to R(169\text{ bp})$, and $X(100\text{ bp}) \to R(169\text{ bp})$.
+  $S$ is a unique seed ($\ge 500$ bp). $S \to R$ is spliced and committed.
+  $X$ contains unique sequence (distinct from $S$ and $R$).
+  Assert that after `resolve_repeats_exspander_with_stats`, $X$ is NOT deleted in `graph.nodes`, and $X$'s unique 69 bp sequence survives in the graph and raw curation (`curate_contigs(&graph, 0, 2.0)`).
+  *On unpatched code, this must FAIL (RED)* because $X$ is deleted as an orphan in Stage 5 cleanup!
+- **Case B (Side Branch Entering Intermediate Node)**:
+  $S(700\text{ bp}) \to R_1(100\text{ bp}) \to R_2(100\text{ bp})$, with $X(100\text{ bp}) \to R_1(100\text{ bp})$.
+  $S \to R_1 \to R_2$ commits. $X$ must not be deleted.
+- **Case C (Multi-Connection Side Branch)**:
+  $X(100\text{ bp})$ has edges to multiple consumed nodes in the committed path. $X$ must survive.
+- **Case D (Reverse/Twin Orientation Side Branch)**:
+  Incoming side branch in reverse-complement orientation. Must survive.
+- **Case E (64-Step Bounded Prefix with Both Outgoing Frontier and Incoming Side Branch)**:
+  Path $S(700) \to R_1(100) \to \dots \to R_{64}(100) \to R_{65}(100)$, plus incoming branch $X(100) \to R_{64}$.
+  At step 64 cap, prefix commits. Both outgoing frontier $R_{65}$ AND incoming branch $X$ must survive!
+  *On unpatched code, this must FAIL (RED)* because $X$ is deleted even though $R_{65}$ is protected.
+- **Case F (Validation Failure Atomicity)**:
+  When a candidate path fails validation (e.g. broken reciprocal edge), NO external neighbors are added to `rejected_nodes`, and graph topology is completely untouched.
+- **Case G (Standard Path Preservation)**:
+  A normal unbranched path without side branches continues to splice correctly and completely.
+
+### 2. F7-B Test Suite: Search Distance Budget Overlap Arithmetic
+Add tests in `tests/test_c0_02r_incoming_side_branch_gate.rs` (or `tests/test_c0_02r_p1_regression_gate.rs`):
+- Construct a topology where $sep_u + len(u) > max\_separation$, but $sep_u + len(u) - overlap \le max\_separation$.
+- Verify that candidate search explores this transition and does not prematurely abort or fail to detect an admissible continuation.
+- *On unpatched code, this must FAIL (RED)* because line 282 and line 327 reject before subtracting overlap.
+
+### 3. F7-C: Strengthen 66-Step Assertions in `tests/test_c0_02r_frontier_preservation_gate.rs`
+- In `test_boundary_sweep_63_64_65_66_short_nodes`:
+  For $N=66$:
+  - Strictly assert `short_survivors == 2` (both $R_{65}$ and $R_{66}$ must survive).
+  - Assert that both $R_{65}$'s unique sequence and $R_{66}$'s unique sequence survive in the graph.
+  - Calculate reference coverage union across all emitted raw contigs (`min_len = 0`) and assert exact 100.00% union coverage.
+
+Implement these tests now. DO NOT touch `src/resolve/exspander.rs` yet.
+When done, summarize your edits and explain the expected RED failures.

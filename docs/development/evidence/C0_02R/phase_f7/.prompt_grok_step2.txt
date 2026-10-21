@@ -1,0 +1,54 @@
+# fastBact Phase F7 — Step 2: Minimal Production Repairs
+
+You are the primary Rust developer for fastBact. You are operating in isolated Git worktree:
+`/hpcfs/fhome/caizhh/Desktop/03_Tool_Development/fastBact-phase-f7-grok-worktree`
+on branch `feature/c0-02r-phase-f7-grok`.
+
+The RED baseline tests have been verified on Slurm compute node `vnode1` and committed at `4ed4f8c`.
+The 7 test failures in `tests/test_c0_02r_incoming_side_branch_gate.rs` confirmed both findings:
+- Case A, B, C, D, E failed due to `F5-P1-001` (incoming side branches deleted by Stage 5 cleanup after constituent nodes are consumed).
+- `test_f7b_overlap_adjusted_transition_is_explored` and `test_f7b_depth_limit_overlap_adjusted_continuation_stays_hidden` failed due to `F5-P2-002` (distance pre-check rejects before overlap deduction).
+
+## Your Task in Step 2
+
+Implement the minimal, surgical production repairs in `src/resolve/exspander.rs` to turn all tests GREEN:
+
+### 1. Fix F5-P1-001: Pre-Commit Neighbor Snapshot & Protection
+In `src/resolve/exspander.rs`:
+- When a path `full_path` is successfully spliced and committed in `resolve_repeats_exspander_with_stats` (around line 975):
+  - Construct `consumed_nodes: HashSet<u32>` containing `step.dir.id()` for every step in `full_path`.
+  - BEFORE marking constituent nodes as deleted, snapshot all active external neighbors incident to every constituent node in both orientations (`edges_fwd` and `edges_rev`):
+    For each `step` in `full_path`:
+      `let node = &graph.nodes[step.dir.id() as usize];`
+      For every edge in `node.edges_fwd.iter().chain(&node.edges_rev)`:
+        `let neighbor_id = edge.target.id();`
+        If `!consumed_nodes.contains(&neighbor_id)` and `!graph.nodes[neighbor_id as usize].is_deleted`:
+          `rejected_nodes.insert(neighbor_id);`
+  - This guarantees that ANY active node adjacent to the committed path (incoming side branches like $X \to R$, intermediate side branches $X \to R_i$, outgoing frontiers like $R_{64} \to R_{65}$, and reverse-orientation neighbors) is registered into `rejected_nodes` upon successful path commitment, shielding them from orphan deletion in Stage 5 cleanup!
+  - If path validation fails (`Err(err)`), no external neighbors are registered into `rejected_nodes`, preserving atomic rollback and avoiding debris pollution.
+
+### 2. Fix F5-P2-002: Exact Overlap-Deducted Separation Budget
+In `src/resolve/exspander.rs`:
+- In `find_candidate_paths` (around lines 280–305):
+  - Do NOT reject `sep_u_exit = sep_u + u_node.seq_len as i64` before overlap deduction!
+  - For each `next_target`:
+    When `resolve_edge_between(graph, u, next_target)` yields `EdgeResolveResult::Valid(edge)`:
+    Calculate `sep_next = sep_u + u_node.seq_len as i64 - edge.overlap_k as i64;`
+    Check `if sep_next <= max_separation`:
+      Enqueue `(next_target, sep_next, next_steps, visited.clone())`.
+- In `depth_limit_hides_continuation` (around lines 325–350):
+  - Do NOT return `false` on `sep_u_exit > max_separation` before overlap deduction!
+  - For each `next_target`:
+    When `resolve_edge_between(graph, u, next_target)` yields `EdgeResolveResult::Valid(edge)`:
+    Calculate `sep_next = sep_u + u_node.seq_len as i64 - edge.overlap_k as i64;`
+    If `sep_next <= max_separation`, return `true`!
+
+### Requirements:
+- Keep the edits minimal, surgical, and idiomatic Rust.
+- Preserve existing comments and docstrings.
+- Ensure all 9 tests in `tests/test_c0_02r_incoming_side_branch_gate.rs` pass.
+- Ensure all 5 tests in `tests/test_c0_02r_frontier_preservation_gate.rs` pass.
+- Ensure no regression in any existing tests.
+
+Resume chat session `1c044a72-e978-401f-bf89-2b0d4062c878` or implement directly.
+When done, summarize your edits.
