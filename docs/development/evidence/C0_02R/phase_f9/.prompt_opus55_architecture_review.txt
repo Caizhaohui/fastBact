@@ -1,0 +1,172 @@
+# fastBact — Claude Opus 5.5 Architecture & State Semantics Review
+
+## Context & Objectives
+
+You are performing an independent, authoritative graph state semantics and architectural safety review for fastBact repeat resolution (exSPAnder subsystem) on commit `37a7c0baeb251e6211beafc60a2608304916a0f6` (`feature/c0-02r-phase-f7-grok`).
+
+### Background: Finding F8-P1-001
+In the Phase F8 Codex independent audit (`AUDIT-20261021-005`), a P1 correctness defect was identified in Phase F7's external neighbor preservation logic:
+- In `src/resolve/exspander.rs`, `rejected_nodes: HashSet<u32>` was historically used for two distinct purposes:
+  1. Excluding rejected candidate paths during BFS search (`exspander.rs:246`: `if rejected_nodes.contains(&u.id()) { continue; }`).
+  2. Protecting unmerged short unitigs (< 500 bp) from orphan cleanup at Stage 5 (`exspander.rs:1051`: `if !rejected_nodes.contains(&node.id) ... { node.is_deleted = true; }`).
+- In Phase F7, when a path was successfully validated and committed, all unconsumed external neighbors incident to any constituent node were inserted into `rejected_nodes` (`exspander.rs:997`) to shield them from Stage 5 orphan cleanup.
+- **Defect**: This conflated cleanup protection with candidate rejection. When an external neighbor $X$ of an earlier committed path $S_1 \to R$ was inserted into `rejected_nodes`, a subsequent seed $S_2$ exploring a fork at $Q$ ($Q \to X$ vs $Q \to D$) silently skipped $X$ during BFS dequeue because `rejected_nodes.contains(&X.id()) == true`.
+- Search returned `SearchStatus::Complete` because the queue drained normally, and fastBact committed the weaker alternative $D$ via single-candidate acceptance ($W/C \ge 0.05$), while the authentic supported path through $X$ was never evaluated.
+
+Codex proposed a minimal repair: split `rejected_nodes` into two separate sets:
+- `rejected_nodes: HashSet<u32>` (strictly for failed candidate path rejections, checked in BFS).
+- `cleanup_protected_nodes: HashSet<u32>` (strictly for Stage 5 orphan cleanup protection, never checked in BFS).
+
+Your mandate is to perform an authoritative architectural review to determine whether this minimal two-set split is fundamentally sound, complete, and sufficient, or whether deeper state lifecycle refactoring is required.
+
+---
+
+## Mandatory Source Inspection Scope
+
+Examine the actual source code in the repository:
+1. `src/resolve/exspander.rs`:
+   - All write locations of `rejected_nodes` (lines 363, 412, 416, 450, 454, 477, 479, 485, 487, 560, 562, 612, 619, 683, 934, 936, 939, 997, 1023, 1026).
+   - All read locations of `rejected_nodes` (lines 206, 246 in `find_candidate_paths`, line 1051 in Stage 5 cleanup).
+   - Candidate search: `find_candidate_paths` (lines 240–310) and `depth_limit_hides_continuation` (lines 315–350).
+   - Candidate scoring: `score_candidate_path` (lines 135–200).
+   - Path validation and commit: `validate_and_splice_path` (lines 760–840) and lines 960–1035.
+   - Stage 5 cleanup: lines 1035–1055.
+2. `src/graph/cdbg.rs`:
+   - `DirUnitigId` representation, `id()`, `is_rc()`, and `twin()` (lines 10–50).
+   - `UnitigNode` structure and adjacency lists `edges_fwd`, `edges_rev` (lines 65–125).
+3. Test suites:
+   - `tests/test_c0_02r_incoming_side_branch_gate.rs`
+   - `tests/test_c0_02r_frontier_preservation_gate.rs`
+   - `tests/test_c0_02r_p1_regression_gate.rs`
+
+Do NOT assume correctness from secondary summaries. Base all findings directly on source code logic.
+
+---
+
+## Detailed Review Mandates
+
+### 1. State Semantics Contract & Lifecycle Matrix
+Formulate a formal State Semantics Matrix covering at least:
+- `SEARCH_REJECTED`
+- `CLEANUP_PROTECTED`
+- `CONSUMED`
+- `DELETED`
+- `VISITED_IN_SEARCH`
+
+For each state, define:
+- **Owner**: Which function/subsystem owns and manages this state?
+- **Writer**: Exactly when and under what preconditions is this state applied?
+- **Reader**: Exactly which components consult this state, and what decisions are gated on it?
+- **Lifecycle**: When is it instantiated, when does it transition, and when is it cleared?
+- **Allowed Transitions**: What subsequent states can a node transition to?
+- **Invalid Transitions**: What state transitions are strictly prohibited?
+- **Effect on Candidate Eligibility**: Does this state exclude or alter BFS search?
+- **Effect on Cleanup**: Does this state shield from Stage 5 deletion?
+- **Effect on Sequence Preservation**: Does it guarantee node sequence survival?
+
+Specifically answer:
+- **Q-A**: Does `cleanup_protected_nodes` completely avoid affecting BFS candidate search?
+- **Q-B**: Should `rejected_nodes` still provide cleanup protection at Stage 5, or should failed candidates be eligible for orphan deletion?
+- **Q-C**: Can a single physical node legitimately belong to both `SEARCH_REJECTED` and `CLEANUP_PROTECTED` simultaneously? If yes, what is the resolved behavior?
+- **Q-D**: Does the resolver-wide lifetime of `rejected_nodes` across multiple seed extensions introduce hidden cross-seed coupling? If a candidate path was rejected during exploration from seed $S_1$, is it valid to permanently ban that node from candidate exploration when starting from seed $S_2$?
+- **Q-E**: When a cleanup-protected node is subsequently incorporated into a splice by a later seed, does it transition to `CONSUMED`/`DELETED`, and does its presence in `cleanup_protected_nodes` create any contradiction?
+- **Q-F**: Is there any risk of over-protection where sequencing noise / dead tips connected to committed paths are improperly immortalized?
+- **Q-G**: If graph validation or splicing fails (`validate_and_splice_path` returns `Err`), is failure atomicity strictly guaranteed for all sets?
+
+---
+
+### 2. Core Correctness Invariants
+Formulate at least 7 formal, verifiable correctness invariants:
+- **Invariant 1 (Search Eligibility)**
+- **Invariant 2 (Search Completeness & Truncation Conservatism)**
+- **Invariant 3 (Sequence Preservation of Unmerged Boundary Neighbors)**
+- **Invariant 4 (Mutation & State Failure Atomicity)**
+- **Invariant 5 (Directional & Twin Consistency)**
+- **Invariant 6 (State Independence Between Scoring and Cleanup)**
+- **Invariant 7 (Cleanup Precision & Bounded Retention)**
+
+Evaluate whether the proposed minimal split satisfies all 7 invariants.
+
+---
+
+### 3. Production Counterexample Rigorous Review
+Review Codex's 6-node cross-seed counterexample:
+```text
+S1(900 bp) ──→ R(169 bp)
+                 ↑
+               X(100 bp)
+                 ↑
+S2(700 bp) ──→ Q(100 bp) ──→ D(100 bp)
+```
+- Evaluate the mathematical and biological plausibility:
+  - Do 20 PE pairs vs 5 PE pairs at equal distance / insert size yield a weight ratio $\ge 2.5$?
+  - Does the path traversal $S_2 \to Q \to X$ meet all orientation, overlap, and fragment span constraints?
+  - Does $D$ meet the single-candidate threshold ($W/C \ge 0.05$) when $X$ is omitted?
+  - Is this topology production-reachable under fastBact's upstream cDBG construction and repeat resolution order (longer seeds first)?
+  - Are there any edge conditions or unstated assumptions in Codex's counterexample?
+
+---
+
+### 4. Architecture Decision: Option A vs Option B vs Option C
+Compare:
+- **Option A (Minimal Split)**:
+  Maintain two separate sets in `resolve_repeats_exspander_with_stats`:
+  `rejected_nodes: HashSet<u32>` (strictly for candidate search exclusion)
+  `cleanup_protected_nodes: HashSet<u32>` (strictly for Stage 5 orphan cleanup protection)
+- **Option B (Explicit Resolver State Machine)**:
+  Introduce an explicit node state enum (`NodeResolverState`) or state manager tracking each node's exact status throughout the resolver lifecycle.
+- **Option C (Alternative)**:
+  If neither Option A nor Option B is sufficient to preserve all invariants, propose the minimal necessary alternative.
+
+Evaluate against: Correctness, Lines of Code changed, API compatibility, Runtime and Memory overhead, Verification complexity, Rollback risk.
+
+---
+
+### 5. Regression Contract for Grok Implementation
+Define a precise test contract for the upcoming implementation:
+- Test A: 6-node sequential seed competition (RED on unpatched F7, GREEN after split).
+- Test B: Cleanup-protected node maintains full BFS candidate eligibility.
+- Test C: Unmerged incoming side branch sequence preservation (Cases A–E remain GREEN).
+- Test D: Genuine failed candidates remain excluded from BFS.
+- Test E: Coexistence of rejection and protection on the same node.
+- Test F: Reverse / twin orientation symmetry.
+- Test G: Failure atomicity on validation error.
+- Test H: Multi-seed sequential commit lifecycle.
+- Test I: Preservation of existing 138 release tests without regression.
+
+---
+
+## Output Contract
+
+Provide your architectural verdict and analysis in the following format:
+
+```markdown
+# Phase F9-D2 Architecture & State Semantics Review Report
+
+## 1. Executive Summary & Design Verdict
+- Target Commit: `37a7c0b` (HEAD `5a85f67`)
+- Model: `claude-opus-5-5` (Claude Code CLI, High reasoning effort)
+- Provider: OmniaKey Claude Gateway
+- Design Verdict: [MINIMAL_SPLIT_SUFFICIENT | ARCHITECTURE_CHANGE_REQUIRED | UNVERIFIED]
+
+## 2. Formal State Semantics Matrix
+[Complete matrix covering SEARCH_REJECTED, CLEANUP_PROTECTED, CONSUMED, DELETED, VISITED_IN_SEARCH]
+
+## 3. Detailed Answers to Questions Q-A through Q-G
+[Thorough, source-grounded answers]
+
+## 4. Formal Correctness Invariants (Invariants 1–7)
+[Formal definitions and verification proofs]
+
+## 5. Counterexample Forensic Audit & Production Reachability
+[Mathematical, statistical, and topological verification of Codex 6-node case]
+
+## 6. Architectural Decision Evaluation (Option A vs B vs C)
+[Trade-off analysis and final recommendation]
+
+## 7. RED → GREEN Regression Test Contract for Grok
+[Detailed specification for subsequent implementation]
+
+## 8. Potential Secondary Risks & Residual Vulnerabilities
+[Any latent issues or explicit statement of absence]
+```
