@@ -1,0 +1,98 @@
+You are Grok 4.7 Extra High Fast, acting as the primary Rust implementer for fastBact Phase F9-I (C0-02R repeat resolution correctness repair).
+
+# Context & Mission
+
+Read the architecture reports in this repository:
+- `docs/development/evidence/C0_02R/phase_f9/opus55_round1_architecture.md`
+- `docs/development/evidence/C0_02R/phase_f9/opus55_round2_adversarial.md`
+- `docs/development/evidence/C0_02R/phase_f8/codex_f7_reaudit.md`
+- `src/resolve/exspander.rs`
+
+## The Problem
+In commit `37a7c0b` (Phase F7), external neighbors of committed paths were inserted into `rejected_nodes` (`exspander.rs:997`) to protect them from Stage 5 orphan cleanup.
+However, `find_candidate_paths` at line 246 checks:
+```rust
+if u_node.is_deleted || u_node.is_circular || rejected_nodes.contains(&u.id()) {
+    continue;
+}
+```
+This causes any external neighbor $X$ of an earlier committed path to be silently skipped in candidate search for subsequent seeds!
+Furthermore, Claude Opus 5.5's deep review proved:
+1. Codex Option A (two sets, still checking `rejected_nodes` in BFS) is INSUFFICIENT because older writers (fork decision failures, validation rollbacks) still insert into `rejected_nodes`, causing cross-seed pollution (CE-2 / Test J).
+2. Option C (simply removing `rejected_nodes` from BFS) has a latent flaw: when a node was consumed by an earlier seed, BFS skips it at `is_deleted`, allowing a weak decoy candidate $D$ on an alternate exit to win under the single-candidate rule ($W/C \ge 0.05$) when the true biological continuation was the consumed node (CE-3 / Risk R-2).
+3. The selected solution is **Refined Option D**:
+   - Decouple `cleanup_protected_nodes` completely from candidate search (remove from `find_candidate_paths`).
+   - Track `consumed_nodes: HashSet<u32>` resolver-wide.
+   - Traverse consumed nodes in BFS as shadow candidates (`through_consumed: true`). Shadow candidates are NEVER spliced.
+   - At decision sites, if a shadow candidate on an alternate exit has strong evidence (`best.total_weight < threshold * shadow.total_weight`), block the decision and preserve the fork!
+
+---
+
+# Step 1 Task: Construct Deterministic RED Regression Tests
+
+Do NOT modify `src/resolve/exspander.rs` yet in this step!
+Your task in Step 1 is to create `tests/test_c0_02r_state_semantics_gate.rs` with comprehensive tests T1 through T13 that demonstrate the defects on the current unpatched code (`37a7c0b`).
+
+## Required Tests in `tests/test_c0_02r_state_semantics_gate.rs`:
+
+1. **Test T1 / CE-1 (Cleanup protection must not exclude subsequent candidate search)**:
+   - S1(900 bp) -> R(169 bp), incoming side branch X(300 bp) -> R(169 bp).
+   - S2(700 bp) -> Q(100 bp), fork from Q to X(300 bp) vs Q to D(300 bp).
+   - All overlaps 31 bp.
+   - S1 commits S1 -> R first.
+   - Evidence from S2:
+     - 20 independent read pairs to X (e.g. span ~450 bp, d1=200, d2=212, matching default insert size).
+     - 5 independent read pairs to D (same span/distances).
+   - Expected behavior on fixed code: S2 explores both X and D. X beats D with weight ratio 20/5 = 4.0 >= 2.5. Contig S2+Q+X is formed; D remains an active node.
+   - On CURRENT unpatched code: X is in `rejected_nodes`, BFS skips X, D becomes the sole candidate and is incorrectly committed!
+   - Assert in test that `S2+Q+X` is spliced and D is NOT spliced to S2. This MUST fail (RED) on unpatched code!
+
+2. **Test T2 / CE-2 (Historical fork failure must not permanently ban nodes for later seeds)**:
+   - Seed S1' (900 bp) -> {X(300 bp), Y(300 bp)}. S1' has weak/ambiguous evidence (e.g. 3 pairs), so its fork decision fails and puts X into `rejected_nodes` at lines 560-562 / 683.
+   - Seed S2' (700 bp) -> M(100 bp) -> {X(300 bp), D(300 bp)}. Evidence from S2': X has 20 pairs, D has 5 pairs.
+   - On unpatched code (and Option A): X is skipped because of S1's failure, and D is incorrectly committed.
+   - On fixed code: S2'+M+X commits; D remains active.
+   - Assert that S2'+M+X is formed. This MUST fail (RED) on unpatched code!
+
+3. **Test T3 / CE-3 (Consumed-node shadow conflict blocks decoy commit)**:
+   - Seed S1(900 bp) -> R(169 bp) commits normally (R is consumed and marked deleted).
+   - Seed S2(700 bp) -> Q(100 bp) with fork from Q:
+     - Exit 1: Q -> R(169 bp) (consumed node). Evidence from S2 has 20 pairs to R.
+     - Exit 2: Q -> D(300 bp) (active node). Evidence from S2 has 5 pairs to D.
+   - On unpatched code: BFS skips R because `is_deleted == true`. D is the sole candidate and commits under single-candidate rule ($W/C \ge 0.05$)!
+   - On fixed code (Option D): R is explored as a shadow candidate on exit 1 with weight 20. Because 5 < 2.5 * 20, shadow candidate blocks D from committing! The fork at Q is safely preserved (no splice of S2+Q+D).
+   - Assert that S2+Q is NOT spliced to D, and Q, D remain active nodes! This MUST fail (RED) on unpatched code!
+
+4. **Test T4 / CE-4 (Same-exit shadow candidate does not block)**:
+   - S1 consumes R. S2 -> Q -> X -> R. Both X and R are on the same fork exit from Q.
+   - Evidence supports X and R on the same exit. Shadow candidate on the SAME exit does not block X from committing.
+
+5. **Test T5 (Non-resolver deleted nodes do not become shadow candidates)**:
+   - A node marked deleted before repeat resolution (e.g. upstream tip or bubble) is NOT in `consumed_nodes` and must NOT become a shadow candidate.
+
+6. **Test T6 (Cases A-G regression compatibility)**:
+   - Ensure helper functions and test constructs preserve the semantics of `test_c0_02r_incoming_side_branch_gate.rs`.
+
+7. **Test T7 (Validation failure atomicity)**:
+   - If path validation fails, no nodes enter `consumed_nodes`, and graph is untouched.
+
+8. **Test T8 (Twin orientation symmetry / Metamorphic test)**:
+   - T1 and T3 constructed in reverse-complement orientation must yield exact mirror behavior.
+
+9. **Test T9 (Cycles and hairpin termination)**:
+   - Directed cycles `A -> R -> A` and hairpins `R -> R.rc` terminate cleanly within state and depth limits.
+
+10. **Test T10 (Budget boundary exactness)**:
+    - Tests for `sep_next == max_separation` (admitted) vs `max_separation + 1` (rejected).
+
+11. **Test T12 (Multi-consumed / shadow path bounds)**:
+    - Multiple consumed nodes in sequence do not cause state explosion; budget cap cleanly truncates.
+
+12. **Test T13 (Shared exit downstream shadow conflict)**:
+    - When two paths share the immediate first step but diverge downstream where one hits a consumed node with strong evidence, verify correct resolution.
+
+## Guidelines:
+- Follow standard test patterns from `tests/test_c0_02r_incoming_side_branch_gate.rs` (use helper functions for adding nodes, edges, DNA, pair evidence).
+- Make sure `tests/test_c0_02r_state_semantics_gate.rs` compiles cleanly (`cargo test --no-run`).
+- When executed, T1, T2, and T3 must FAIL (RED) with clear assertion failure messages showing the exact defect.
+- Return a summary of tests implemented.
