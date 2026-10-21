@@ -1,0 +1,155 @@
+# fastBact — Independent Codex Re-Audit of Grok Phase F7 Repairs
+
+## Context & Objectives
+
+You are performing an independent, rigorous code correctness, graph boundary preservation, and search budget audit of fastBact Phase F7 repairs on branch `feature/c0-02r-phase-f7-grok` (target HEAD `8ceb3e5`, repair commit `37a7c0b`).
+
+In the prior audit (`AUDIT-20261021-004` on commit `0e513a3`), your independent audit returned `VERDICT: FAIL` with three findings:
+1. **F5-P1-001 (P1 Correctness / Incoming unmerged boundary sequence can still be deleted)**:
+   - Location: `src/resolve/exspander.rs:363`, commit at line 975, cleanup at line 1025.
+   - Defect: `protect_unmerged_frontier` only protected outgoing edges from the last extension node at the cap. When a path was committed, all constituent nodes were deleted; incoming side branches ($X \to R$) lost their connection, and being $< 500$ bp and absent from `rejected_nodes`, Stage 5 cleanup pruned them as orphans.
+2. **F5-P2-002 (P2 Robustness / Search distance budget overlap arithmetic)**:
+   - Location: `src/resolve/exspander.rs:327`, normal-search guard at line 282.
+   - Defect: `sep_u + len(u) > max_separation` rejected candidate branches before subtracting `edge.overlap_k`, prematurely aborting admissible continuations where $sep_u + len(u) - overlap \le max\_separation$.
+3. **F5-P2-003 (P2 Test Rigor / Strengthen 66-step boundary gate)**:
+   - Location: `tests/test_c0_02r_frontier_preservation_gate.rs:164`.
+   - Defect: The $N=66$ test used `short_survivors >= 1` instead of `== 2`, failing to strictly establish that both $R_{65}$ and $R_{66}$ survived.
+
+In Phase F7 (implemented by Cursor Grok 4.7 Extra High Fast, orchestrated by Antigravity):
+- Git baseline: `0e513a3` (Phase F5B)
+- RED tests commit: `4ed4f8c`
+- Production repair commit: `37a7c0b`
+- Evidence & docs commit: `8ceb3e5` (HEAD)
+
+Run `git diff 0e513a3 37a7c0b` to inspect the full incremental diff. Focus your audit strictly on the F7 incremental changes against F5B (`0e513a3`). Do not repeat unrelated whole-repository audits.
+
+---
+
+## Detailed Audit Mandates
+
+### Audit A — External Neighbor Preservation (`src/resolve/exspander.rs`)
+
+Examine lines 967–1005 in `src/resolve/exspander.rs`:
+```rust
+let mut consumed_nodes = HashSet::with_capacity(full_path.len());
+for step in &full_path {
+    consumed_nodes.insert(step.dir.id());
+}
+for step in &full_path {
+    let neighbor_ids: Vec<u32> = {
+        let node = &graph.nodes[step.dir.id() as usize];
+        node.edges_fwd
+            .iter()
+            .chain(node.edges_rev.iter())
+            .map(|edge| edge.target.id())
+            .collect()
+    };
+    for neighbor_id in neighbor_ids {
+        if consumed_nodes.contains(&neighbor_id) {
+            continue;
+        }
+        if graph.nodes[neighbor_id as usize].is_deleted {
+            continue;
+        }
+        rejected_nodes.insert(neighbor_id);
+    }
+}
+```
+
+Evaluate and specifically answer the following questions:
+- **A1**: Does this mechanism truly protect ALL active external neighbors not consumed by path splicing?
+- **A2**: Are there any scenarios where an incoming side branch ($X \to R$ or $X \to R_i$) is missed or deleted?
+- **A3**: Can node orientation or strand conversion (forward vs reverse complement / twin) cause the wrong node to be protected or an authentic node to be overlooked? Note that `node.edges_fwd` and `node.edges_rev` store edges from 3' ends of forward and reverse strands, and in a canonical cDBG every edge $u \to v$ has a twin $v^{rc} \to u^{rc}$.
+- **A4**: Does this protection preserve failure atomicity? If `validate_and_splice_path` returns `Err`, does the rollback path leave behind any spurious node protection or state pollution in `rejected_nodes`?
+- **A5**: Is there any harmful over-protection? Could dead debris, false artifacts, or bubbles that should legitimately be pruned be incorrectly made immortal by being added to `rejected_nodes`?
+- **A6**: When multiple consumed nodes connect to the same external neighbor $N$, is deduplication handled cleanly without unbounded allocations or duplicate entries?
+- **A7**: Is there any case where a graph node survives in the cDBG, but is omitted or corrupted when emitting raw FASTA contigs via `curate_contigs(&graph, min_len = 0)`?
+- **A8**: Are graph state invariants strictly maintained under both successful and failed extension attempts?
+
+If any defect is found, provide a minimal production-reachable counterexample.
+
+---
+
+### Audit B — Search Budget Consistency (`find_candidate_paths` & `depth_limit_hides_continuation`)
+
+Examine lines 275–345 in `src/resolve/exspander.rs`:
+- Distance formula: `sep_next = sep_u + u_node.seq_len as i64 - edge.overlap_k as i64`
+- Overlap deduction timing: evaluated on each valid edge rather than before edge enumeration.
+- Signed/unsigned arithmetic: `i64` conversions and potential underflow/overflow.
+- Budget boundary: behavior when `sep_next == max_separation`.
+- Consistency: does `depth_limit_hides_continuation` use the exact same budget definition, edge filtering, and overlap deduction as `find_candidate_paths`?
+- Topology handling: are directed cycles, twin edges, and multi-edge forks handled identically in BFS and depth-limit check?
+- Truncation safety: when the candidate space cannot be proved complete, is `SearchStatus::Truncated` guaranteed to be returned? Could an admissible candidate path be omitted while returning `SearchStatus::Complete`?
+
+---
+
+### Audit C — F7 Regression Tests
+
+Examine `tests/test_c0_02r_incoming_side_branch_gate.rs` and `tests/test_c0_02r_frontier_preservation_gate.rs`:
+1. Did the RED tests in `4ed4f8c` genuinely fail against unpatched code (`0e513a3`), demonstrating the exact failure modes of F5-P1-001, F5-P2-002, and F5-P2-003?
+2. Did the GREEN state in `37a7c0b` genuinely pass on the repaired code without weakening assertions?
+3. Do Cases A–G cover:
+   - Case A: Terminal incoming side branch ($X \to R$)
+   - Case B: Intermediate incoming side branch ($X \to R_2$)
+   - Case C: Reverse / twin orientation ($X \to R_2(\text{rev})$)
+   - Case D: 64-step bounded prefix boundary
+   - Case E: Raw FASTA sequence preservation with exact DNA substring recovery
+   - Case F: Failure atomicity and rollback
+   - Case G: Standard path splicing without side branches
+   - F7-B: Overlap distance budget boundary tests
+   - Strengthened 66-step gate: strictly asserts `short_survivors == 2` and 100.00% reference union coverage.
+4. Are assertions strict (verifying nucleotide sequences and exact survivor counts) rather than trivial tautologies?
+5. Are all pre-existing tests preserved (138 release tests passing total)? Have any tests been deleted, skipped, or weakened?
+
+---
+
+### Audit D — Secondary Defects & Invariant Violations
+
+Identify any secondary risks or regressions introduced by F7:
+- Set leakage or unbounded memory retention in `rejected_nodes`.
+- Spurious survival of sequencing noise / tips.
+- Orientation mismatch in `GraphEdge` traversal.
+- Re-visitation of marked deleted nodes.
+- Incomplete rollback on validation failure.
+- Duplicate sequence emission in FASTA curation.
+- Inconsistent search budget between forward and backward extensions.
+
+Only report issues with concrete source code evidence or constructible counterexamples. Do not suggest out-of-scope architectural rewrites.
+
+---
+
+## Output Contract
+
+Provide your audit in the following structured format:
+
+```markdown
+# Phase F8 Independent Codex Re-Audit Report (AUDIT-20261021-005)
+
+## 1. Executive Summary & Overall Verdict
+- Target Commit: `37a7c0b` (HEAD `8ceb3e5`)
+- Auditor Model: `gpt-6.1-sol` (Codex CLI, medium reasoning effort)
+- Overall Verdict: [PASS | CONDITIONAL PASS | FAIL]
+
+## 2. Subsystem Verdicts
+- A. External Neighbor Preservation: [PASS | CONDITIONAL PASS | FAIL]
+- B. Graph Cleanup Correctness: [PASS | CONDITIONAL PASS | FAIL]
+- C. Failure Atomicity: [PASS | CONDITIONAL PASS | FAIL]
+- D. Search Budget Correctness: [PASS | CONDITIONAL PASS | FAIL]
+- E. Sequence Preservation: [PASS | CONDITIONAL PASS | FAIL]
+- F. Regression Integrity: [PASS | CONDITIONAL PASS | FAIL]
+
+## 3. Detailed Audit Findings & Answers to A1–A8
+[Address A1 through A8 with detailed evidence from the codebase]
+
+## 4. Search Budget Consistency Analysis
+[Detailed analysis of find_candidate_paths vs depth_limit_hides_continuation]
+
+## 5. Regression Suite Audit & Assertion Rigor
+[Detailed analysis of test_c0_02r_incoming_side_branch_gate.rs and test_c0_02r_frontier_preservation_gate.rs]
+
+## 6. Secondary Defects Ledger (P0/P1/P2)
+[Any Findings formatted with ID, Severity, File:line, Root cause, Production reachability, Minimal counterexample, Existing test coverage, Minimal repair direction; or explicitly state "None identified"]
+
+## 7. Final Recommendations & Transition Gate
+[Clear guidance for Phase F9 or required follow-ups]
+```
