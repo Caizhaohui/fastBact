@@ -1,0 +1,12 @@
+Refined Option D 已落到 `src/resolve/exspander.rs`。清理保护、已消费节点和候选搜索现在是三套分开的状态，之前会失败的 6 个状态语义测试都已通过。
+
+`cleanup_protected_nodes` 只服务 Stage 5 的短 unitig 清理。候选搜索不再读取这套集合，所以一次失败的分叉或一次成功提交登记的外部邻居，不会把后续种子的候选排除掉。成功拼接的节点记入 `consumed_nodes`，并传给 `extend_one_direction`、`find_candidate_paths` 和 `depth_limit_hides_continuation`。
+
+搜索遇到本轮已消费的节点，或本种子已经用过的长唯一节点时，会把路径标成 `through_consumed` 并继续走。上游删除、且不在 `consumed_nodes` 里的节点仍然跳过。只有未穿过这些节点的路径可以成为 `best` 并提交。`shadow_blocks_decision` 在两条决策点上生效：shadow 若是 `best` 的延伸，则视为同一出口；若在分叉处或之后分道，且权重达到 `decision_threshold`，则否决这次提交，分叉保持原样。
+
+验证结果：
+
+- `cargo check` 与 `cargo test --no-run` 均通过。
+- `test_c0_02r_state_semantics_gate`：14 通过。
+- `test_c0_02r_incoming_side_branch_gate`：9 通过。
+- `test_c0_02r_frontier_preservation_gate`：5 通过。

@@ -1,0 +1,101 @@
+You are Grok 4.7 Extra High Fast, implementing the production repair for fastBact Phase F9-I (C0-02R repeat resolution correctness repair).
+
+# Step 1 Verification Status
+In Step 1, you added `tests/test_c0_02r_state_semantics_gate.rs` with 14 tests.
+Antigravity verified on Slurm compute node `vnode1` (Job ID 2992886) that the test suite compiled cleanly and produced the EXACT expected deterministic RED state:
+- 8 tests passed (baseline compatibility, cycles, termination, budget).
+- 6 tests FAILED (RED):
+  - `test_t1_ce1_cleanup_must_not_exclude_later_candidate` (panicked: X excluded by cleanup protection, D misassembled)
+  - `test_t2_ce2_fork_failure_must_not_ban_later_seed` (panicked: X excluded by S1's failure, D misassembled)
+  - `test_t3_ce3_consumed_shadow_blocks_decoy` (panicked: consumed R skipped at is_deleted, D misassembled)
+  - `test_t4_ce4_same_exit_shadow_does_not_block` (panicked: unpatched code banned X)
+  - `test_t7_failed_validation_does_not_ban_later_seed` (panicked: validation failure banned R1)
+  - `test_t13_shared_prefix_downstream_shadow_blocks_fork` (panicked: unpatched code banned X)
+
+The RED baseline was committed at `03f0cc0`.
+
+---
+
+# Step 2 Task: Implement Refined Option D in `src/resolve/exspander.rs`
+
+Modify `src/resolve/exspander.rs` to implement Refined Option D. Keep changes minimal, clean, and idiomatic.
+
+## Implementation Details:
+
+### D1. State Decoupling
+1. In `resolve_repeats_exspander_with_stats`:
+   - Rename `rejected_nodes` to `cleanup_protected_nodes: HashSet<u32>`.
+   - Update all existing writers that wrote to `rejected_nodes` (lines 363, 412, 416, 450, 454, 477, 479, 485, 487, 560, 562, 612, 619, 683, 934, 936, 939, 997, 1023, 1026) to write to `cleanup_protected_nodes`.
+   - Note: At Stage 5 cleanup (line 1051), check `cleanup_protected_nodes`:
+     `if !node.is_circular && node.seq_len < 500 && !cleanup_protected_nodes.contains(&node.id) && !connected.contains(&node.id)`
+2. In `find_candidate_paths` and `depth_limit_hides_continuation`:
+   - REMOVE the `rejected_nodes` / `cleanup_protected_nodes` parameter completely!
+   - In `find_candidate_paths`, candidate dequeue check must NOT check `cleanup_protected_nodes` or `rejected_nodes`.
+
+### D2. Consumed Nodes Tracking
+1. In `resolve_repeats_exspander_with_stats`:
+   - Initialize: `let mut consumed_nodes: HashSet<u32> = HashSet::new();`
+   - In the `Ok(assembled_seq)` commit block (around lines 975-1015), when constituent nodes are deleted, record them:
+     `consumed_nodes.extend(full_path.iter().map(|step| step.dir.id()));`
+   - Pass `&consumed_nodes` into `extend_one_direction`, and from there into `find_candidate_paths` and `depth_limit_hides_continuation`.
+
+### D3. Shadow Candidate Traversal
+1. Update `CandidatePath` struct:
+   ```rust
+   pub struct CandidatePath {
+       pub steps: Vec<(DirUnitigId, GraphEdge)>,
+       pub total_weight: f64,
+       pub valid_count: usize,
+       pub through_consumed: bool,
+   }
+   ```
+2. In `find_candidate_paths`:
+   - The BFS queue state carries `through_consumed: bool`:
+     `VecDeque<(DirUnitigId, i64, Vec<(DirUnitigId, GraphEdge)>, SmallVec<[u32; 8]>, bool)>`
+     Initial push has `through_consumed = false`.
+   - On dequeue `(u, sep_u, steps, mut visited, through_consumed)`:
+     - If `u_node.is_circular`: continue.
+     - If `u_node.is_deleted`:
+       - If `consumed_nodes.contains(&u.id())`: allow traversing as a shadow candidate (`let through_consumed = true;`)!
+       - Else: continue (skip nodes deleted by upstream simplify).
+     - If `u_node.seq_len >= 500 && used_unique.contains(&u.id())`:
+       `let through_consumed = true;`
+     - When pushing valid candidate paths to `candidates`:
+       `through_consumed` is set on `CandidatePath`.
+     - When enqueuing child steps, pass the propagated `through_consumed` flag!
+
+### D4. Shadow Decision Guard
+1. Add helper function:
+   ```rust
+   fn shadow_blocks_decision(best: &CandidatePath, shadows: &[CandidatePath], threshold: f64) -> bool {
+       shadows.iter().any(|s| {
+           // A shadow path that is an extension/continuation of best does not conflict with best.
+           // But if best is NOT a prefix of s (i.e. they diverge at or after the fork),
+           // and s has strong evidence relative to best, s blocks best.
+           let is_continuation = s.steps.len() >= best.steps.len()
+               && s.steps[..best.steps.len()]
+                   .iter()
+                   .map(|step| step.0)
+                   .eq(best.steps.iter().map(|step| step.0));
+           !is_continuation && best.total_weight < threshold * s.total_weight
+       })
+   }
+   ```
+2. At both decision sites in `extend_one_direction` (forward extension around line 484 and backward extension around line 617):
+   - Partition candidate paths:
+     ```rust
+     let (shadow_paths, mut candidate_paths): (Vec<_>, Vec<_>) =
+         candidate_paths.into_iter().partition(|c| c.through_consumed);
+     ```
+   - Only `candidate_paths` (which have `!through_consumed`) can be chosen as `best` or committed!
+   - In `is_decision_valid` computation:
+     Add check: `!shadow_blocks_decision(best, &shadow_paths, params.decision_threshold)`:
+     If a conflicting shadow path has strong evidence, `is_decision_valid` is `false`, blocking the commit and safely preserving the fork!
+
+---
+
+# Verification
+1. Ensure the code compiles cleanly (`cargo check`, `cargo test --no-run`).
+2. Run `cargo test --test test_c0_02r_state_semantics_gate` and confirm all 14 tests turn GREEN!
+3. Run `cargo test --test test_c0_02r_incoming_side_branch_gate` and confirm all 9 tests remain GREEN!
+4. Run `cargo test --test test_c0_02r_frontier_preservation_gate` and confirm all 5 tests remain GREEN!

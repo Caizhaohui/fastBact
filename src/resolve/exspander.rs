@@ -186,6 +186,9 @@ struct CandidatePath {
     separation: i64,
     support_count: u32,
     total_weight: f64,
+    /// Route enters a node spliced by an earlier seed, or a unique node this
+    /// seed already uses. Never committed; its evidence still competes.
+    through_consumed: bool,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -203,7 +206,7 @@ fn find_candidate_paths(
     fork_node: DirUnitigId,
     init_sep: i64,
     used_unique: &HashSet<u32>,
-    rejected_nodes: &HashSet<u32>,
+    consumed_nodes: &HashSet<u32>,
     ext_nodes: &HashSet<u32>,
 ) -> (Vec<CandidatePath>, SearchStatus) {
     let max_separation = dist.max_insert as i64;
@@ -230,12 +233,12 @@ fn find_candidate_paths(
                 visited.push(fork_node.id());
                 let mut steps: SmallVec<[(DirUnitigId, GraphEdge); 4]> = SmallVec::new();
                 steps.push((target, edge));
-                queue.push_back((target, sep, steps, visited));
+                queue.push_back((target, sep, steps, visited, false));
             }
         }
     }
 
-    while let Some((u, sep_u, steps, mut visited)) = queue.pop_front() {
+    while let Some((u, sep_u, steps, mut visited, mut through_consumed)) = queue.pop_front() {
         states_visited += 1;
         if states_visited > MAX_DFS_STATES {
             search_status = SearchStatus::Truncated;
@@ -243,14 +246,24 @@ fn find_candidate_paths(
         }
 
         let u_node = &graph.nodes[u.id() as usize];
-        if u_node.is_deleted || u_node.is_circular || rejected_nodes.contains(&u.id()) {
+        // Cleanup protection never filters search. A node deleted upstream of this
+        // resolver is skipped; a node this resolver already spliced stays visible
+        // as a shadow so its pairs can still block a weaker live exit.
+        if u_node.is_circular {
             continue;
+        }
+        if u_node.is_deleted {
+            if consumed_nodes.contains(&u.id()) {
+                through_consumed = true;
+            } else {
+                continue;
+            }
         }
         if u.id() == curr_dir.id() || ext_nodes.contains(&u.id()) {
             continue;
         }
         if u_node.seq_len >= 500 && used_unique.contains(&u.id()) {
-            continue;
+            through_consumed = true;
         }
 
         visited.push(u.id());
@@ -266,6 +279,7 @@ fn find_candidate_paths(
                     separation: sep_u,
                     support_count: count,
                     total_weight: weight,
+                    through_consumed,
                 });
                 if candidate_paths.len() >= MAX_CANDIDATE_PATHS {
                     search_status = SearchStatus::Truncated;
@@ -297,11 +311,24 @@ fn find_candidate_paths(
                     if sep_next <= max_separation {
                         let mut next_steps = steps.clone();
                         next_steps.push((next_target, edge));
-                        queue.push_back((next_target, sep_next, next_steps, visited.clone()));
+                        queue.push_back((
+                            next_target,
+                            sep_next,
+                            next_steps,
+                            visited.clone(),
+                            through_consumed,
+                        ));
                     }
                 }
             }
-        } else if depth_limit_hides_continuation(graph, u, sep_u, &visited, max_separation) {
+        } else if depth_limit_hides_continuation(
+            graph,
+            u,
+            sep_u,
+            &visited,
+            max_separation,
+            consumed_nodes,
+        ) {
             search_status = SearchStatus::Truncated;
             break;
         }
@@ -313,13 +340,16 @@ fn find_candidate_paths(
 /// True when `u` still has a continuation the depth cap did not enqueue.
 ///
 /// Mirrors the enqueue filters: separation budget, unvisited target, and a
-/// sequence-valid edge. Such a neighbor may carry the authentic paired-end route.
+/// sequence-valid edge. A node deleted upstream of this resolver is not a
+/// continuation. A node this resolver already spliced still is, so an unseen
+/// shadow hop leaves the search incomplete.
 fn depth_limit_hides_continuation(
     graph: &CdbgGraph,
     u: DirUnitigId,
     sep_u: i64,
     visited: &SmallVec<[u32; 8]>,
     max_separation: i64,
+    consumed_nodes: &HashSet<u32>,
 ) -> bool {
     let u_node = &graph.nodes[u.id() as usize];
 
@@ -334,6 +364,12 @@ fn depth_limit_hides_continuation(
         if visited.contains(&next_target.id()) {
             continue;
         }
+        // Mirror dequeue: upstream deletions are not routes. A node spliced by
+        // this resolver still is, so an unseen shadow hop keeps the search incomplete.
+        let next_node = &graph.nodes[next_target.id() as usize];
+        if next_node.is_deleted && !consumed_nodes.contains(&next_target.id()) {
+            continue;
+        }
         if let EdgeResolveResult::Valid(edge) = resolve_edge_between(graph, u, next_target) {
             let sep_next = sep_u + u_node.seq_len as i64 - edge.overlap_k as i64;
             if sep_next <= max_separation {
@@ -344,6 +380,20 @@ fn depth_limit_hides_continuation(
     false
 }
 
+/// True when a consumed route that leaves `best`'s exit has enough evidence to
+/// withhold the decision. A shadow that continues through `best` is the same
+/// route and does not compete with it.
+fn shadow_blocks_decision(best: &CandidatePath, shadows: &[CandidatePath], threshold: f64) -> bool {
+    shadows.iter().any(|shadow| {
+        let is_continuation = shadow.steps.len() >= best.steps.len()
+            && shadow.steps[..best.steps.len()]
+                .iter()
+                .map(|step| step.0)
+                .eq(best.steps.iter().map(|step| step.0));
+        !is_continuation && best.total_weight < threshold * shadow.total_weight
+    })
+}
+
 /// Keep outgoing neighbors that the step cap did not merge.
 ///
 /// After the prefix contig deletes `curr_dir`, a short neighbor whose only active
@@ -352,7 +402,7 @@ fn protect_unmerged_frontier(
     graph: &CdbgGraph,
     curr_dir: DirUnitigId,
     ext: &[PathStep],
-    rejected_nodes: &mut HashSet<u32>,
+    cleanup_protected_nodes: &mut HashSet<u32>,
 ) {
     let curr_node = &graph.nodes[curr_dir.id() as usize];
     for edge in curr_node.edges(curr_dir.is_rc()) {
@@ -360,7 +410,7 @@ fn protect_unmerged_frontier(
         if ext.iter().any(|step| step.dir.id() == frontier_id) {
             continue;
         }
-        rejected_nodes.insert(frontier_id);
+        cleanup_protected_nodes.insert(frontier_id);
     }
 }
 
@@ -374,7 +424,8 @@ fn extend_one_direction(
     params: ExspanderParams,
     used_unique: &mut HashSet<u32>,
     stats: &mut JunctionStats,
-    rejected_nodes: &mut HashSet<u32>,
+    cleanup_protected_nodes: &mut HashSet<u32>,
+    consumed_nodes: &HashSet<u32>,
 ) -> Vec<PathStep> {
     let mut ext: Vec<PathStep> = Vec::new();
 
@@ -382,7 +433,7 @@ fn extend_one_direction(
         if ext.len() >= MAX_EXTENSION_STEPS {
             // The node in hand is the last merged step. Its outgoing neighbors were
             // not consumed; keep them out of orphan cleanup after the prefix commit.
-            protect_unmerged_frontier(graph, curr_dir, &ext, rejected_nodes);
+            protect_unmerged_frontier(graph, curr_dir, &ext, cleanup_protected_nodes);
             break;
         }
 
@@ -409,11 +460,11 @@ fn extend_one_direction(
                 }
                 EdgeResolveResult::Ambiguous => {
                     stats.rejected_ambiguous_joins += 1;
-                    rejected_nodes.insert(target.id());
+                    cleanup_protected_nodes.insert(target.id());
                 }
                 EdgeResolveResult::InvalidSequenceOverlap => {
                     stats.rejected_invalid_joins += 1;
-                    rejected_nodes.insert(target.id());
+                    cleanup_protected_nodes.insert(target.id());
                 }
                 EdgeResolveResult::NoEdge => {}
             }
@@ -447,11 +498,11 @@ fn extend_one_direction(
                     }
                     EdgeResolveResult::Ambiguous => {
                         stats.rejected_ambiguous_joins += 1;
-                        rejected_nodes.insert(cand.id());
+                        cleanup_protected_nodes.insert(cand.id());
                     }
                     EdgeResolveResult::InvalidSequenceOverlap => {
                         stats.rejected_invalid_joins += 1;
-                        rejected_nodes.insert(cand.id());
+                        cleanup_protected_nodes.insert(cand.id());
                     }
                     EdgeResolveResult::NoEdge => {}
                 }
@@ -461,7 +512,7 @@ fn extend_one_direction(
                 // Target is a branching repeat node! Evaluate complete candidate paths exiting the repeat
                 let ext_nodes: HashSet<u32> = ext.iter().map(|s: &PathStep| s.dir.id()).collect();
                 let init_sep = target_node.seq_len as i64 - edge_to_target.overlap_k as i64;
-                let (mut candidate_paths, search_status) = find_candidate_paths(
+                let (candidate_paths, search_status) = find_candidate_paths(
                     graph,
                     matrix,
                     dist,
@@ -469,22 +520,26 @@ fn extend_one_direction(
                     target,
                     init_sep,
                     used_unique,
-                    rejected_nodes,
+                    consumed_nodes,
                     &ext_nodes,
                 );
 
                 if let SearchStatus::Truncated = search_status {
-                    rejected_nodes.insert(target.id());
+                    cleanup_protected_nodes.insert(target.id());
                     for &(cand, _) in &next_continuations {
-                        rejected_nodes.insert(cand.id());
+                        cleanup_protected_nodes.insert(cand.id());
                     }
                     break;
                 }
 
+                let (shadow_paths, mut candidate_paths): (Vec<_>, Vec<_>) = candidate_paths
+                    .into_iter()
+                    .partition(|candidate| candidate.through_consumed);
+
                 if candidate_paths.is_empty() {
-                    rejected_nodes.insert(target.id());
+                    cleanup_protected_nodes.insert(target.id());
                     for &(cand, _) in &next_continuations {
-                        rejected_nodes.insert(cand.id());
+                        cleanup_protected_nodes.insert(cand.id());
                     }
                     break;
                 }
@@ -508,7 +563,7 @@ fn extend_one_direction(
                     0.0
                 };
 
-                let is_decision_valid = if best.support_count < params.min_support {
+                let rivals_agree = if best.support_count < params.min_support {
                     false
                 } else if second_count == 0 || second_weight < 1e-9 {
                     // Single candidate: require average weight >= 0.05 (Z <= 2.45) to reject tail outliers
@@ -516,6 +571,8 @@ fn extend_one_direction(
                 } else {
                     (best.total_weight / second_weight) >= params.decision_threshold
                 };
+                let is_decision_valid = rivals_agree
+                    && !shadow_blocks_decision(best, &shadow_paths, params.decision_threshold);
 
                 let all_steps_valid = best.steps.iter().all(|(step_dir, _)| {
                     let step_node = &graph.nodes[step_dir.id() as usize];
@@ -557,9 +614,9 @@ fn extend_one_direction(
                 }
 
                 // Exit repeat decision failed: protect target and candidate exit nodes
-                rejected_nodes.insert(target.id());
+                cleanup_protected_nodes.insert(target.id());
                 for &(cand, _) in &next_continuations {
-                    rejected_nodes.insert(cand.id());
+                    cleanup_protected_nodes.insert(cand.id());
                 }
                 break;
             } else if next_continuations.len() == 1 {
@@ -595,7 +652,7 @@ fn extend_one_direction(
 
         // Case B: multiple outgoing edges directly from curr_dir
         let ext_nodes: HashSet<u32> = ext.iter().map(|s: &PathStep| s.dir.id()).collect();
-        let (mut candidate_paths, search_status) = find_candidate_paths(
+        let (candidate_paths, search_status) = find_candidate_paths(
             graph,
             matrix,
             dist,
@@ -603,20 +660,24 @@ fn extend_one_direction(
             curr_dir,
             0,
             used_unique,
-            rejected_nodes,
+            consumed_nodes,
             &ext_nodes,
         );
 
         if let SearchStatus::Truncated = search_status {
             for &(cand, _) in &valid_continuations {
-                rejected_nodes.insert(cand.id());
+                cleanup_protected_nodes.insert(cand.id());
             }
             break;
         }
 
+        let (shadow_paths, mut candidate_paths): (Vec<_>, Vec<_>) = candidate_paths
+            .into_iter()
+            .partition(|candidate| candidate.through_consumed);
+
         if candidate_paths.is_empty() {
             for &(cand, _) in &valid_continuations {
-                rejected_nodes.insert(cand.id());
+                cleanup_protected_nodes.insert(cand.id());
             }
             break;
         }
@@ -640,7 +701,7 @@ fn extend_one_direction(
             0.0
         };
 
-        let is_decision_valid = if best.support_count < params.min_support {
+        let rivals_agree = if best.support_count < params.min_support {
             false
         } else if second_count == 0 || second_weight < 1e-9 {
             // Single candidate: require average weight >= 0.05 (Z <= 2.45) to reject tail outliers
@@ -648,6 +709,8 @@ fn extend_one_direction(
         } else {
             (best.total_weight / second_weight) >= params.decision_threshold
         };
+        let is_decision_valid = rivals_agree
+            && !shadow_blocks_decision(best, &shadow_paths, params.decision_threshold);
 
         let all_steps_valid = best.steps.iter().all(|(step_dir, _)| {
             let step_node = &graph.nodes[step_dir.id() as usize];
@@ -680,7 +743,7 @@ fn extend_one_direction(
 
         // Branching decision failed: protect candidate targets
         for &(cand, _) in &valid_continuations {
-            rejected_nodes.insert(cand.id());
+            cleanup_protected_nodes.insert(cand.id());
         }
         break;
     }
@@ -843,7 +906,8 @@ pub fn resolve_repeats_exspander_with_stats(
     seeds.sort_by_key(|&id| std::cmp::Reverse(graph.nodes[id as usize].seq_len));
 
     let mut used_in_path: HashSet<u32> = HashSet::new();
-    let mut rejected_nodes: HashSet<u32> = HashSet::new();
+    let mut cleanup_protected_nodes: HashSet<u32> = HashSet::new();
+    let mut consumed_nodes: HashSet<u32> = HashSet::new();
 
     for seed_id in seeds {
         if used_in_path.contains(&seed_id) || graph.nodes[seed_id as usize].is_deleted {
@@ -857,10 +921,30 @@ pub fn resolve_repeats_exspander_with_stats(
         local_used.insert(seed_id);
 
         // 1. Extend forward from 3' end
-        let fwd_ext = extend_one_direction(seed_fwd, graph, matrix, dist, params, &mut local_used, &mut stats, &mut rejected_nodes);
+        let fwd_ext = extend_one_direction(
+            seed_fwd,
+            graph,
+            matrix,
+            dist,
+            params,
+            &mut local_used,
+            &mut stats,
+            &mut cleanup_protected_nodes,
+            &consumed_nodes,
+        );
 
         // 2. Extend backward from 5' end (forward from seed.twin())
-        let bwd_ext = extend_one_direction(seed_fwd.twin(), graph, matrix, dist, params, &mut local_used, &mut stats, &mut rejected_nodes);
+        let bwd_ext = extend_one_direction(
+            seed_fwd.twin(),
+            graph,
+            matrix,
+            dist,
+            params,
+            &mut local_used,
+            &mut stats,
+            &mut cleanup_protected_nodes,
+            &consumed_nodes,
+        );
 
         // Construct full path with explicit PathSteps:
         // bwd_ext is reversed and twinned
@@ -931,12 +1015,12 @@ pub fn resolve_repeats_exspander_with_stats(
             if bwd_failed {
                 // Conservatively reject candidate path when reciprocal edge is missing
                 stats.rejected_invalid_joins += 1;
-                rejected_nodes.insert(seed_id);
+                cleanup_protected_nodes.insert(seed_id);
                 for step in &bwd_ext {
-                    rejected_nodes.insert(step.dir.id());
+                    cleanup_protected_nodes.insert(step.dir.id());
                 }
                 for step in &fwd_ext {
-                    rejected_nodes.insert(step.dir.id());
+                    cleanup_protected_nodes.insert(step.dir.id());
                 }
                 continue;
             }
@@ -973,11 +1057,10 @@ pub fn resolve_repeats_exspander_with_stats(
                     // once constituent nodes are deleted. Register them before that
                     // deletion so Stage 5 orphan cleanup cannot drop their sequence.
                     // Validation failure does not reach here, so external neighbors
-                    // stay out of `rejected_nodes` when the commit is rolled back.
-                    let mut consumed_nodes = HashSet::with_capacity(full_path.len());
-                    for step in &full_path {
-                        consumed_nodes.insert(step.dir.id());
-                    }
+                    // stay out of `cleanup_protected_nodes` when the commit is rolled back.
+                    // These ids are the constituent nodes deleted below. Later seeds
+                    // may traverse them as shadows, but must not splice them again.
+                    consumed_nodes.extend(full_path.iter().map(|step| step.dir.id()));
                     for step in &full_path {
                         let neighbor_ids: Vec<u32> = {
                             let node = &graph.nodes[step.dir.id() as usize];
@@ -994,7 +1077,7 @@ pub fn resolve_repeats_exspander_with_stats(
                             if graph.nodes[neighbor_id as usize].is_deleted {
                                 continue;
                             }
-                            rejected_nodes.insert(neighbor_id);
+                            cleanup_protected_nodes.insert(neighbor_id);
                         }
                     }
 
@@ -1020,10 +1103,10 @@ pub fn resolve_repeats_exspander_with_stats(
                     stats.rejected_invalid_joins += 1;
                     tracing::debug!("[exSPAnder] Path rejected for seed {}: {}", seed_id, err);
                     for &nid in &local_used {
-                        rejected_nodes.insert(nid);
+                        cleanup_protected_nodes.insert(nid);
                     }
                     for step in &full_path {
-                        rejected_nodes.insert(step.dir.id());
+                        cleanup_protected_nodes.insert(step.dir.id());
                     }
                     // Contract 1: Do NOT commit: used_in_path, node deletions, and graph stay untouched
                 }
@@ -1034,9 +1117,9 @@ pub fn resolve_repeats_exspander_with_stats(
     // Post-exSPAnder Cleanup Phase:
     // Defined behavioral contracts:
     // Contract 1: Candidate paths rejected during exploration or validation make ZERO modifications to graph topology.
-    // Contract 2: Short unitigs (< 500 bp) involved in rejected candidate paths are protected via `rejected_nodes`
+    // Contract 2: Short unitigs (< 500 bp) involved in rejected candidate paths are protected via `cleanup_protected_nodes`
     //             and MUST NOT be deleted by cleanup, preserving graph connectivity for downstream stages.
-    // Contract 3: Unrelated short unitigs (< 500 bp, non-circular, not protected by `rejected_nodes` and never incorporated
+    // Contract 3: Unrelated short unitigs (< 500 bp, non-circular, not protected by `cleanup_protected_nodes` and never incorporated
     //             into any contig) are safely cleaned up to eliminate orphan sequencing artifacts.
     let mut connected = HashSet::new();
     for node in graph.nodes.iter().filter(|node| !node.is_deleted) {
@@ -1048,7 +1131,7 @@ pub fn resolve_repeats_exspander_with_stats(
         }
     }
     for node in graph.nodes.iter_mut() {
-        if !node.is_circular && node.seq_len < 500 && !rejected_nodes.contains(&node.id) && !connected.contains(&node.id) {
+        if !node.is_circular && node.seq_len < 500 && !cleanup_protected_nodes.contains(&node.id) && !connected.contains(&node.id) {
             node.is_deleted = true;
         }
     }
