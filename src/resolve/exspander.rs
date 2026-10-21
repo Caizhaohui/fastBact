@@ -136,7 +136,8 @@ pub fn resolve_edge_between(
 /// Normalized score Z = |Span - median| / (1.4826 * MAD).
 /// Gaussian kernel weight w = exp(-0.5 * Z^2).
 ///
-/// Returns (valid_count, total_weight).
+/// Returns (valid_count, total_weight). Each `pair_id` contributes at most once;
+/// the first in-range row for that id supplies the weight.
 pub fn score_candidate_path(
     matrix: &PairLinkMatrix,
     dist: &InsertSizeDist,
@@ -151,6 +152,7 @@ pub fn score_candidate_path(
 
     let mut valid_count = 0u32;
     let mut total_weight = 0.0f64;
+    let mut seen_pair_ids = HashSet::with_capacity(evidences.len());
 
     let mad = if dist.mad > 1.0 { dist.mad } else { 1.0 };
     let norm_factor = 1.4826 * mad;
@@ -158,6 +160,9 @@ pub fn score_candidate_path(
     for ev in evidences {
         let span = ev.dist_u1_exit as i64 + path_separation + ev.dist_u2_entry as i64;
         if span >= dist.min_insert as i64 && span <= dist.max_insert as i64 {
+            if !seen_pair_ids.insert(ev.pair_id) {
+                continue;
+            }
             let z = (span as f64 - dist.median).abs() / norm_factor;
             let w = (-0.5 * z * z).exp();
             valid_count += 1;
@@ -269,7 +274,9 @@ fn find_candidate_paths(
             }
         }
 
-        // Recurse to outgoing neighbors if within depth and separation bounds
+        // Recurse to outgoing neighbors if within depth and separation bounds.
+        // At the depth bound, an admissible continuation means the search is incomplete:
+        // committing a shallower shortcut would ignore that unseen route.
         if steps.len() < MAX_CANDIDATE_DEPTH {
             let sep_u_exit = sep_u + u_node.seq_len as i64;
             if sep_u_exit <= max_separation {
@@ -295,10 +302,71 @@ fn find_candidate_paths(
                     }
                 }
             }
+        } else if depth_limit_hides_continuation(graph, u, sep_u, &visited, max_separation) {
+            search_status = SearchStatus::Truncated;
+            break;
         }
     }
 
     (candidate_paths, search_status)
+}
+
+/// True when `u` still has a continuation the depth cap did not enqueue.
+///
+/// Mirrors the enqueue filters: separation budget, unvisited target, and a
+/// sequence-valid edge. Such a neighbor may carry the authentic paired-end route.
+fn depth_limit_hides_continuation(
+    graph: &CdbgGraph,
+    u: DirUnitigId,
+    sep_u: i64,
+    visited: &SmallVec<[u32; 8]>,
+    max_separation: i64,
+) -> bool {
+    let u_node = &graph.nodes[u.id() as usize];
+    let sep_u_exit = sep_u + u_node.seq_len as i64;
+    if sep_u_exit > max_separation {
+        return false;
+    }
+
+    let mut next_targets = Vec::new();
+    for edge in u_node.edges(u.is_rc()) {
+        if !next_targets.contains(&edge.target) {
+            next_targets.push(edge.target);
+        }
+    }
+
+    for next_target in next_targets {
+        if visited.contains(&next_target.id()) {
+            continue;
+        }
+        if let EdgeResolveResult::Valid(edge) = resolve_edge_between(graph, u, next_target) {
+            let sep_next = sep_u_exit - edge.overlap_k as i64;
+            if sep_next <= max_separation {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// Keep outgoing neighbors that the step cap did not merge.
+///
+/// After the prefix contig deletes `curr_dir`, a short neighbor whose only active
+/// edge ran back to that node would otherwise be removed as an orphan.
+fn protect_unmerged_frontier(
+    graph: &CdbgGraph,
+    curr_dir: DirUnitigId,
+    ext: &[PathStep],
+    rejected_nodes: &mut HashSet<u32>,
+) {
+    let curr_node = &graph.nodes[curr_dir.id() as usize];
+    for edge in curr_node.edges(curr_dir.is_rc()) {
+        let frontier_id = edge.target.id();
+        if ext.iter().any(|step| step.dir.id() == frontier_id) {
+            continue;
+        }
+        rejected_nodes.insert(frontier_id);
+    }
 }
 
 /// Extends path from `curr_dir` in one direction using paired-end read constraints
@@ -317,6 +385,9 @@ fn extend_one_direction(
 
     loop {
         if ext.len() >= MAX_EXTENSION_STEPS {
+            // The node in hand is the last merged step. Its outgoing neighbors were
+            // not consumed; keep them out of orphan cleanup after the prefix commit.
+            protect_unmerged_frontier(graph, curr_dir, &ext, rejected_nodes);
             break;
         }
 
