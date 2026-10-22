@@ -392,13 +392,14 @@ fn admissible_repeat_continuation(
     }
 }
 
-/// True when allowing one re-entry of a pruned short repeat would score an
-/// endpoint the acyclic search cannot see.
+/// True when unrolling pruned short-repeat hops would score an endpoint the
+/// acyclic search cannot see.
 ///
-/// The repeat itself, or a walk that leaves it without a second re-entry, must
-/// land inside the insert-size window with paired-end support from `curr_dir`.
-/// Reaching the depth cap with a still-admissible continuation is also incomplete:
-/// that is the same budget the main search would have refused to close.
+/// Nodes shorter than 500 bp may recur along the probe for as long as the
+/// splicer would accept the hop. A node of at least 500 bp may appear at most
+/// once. The walk must land inside the insert-size window with paired-end
+/// support from `curr_dir`, or reach the depth cap with a still-admissible
+/// continuation. That cap is the same budget the main search refuses to close.
 fn pruned_repeat_hides_supported_endpoint(
     graph: &CdbgGraph,
     matrix: &PairLinkMatrix,
@@ -485,12 +486,28 @@ fn pruned_repeat_hides_supported_endpoint(
             }
         }
         for neighbor in next_targets {
+            // A node of at least 500 bp can appear at most once. A shorter
+            // repeat may recur: the splicer accepts it, and dropping every
+            // later visit hides tandem and alternating-cycle exits.
             if node_visited.contains(&neighbor.id()) {
-                continue;
-            }
-            let neighbor_node = &graph.nodes[neighbor.id() as usize];
-            if neighbor_node.is_deleted && !consumed_nodes.contains(&neighbor.id()) {
-                continue;
+                if neighbor.id() == curr_dir.id() || ext_nodes.contains(&neighbor.id()) {
+                    continue;
+                }
+                if !admissible_repeat_continuation(
+                    graph,
+                    node,
+                    neighbor,
+                    sep,
+                    max_separation,
+                    consumed_nodes,
+                ) {
+                    continue;
+                }
+            } else {
+                let neighbor_node = &graph.nodes[neighbor.id() as usize];
+                if neighbor_node.is_deleted && !consumed_nodes.contains(&neighbor.id()) {
+                    continue;
+                }
             }
             if let EdgeResolveResult::Valid(edge) = resolve_edge_between(graph, node, neighbor) {
                 let sep_next = sep + node_len as i64 - edge.overlap_k as i64;
