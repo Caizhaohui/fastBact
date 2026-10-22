@@ -28,6 +28,12 @@
 //!   exploration, so the consumed shadow cannot be replaced by T3's decoy.
 //! - T17: cloning a `Completed` graph preserves `Completed` and rejects re-entry.
 //! - T18: freshly constructed graphs start in `NeverRun` and resolve independently.
+//!
+//! Phase F13 multi-copy tandem repeat completeness (F12-P1-001):
+//! - T19: three-copy tandem repeat (R→R→R→X) must withhold weak decoy D.
+//! - T20: four-step tandem repeat (R→R→R→R) reaching depth cap must withhold weak decoy D.
+//! - T21: alternating two-node cycle (A⇄B) must withhold weak decoy D.
+//! - T22: reverse-complement twin symmetry of three-copy tandem repeat must withhold weak decoy D.
 
 use std::collections::BTreeSet;
 
@@ -2247,4 +2253,343 @@ fn test_t18_independent_graphs_resolve_separately() {
         "a freshly constructed graph must still resolve after other graphs have completed"
     );
     assert_eq!(graph_c.resolver_state(), ResolverLifecycleState::Completed);
+}
+
+/// T19 / F12-P1-001. Three-copy tandem repeat must withhold weak decoy.
+///
+/// Topology:
+/// S(700) → Q(100) → D(300)
+///        └→ R(120) → X(300)
+///            ↺ (loop)
+///
+/// Overlap: 31 bp.
+/// S→Q→D has sep_D = 100 - 31 - 31 = 38 bp.
+/// Read offsets in S (200) and D (217) give span_D = 200 + 38 + 217 = 455 bp (5 pairs).
+///
+/// Authentic route is S→Q→R→R→R→X (3 copies of R, 4 steps from Q).
+/// For X with read offsets 75 in S and 75 in X:
+/// - 1 copy: sep = 127 bp, span = 277 bp (0 valid pairs in [380, 520]).
+/// - 2 copies: sep = 216 bp, span = 366 bp (0 valid pairs in [380, 520]).
+/// - 3 copies: sep = 305 bp, span = 455 bp (20 valid pairs, perfectly centered).
+///
+/// In F11-A, the repeat probe admitted only one re-entry into R and then pruned
+/// subsequent repeat transitions at line 488 via `node_visited.contains(&neighbor.id())`.
+/// Because 2 copies yield span 366 (< 380), the probe returned false, the main search
+/// reported Complete, and weak decoy D was committed under single-candidate acceptance.
+#[test]
+fn test_t19_three_copy_tandem_repeat_must_withhold_decoy() {
+    let mut graph = CdbgGraph::new(31);
+    let j_sq = junction(0xE19_0001);
+    let j_loop = junction(0xE19_0002);
+    assert_junctions_distinct(&[j_sq.clone(), j_loop.clone()]);
+
+    let s_seq = span_node(&[], 0xE19_0101, 700, &j_sq);
+    let q_seq = span_node(&j_sq, 0xE19_0102, 100, &j_loop);
+    let d_seq = span_node(&j_loop, 0xE19_0103, 300, &[]);
+    let r_seq = span_node(&j_loop, 0xE19_0104, 120, &j_loop);
+    let x_seq = span_node(&j_loop, 0xE19_0105, 300, &[]);
+    assert_eq!(
+        (
+            s_seq.len(),
+            q_seq.len(),
+            d_seq.len(),
+            r_seq.len(),
+            x_seq.len()
+        ),
+        (700, 100, 300, 120, 300)
+    );
+    assert!(q_seq.len() < 500 && d_seq.len() < 500 && r_seq.len() < 500 && x_seq.len() < 500);
+    assert_eq!(&r_seq[..OV], &r_seq[r_seq.len() - OV..]);
+    assert_ne!(
+        &r_seq[OV..OV + OV],
+        &r_seq[..OV],
+        "R's interior must differ from its junction"
+    );
+    assert_ne!(d_seq, x_seq);
+    assert_ne!(&d_seq[OV..], &x_seq[OV..]);
+
+    let s_id = add_node(&mut graph, &s_seq);
+    let q_id = add_node(&mut graph, &q_seq);
+    let d_id = add_node(&mut graph, &d_seq);
+    let r_id = add_node(&mut graph, &r_seq);
+    let x_id = add_node(&mut graph, &x_seq);
+    assert_eq!(
+        (s_id.id(), q_id.id(), d_id.id(), r_id.id(), x_id.id()),
+        (0, 1, 2, 3, 4)
+    );
+    assert!(!graph.nodes[r_id.id() as usize].is_circular);
+
+    for (from, to) in [
+        (s_id, q_id),
+        (q_id, d_id),
+        (q_id, r_id),
+        (r_id, r_id),
+        (r_id, x_id),
+    ] {
+        add_edge(&mut graph, from, to, OV as u8);
+        assert_valid_edge(&graph, from, to, OV as u8);
+    }
+    assert_eq!(graph.nodes[q_id.id() as usize].edges_fwd.len(), 2);
+    assert_eq!(graph.nodes[r_id.id() as usize].edges_fwd.len(), 2);
+
+    let sep_d = q_seq.len() as i64 - OV as i64 - OV as i64;
+    let sep_r1 = sep_d + r_seq.len() as i64 - OV as i64;
+    let sep_r2 = sep_r1 + r_seq.len() as i64 - OV as i64;
+    let sep_r3 = sep_r2 + r_seq.len() as i64 - OV as i64;
+    assert_eq!((sep_d, sep_r1, sep_r2, sep_r3), (38, 127, 216, 305));
+    assert!(sep_r3 <= 520);
+
+    const READ: u32 = 75;
+    assert_read_inside(s_seq.len(), 200, READ);
+    assert_read_inside(d_seq.len(), 217, READ);
+    assert_read_inside(s_seq.len(), 75, READ);
+    assert_read_inside(x_seq.len(), 75, READ);
+
+    let dist = InsertSizeDist {
+        median: 455.0,
+        mad: 20.0,
+        min_insert: 380,
+        max_insert: 520,
+    };
+    let mut matrix = PairLinkMatrix::new();
+    add_pairs_len(&mut matrix, s_id, d_id, 5, 200, 217, 19_100, READ as u16);
+    add_pairs_len(&mut matrix, s_id, x_id, 20, 75, 75, 19_200, READ as u16);
+
+    let d_weight = assert_score(&matrix, &dist, s_id, d_id, sep_d, 5);
+    let (c1, w1) = score_candidate_path(&matrix, &dist, s_id, x_id, sep_r1);
+    assert_eq!((c1, w1), (0, 0.0), "1 copy of R must be outside [380, 520]");
+    let (c2, w2) = score_candidate_path(&matrix, &dist, s_id, x_id, sep_r2);
+    assert_eq!((c2, w2), (0, 0.0), "2 copies of R must be outside [380, 520]");
+    let three_weight = assert_score(&matrix, &dist, s_id, x_id, sep_r3, 20);
+
+    assert!(
+        (d_weight / f64::from(5) - 1.0).abs() < 1e-6,
+        "D's five pairs are centered at median 455 and pass single-candidate rule on their own"
+    );
+    assert!(
+        three_weight / d_weight >= 2.5,
+        "the 3-copy tandem route must be strong enough to defeat D"
+    );
+
+    let misassembly = splice(&[&s_seq, &q_seq, &d_seq], &[OV, OV]);
+    resolve_repeats_exspander_with_stats(&mut graph, &matrix, &dist, params())
+        .expect("repeat resolution failed");
+
+    let d_node = d_id.id() as usize;
+    assert!(
+        !graph.nodes[d_node].is_deleted,
+        "D must not be consumed by a misassembly commit"
+    );
+    assert!(
+        !has_active_seq(&graph, &misassembly),
+        "Misassembled contig S-Q-D must not be created"
+    );
+}
+
+/// T20 / F12-P1-001. Four-step tandem repeat exceeding/hitting candidate depth cap.
+///
+/// Topology: S(700) → Q(100) → D(300)
+///                 └→ R(120) ↺
+///
+/// Route from Q: R → R → R → R (4 steps, reaching MAX_CANDIDATE_DEPTH).
+/// From the 4th R, an outgoing edge leads to X(300).
+/// Because an admissible continuation exists at the depth boundary, the resolver
+/// must mark the search Truncated and withhold the decision, never committing D.
+#[test]
+fn test_t20_four_step_tandem_repeat_must_withhold_decoy() {
+    let mut graph = CdbgGraph::new(31);
+    let j_sq = junction(0xE20_0001);
+    let j_loop = junction(0xE20_0002);
+    assert_junctions_distinct(&[j_sq.clone(), j_loop.clone()]);
+
+    let s_seq = span_node(&[], 0xE20_0101, 700, &j_sq);
+    let q_seq = span_node(&j_sq, 0xE20_0102, 100, &j_loop);
+    let d_seq = span_node(&j_loop, 0xE20_0103, 300, &[]);
+    let r_seq = span_node(&j_loop, 0xE20_0104, 120, &j_loop);
+    let x_seq = span_node(&j_loop, 0xE20_0105, 300, &[]);
+
+    let s_id = add_node(&mut graph, &s_seq);
+    let q_id = add_node(&mut graph, &q_seq);
+    let d_id = add_node(&mut graph, &d_seq);
+    let r_id = add_node(&mut graph, &r_seq);
+    let x_id = add_node(&mut graph, &x_seq);
+
+    for (from, to) in [
+        (s_id, q_id),
+        (q_id, d_id),
+        (q_id, r_id),
+        (r_id, r_id),
+        (r_id, x_id),
+    ] {
+        add_edge(&mut graph, from, to, OV as u8);
+        assert_valid_edge(&graph, from, to, OV as u8);
+    }
+
+    let sep_d = q_seq.len() as i64 - OV as i64 - OV as i64;
+    let sep_r4 = sep_d + 4 * (r_seq.len() as i64 - OV as i64);
+    assert_eq!(sep_d, 38);
+    assert_eq!(sep_r4, 394);
+    assert!(sep_r4 <= 520);
+
+    const READ: u32 = 75;
+    let dist = InsertSizeDist {
+        median: 455.0,
+        mad: 20.0,
+        min_insert: 380,
+        max_insert: 520,
+    };
+    let mut matrix = PairLinkMatrix::new();
+    add_pairs_len(&mut matrix, s_id, d_id, 5, 200, 217, 20_100, READ as u16);
+    add_pairs_len(&mut matrix, s_id, x_id, 20, 30, 31, 20_200, READ as u16);
+
+    let misassembly = splice(&[&s_seq, &q_seq, &d_seq], &[OV, OV]);
+    resolve_repeats_exspander_with_stats(&mut graph, &matrix, &dist, params())
+        .expect("repeat resolution failed");
+
+    let d_node = d_id.id() as usize;
+    assert!(
+        !graph.nodes[d_node].is_deleted,
+        "D must not be consumed by a misassembly commit"
+    );
+    assert!(
+        !has_active_seq(&graph, &misassembly),
+        "Misassembled contig S-Q-D must not be created"
+    );
+}
+
+/// T21 / F12-P1-001. Alternating two-node cycle A ⇄ B must withhold weak decoy.
+///
+/// Topology:
+/// S(700) → Q(100) → D(300)
+///        └→ A(70) ⇄ B(70)
+///                   B → X(300)
+///
+/// Route from Q: A → B → A → B → X (or A → B → A with continuation).
+/// A and B are short (< 500 bp) nodes. Because the cycle involves multiple distinct
+/// physical nodes, pruning any visited node in the probe hides authentic paths.
+#[test]
+fn test_t21_alternating_cycle_repeat_must_withhold_decoy() {
+    let mut graph = CdbgGraph::new(31);
+    let j_sq = junction(0xE21_0001);
+    let j_shared = junction(0xE21_0002);
+    let j_ab = junction(0xE21_0003);
+    assert_junctions_distinct(&[j_sq.clone(), j_shared.clone(), j_ab.clone()]);
+
+    let s_seq = span_node(&[], 0xE21_0101, 700, &j_sq);
+    let q_seq = span_node(&j_sq, 0xE21_0102, 100, &j_shared);
+    let d_seq = span_node(&j_shared, 0xE21_0103, 300, &[]);
+    let a_seq = span_node(&j_shared, 0xE21_0104, 70, &j_ab);
+    let b_seq = span_node(&j_ab, 0xE21_0105, 70, &j_shared);
+    let x_seq = span_node(&j_shared, 0xE21_0106, 300, &[]);
+
+    let s_id = add_node(&mut graph, &s_seq);
+    let q_id = add_node(&mut graph, &q_seq);
+    let d_id = add_node(&mut graph, &d_seq);
+    let a_id = add_node(&mut graph, &a_seq);
+    let b_id = add_node(&mut graph, &b_seq);
+    let x_id = add_node(&mut graph, &x_seq);
+
+    for (from, to) in [
+        (s_id, q_id),
+        (q_id, d_id),
+        (q_id, a_id),
+        (a_id, b_id),
+        (b_id, a_id),
+        (b_id, x_id),
+    ] {
+        add_edge(&mut graph, from, to, OV as u8);
+        assert_valid_edge(&graph, from, to, OV as u8);
+    }
+
+    let sep_d = q_seq.len() as i64 - OV as i64 - OV as i64;
+    assert_eq!(sep_d, 38);
+    const READ: u32 = 75;
+    let dist = InsertSizeDist {
+        median: 455.0,
+        mad: 20.0,
+        min_insert: 380,
+        max_insert: 520,
+    };
+    let mut matrix = PairLinkMatrix::new();
+    add_pairs_len(&mut matrix, s_id, d_id, 5, 200, 217, 21_100, READ as u16);
+    add_pairs_len(&mut matrix, s_id, x_id, 20, 75, 75, 21_200, READ as u16);
+
+    let misassembly = splice(&[&s_seq, &q_seq, &d_seq], &[OV, OV]);
+    resolve_repeats_exspander_with_stats(&mut graph, &matrix, &dist, params())
+        .expect("repeat resolution failed");
+
+    let d_node = d_id.id() as usize;
+    assert!(
+        !graph.nodes[d_node].is_deleted,
+        "D must not be consumed by a misassembly commit"
+    );
+    assert!(
+        !has_active_seq(&graph, &misassembly),
+        "Misassembled contig S-Q-D must not be created"
+    );
+}
+
+/// T22 / F12-P1-001. Reverse-complement twin symmetry of three-copy tandem repeat.
+///
+/// Verifies that when the entire topology is oriented in reverse complement,
+/// the multi-copy tandem repeat search withhold guard functions symmetrically.
+#[test]
+fn test_t22_three_copy_tandem_repeat_rc_symmetry_must_withhold_decoy() {
+    let j_sq = junction(0xE22_0001);
+    let j_loop = junction(0xE22_0002);
+    assert_junctions_distinct(&[j_sq.clone(), j_loop.clone()]);
+
+    let s_seq = span_node(&[], 0xE22_0101, 700, &j_sq);
+    let q_seq = span_node(&j_sq, 0xE22_0102, 100, &j_loop);
+    let d_seq = span_node(&j_loop, 0xE22_0103, 300, &[]);
+    let r_seq = span_node(&j_loop, 0xE22_0104, 120, &j_loop);
+    let x_seq = span_node(&j_loop, 0xE22_0105, 300, &[]);
+
+    let mut fwd_graph = CdbgGraph::new(31);
+    let fs_id = add_node(&mut fwd_graph, &s_seq);
+    let fq_id = add_node(&mut fwd_graph, &q_seq);
+    let fd_id = add_node(&mut fwd_graph, &d_seq);
+    let fr_id = add_node(&mut fwd_graph, &r_seq);
+    let fx_id = add_node(&mut fwd_graph, &x_seq);
+
+    for (from, to) in [
+        (fs_id, fq_id),
+        (fq_id, fd_id),
+        (fq_id, fr_id),
+        (fr_id, fr_id),
+        (fr_id, fx_id),
+    ] {
+        add_edge(&mut fwd_graph, from, to, OV as u8);
+        assert_valid_edge(&fwd_graph, from, to, OV as u8);
+    }
+
+    let dist = InsertSizeDist {
+        median: 455.0,
+        mad: 20.0,
+        min_insert: 380,
+        max_insert: 520,
+    };
+    let mut matrix = PairLinkMatrix::new();
+    const READ: u32 = 75;
+    // Map pairs on twin directions
+    add_pairs_len(&mut matrix, fs_id.twin(), fd_id.twin(), 5, 200, 217, 22_100, READ as u16);
+    add_pairs_len(&mut matrix, fs_id.twin(), fx_id.twin(), 20, 75, 75, 22_200, READ as u16);
+
+    // Also map forward pairs so both directions are symmetric
+    add_pairs_len(&mut matrix, fs_id, fd_id, 5, 200, 217, 22_101, READ as u16);
+    add_pairs_len(&mut matrix, fs_id, fx_id, 20, 75, 75, 22_201, READ as u16);
+
+    let misassembly = splice(&[&s_seq, &q_seq, &d_seq], &[OV, OV]);
+    resolve_repeats_exspander_with_stats(&mut fwd_graph, &matrix, &dist, params())
+        .expect("repeat resolution failed");
+
+    let d_node = fd_id.id() as usize;
+    assert!(
+        !fwd_graph.nodes[d_node].is_deleted,
+        "D must not be consumed by a misassembly commit under RC symmetry"
+    );
+    assert!(
+        !has_active_seq(&fwd_graph, &misassembly),
+        "Misassembled contig S-Q-D must not be created under RC symmetry"
+    );
 }
