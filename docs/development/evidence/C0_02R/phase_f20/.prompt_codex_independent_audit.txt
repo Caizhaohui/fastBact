@@ -1,0 +1,54 @@
+# fastBact — Phase F20: Independent Benchmark Audit Task
+
+## Role & Instructions
+You are acting as the **Independent Auditor (Codex CLI)** for fastBact Phase F20.
+You are conducting a strict, independent, code-level, metric-level, and provenance-level audit of the **Phase F20 Selective Real-Data A/B Benchmark** executed for datasets `R1-001` and `R1-003`.
+
+Your audit report must be written to:
+`docs/development/evidence/C0_02R/phase_f20/codex_independent_benchmark_audit.md`
+
+## Audit Artifacts & Evidence to Inspect
+- Benchmark Results Root: `benchmark-results/C0_02R_f20_selective_20261022/`
+  - `status.tsv` (`REGRESSION_DETECTED`)
+  - `acceptance.tsv`
+  - `assembly_metrics.tsv`
+  - `artifact_checksums.sha256`
+  - `assemblies/R1-001/A`, `assemblies/R1-001/B`
+  - `assemblies/R1-003/A`, `assemblies/R1-003/B`
+  - `quast/R1-001/A`, `quast/R1-001/B`
+  - `quast/R1-003/A`, `quast/R1-003/B`
+  - `logs/` (Slurm execution trace, timing, checksums, allocation, QUAST outputs)
+- Benchmark Evidence Root: `docs/development/evidence/C0_02R/phase_f20/`
+  - `benchmark_manifest.tsv`
+  - `dataset_checksums.tsv`
+  - `binary_checksums.tsv`
+  - `benchmark_commands.sh` and `benchmark_commands.sha256`
+  - `slurm_job_ledger.tsv`
+  - `slurm_accounting.tsv` (Job ID: `3001561`, all 8 steps completed exit 0:0 on `vnode1`)
+  - `assembly_comparison.md` (Data Summary)
+  - `codex_benchmark_analysis.md` (Scientific Interpretation)
+
+## Required Audit Evaluations
+1. **Provenance & Execution Integrity**:
+   - Verify that all raw FASTQ inputs (`R1-001` and `R1-003`) and references match the verified SHA-256 checksums.
+   - Verify that Baseline Version A binary matches SHA-256 `2b184db0f108cb508ca7e591240eddb551bea8ebad90ac5eb8ee360bac78ea38`.
+   - Verify that Candidate Version B binary matches SHA-256 `4fbafeeeffe94abeef42efaa5710f75dbd0af8b234edd2bffba43cc4f50198f0`.
+   - Confirm that Slurm Job `3001561` ran exclusively on compute node `vnode1` (`qfree` partition, 8 cores, 12 GB RAM) with exit code `0:0`.
+   - Verify that production code in `src/` remained completely immutable and identical to the F18 audited tree (`30967bf4940844aeb6b744732bcad6d2a72daab4`).
+2. **Metric Authenticity & Extraction Correctness**:
+   - Verify that the metrics in `assembly_metrics.tsv` faithfully reflect the raw QUAST `report.tsv` files and `/usr/bin/time` execution logs.
+   - Confirm that the displayed metrics for Baseline A match the historical C0-02 baseline results bit-for-bit.
+3. **Acceptance Criteria Verification**:
+   - Evaluate Candidate B against the strict zero-regression criteria:
+     - No increase in extensive or local misassemblies.
+     - No increase in mismatches or indels per 100 kbp.
+     - No decrease in genome fraction.
+     - No decrease in N50 or NGA50.
+   - Confirm the status: `REGRESSION_DETECTED`.
+     - R1-001 failed: Misassemblies increased (4 -> 5), mismatches increased (2.14 -> 2.38), indels increased (0.48 -> 1.03), genome fraction dropped (98.364% -> 98.281%), N50 dropped (58,318 -> 57,462).
+     - R1-003 passed misassemblies (2 -> 1, -50%), mismatches (1.51 -> 1.08, -28.5%), indels (0.04 -> 0.00), N50 (67,452 -> 70,868), NGA50 (63,648 -> 70,010), but failed genome fraction (98.330% -> 98.233%, -0.097 pp).
+4. **Audit Verdict on C0-02R Acceptance**:
+   - Audit ID: `AUDIT-20261022-015`
+   - Overall Verdict: **FAIL (REGRESSION DETECTED)**
+   - Stage C0-02R Status: Strictly **NOT ACCEPTED**
+   - Recommendation: Stop benchmark expansion; preserve all evidence; conduct focused investigation into R1-001 misassembly and indel mechanisms.

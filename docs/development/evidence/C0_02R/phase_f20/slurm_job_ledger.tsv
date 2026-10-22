@@ -1,0 +1,2 @@
+job_id	partition	node	cpus	memory	time_limit	submitted_at	script	purpose	status
+3001561	qfree	vnode1	8	12G	02:30:00	2026-10-22T18:36:39+08:00	benchmark_commands.sh	Phase F20 Selective Real-Data A/B Benchmark (R1-001, R1-003)	COMPLETED (Exit 0:0)

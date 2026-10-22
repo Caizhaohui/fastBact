@@ -107,3 +107,51 @@ Every cross-model execution MUST record the following fields:
 - **Next Action**:
   - Maintain C0-02R strictly as **NOT ACCEPTED**.
   - Await user guidance on whether to address the T39 queue-specific sensitivity assertion or proceed directly to selective real-data benchmarking (`R1-001`, `R1-003`).
+
+---
+
+### [AUDIT-20261022-015] Codex Independent Real-Data Benchmark Audit of Phase F20
+
+- **Task ID**: `C0-02R Phase F20`
+- **Agent**: Codex CLI (v0.163.0)
+- **Model**: `gpt-6.1-sol`
+- **Reasoning Effort**: `medium` (`-c model_reasoning_effort="medium"`)
+- **Permission Level**: `READ_ONLY` (`-s read-only`)
+- **Target Branch**: `feature/c0-02r-phase-f19-codex`
+- **Worktree**: `/hpcfs/fhome/caizhh/Desktop/03_Tool_Development/fastBact-phase-f19-codex-worktree`
+- **Audited HEAD Commit**: `0606be423d187771f5925a83da2cc377c40c2a3d` (Code: `a9930471a73612159a83694d3d661f060042efc8`, Tree: `30967bf4940844aeb6b744732bcad6d2a72daab4`)
+- **Baseline Commit**: `b9727c3ab372f7b995e439d92b72c7a4bfd051cf` (C0-02 baseline)
+- **Slurm Benchmark Job ID**: `3001561` on `vnode1` (Exit code `0:0`, 00:13:13 elapsed)
+- **Benchmark Scope**: Selective real-data A/B benchmark (4 cells: R1-001 A, R1-001 B, R1-003 B, R1-003 A)
+- **Output Report Path**: [`docs/development/evidence/C0_02R/phase_f20/codex_independent_benchmark_audit.md`](./evidence/C0_02R/phase_f20/codex_independent_benchmark_audit.md)
+- **Overall Verdict**: **FAIL (REGRESSION DETECTED)**
+- **C0-02R Acceptance**: **Strictly NOT ACCEPTED**
+- **Independent Acceptance Evaluation**:
+  - Exactly 56 metrics extracted across all 4 assemblies.
+  - Acceptance criteria: 7 comparisons PASS, 7 comparisons REGRESSION $\implies$ Status: `REGRESSION_DETECTED`.
+  - **R1-003 (Marked Improvement)**:
+    - Extensive misassemblies: 2 $\to$ 1 (-50%, PASS)
+    - Mismatches/100kbp: 1.51 $\to$ 1.08 (-28.5%, PASS)
+    - Indels/100kbp: 0.04 $\to$ 0.00 (-100%, PASS)
+    - N50 bp: 67,452 $\to$ 70,868 (+5.06%, PASS)
+    - NGA50 bp: 63,648 $\to$ 70,010 (+10.00%, PASS)
+    - Local misassemblies: 1 $\to$ 1 (0%, PASS)
+    - Genome fraction: 98.330% $\to$ 98.233% (-0.097 pp, REGRESSION)
+  - **R1-001 (Quality Regression)**:
+    - Extensive misassemblies: 4 $\to$ 5 (+25%, REGRESSION)
+    - Mismatches/100kbp: 2.14 $\to$ 2.38 (+11.2%, REGRESSION)
+    - Indels/100kbp: 0.48 $\to$ 1.03 (+114.6%, REGRESSION)
+    - N50 bp: 58,318 $\to$ 57,462 (-1.47%, REGRESSION)
+    - NGA50 bp: 58,318 $\to$ 57,127 (-2.04%, REGRESSION)
+    - Genome fraction: 98.364% $\to$ 98.281% (-0.083 pp, REGRESSION)
+    - Local misassemblies: 0 $\to$ 0 (PASS)
+    - Active unitigs post-exspander: 315 $\to$ 1,728 (5.49×, conservative withholding leaves small unitigs unmerged below 500 bp cutoff)
+- **Auditor Findings**:
+  1. *Acceptance Blocker*: R1-001 fails 6 quality criteria (misassemblies, mismatches, indels, genome fraction, N50, NGA50).
+  2. *Acceptance Blocker*: R1-003 fails genome fraction (-0.097 pp) despite significant improvements in all 5 other criteria.
+  3. *Provenance & Execution Integrity*: All raw input FASTQs, reference genomes, and binaries match recorded SHA-256 digests bit-for-bit.
+  4. *Reproducibility*: Baseline A assemblies reproduce historical benchmark outputs bit-for-bit.
+- **Next Action**:
+  - Stop automated benchmark expansion. Do not expand to full 18 datasets.
+  - Maintain C0-02R strictly as **NOT ACCEPTED**.
+  - Conduct focused forensic investigation into R1-001's additional misassembly breakpoint and indel loci before modifying any code.

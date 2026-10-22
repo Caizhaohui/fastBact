@@ -1,69 +1,87 @@
-# ACTIVE TASK: fastBact C0-02R Phase F19 (Codex-Led P2 Verification Repair)
+# ACTIVE TASK: fastBact C0-02R Phase F20 (Codex-Led Selective Real-Data A/B Benchmark)
 
-**Status**: PHASE_F19_AUDITED_P2_PARTIALLY_OPEN  
-**F18 Audit Baseline**: **AUDIT-20261022-013 (Conditional Pass, 0 P0, 0 P1, 5 P2)**  
-**F19 Independent Audit**: **COMPLETED (AUDIT-20261022-014, Verdict: FAIL on 100% resolution claim; 4 of 5 P2 closed, 1 P2 open)**  
-**Production Correctness**: **VERIFIED SOUND & IMMUTABLE (0 lines changed in `src/`). 0 P0, 0 P1 confirmed blockers**.  
-**Test Suite Status**: **183 passed, 0 failed, 0 ignored across all 16 test targets on compute node `vnode1`**  
-**Overall Acceptance Status**: **NOT ACCEPTED** (C0-02R maintained strictly NOT ACCEPTED pending final gate resolution)  
+**Status**: BENCHMARK_REGRESSION_REVIEW_REQUIRED  
+**Overall Acceptance Status**: **NOT ACCEPTED** (C0-02R maintained strictly NOT ACCEPTED; benchmark regression detected on R1-001)  
+**F20 Independent Audit**: **COMPLETED (AUDIT-20261022-015, Verdict: FAIL; 7 PASS, 7 REGRESSION)**  
+**Benchmark Scope**: Selective real-data A/B benchmark (4 cells: R1-001 A, R1-001 B, R1-003 B, R1-003 A)  
+**Slurm Benchmark Job**: `3001561` on `vnode1` (`qfree`, 8 CPUs, 12 GB RAM, runtime `00:13:13`, exit `0:0`)  
+**Production Code Status**: **100% BIT-IDENTICAL & IMMUTABLE** (Tree SHA `30967bf4940844aeb6b744732bcad6d2a72daab4`, 0 lines changed in `src/`)  
+**Baseline Version A**: `b9727c3ab372f7b995e439d92b72c7a4bfd051cf` (Binary SHA-256: `2b184db0f108cb508ca7e591240eddb551bea8ebad90ac5eb8ee360bac78ea38`)  
+**Candidate Version B**: `0606be423d187771f5925a83da2cc377c40c2a3d` (Binary SHA-256: `4fbafeeeffe94abeef42efaa5710f75dbd0af8b234edd2bffba43cc4f50198f0`)  
 **Main Branch**: `fix/c0-02r-final-gate`  
-**Phase F19 Feature Branch**: `feature/c0-02r-phase-f19-codex` (worktree `fastBact-phase-f19-codex-worktree`, HEAD `a993047`)  
-**Baseline Commit**: `39f11ca90a5de13a5b3d5572d29c191c40d9c03d`  
-**Audited HEAD Commit**: `a9930471a73612159a83694d3d661f060042efc8`  
-**F19 Execution Report**: [`phase_f19_execution_report.md`](./evidence/C0_02R/phase_f19/phase_f19_execution_report.md)  
-**F19 Independent Audit Report**: [`codex_f19_incremental_audit.md`](./evidence/C0_02R/phase_f19/codex_f19_incremental_audit.md) (`AUDIT-20261022-014`)  
-**Prior Audits**: [`AUDIT-20261021-006`](./AUDIT_FINDINGS.md#audit-20261021-006) through [`AUDIT-20261022-014`](./AUDIT_FINDINGS.md#audit-20261022-014)  
-**Next Milestone**: **PHASE_F20_T39_SENSITIVITY_CLOSURE_OR_SELECTIVE_BENCHMARK** (Awaiting user instructions)  
+**Feature Branch**: `feature/c0-02r-phase-f19-codex` (worktree `fastBact-phase-f19-codex-worktree`)  
+**Deliverables Directory**: [`docs/development/evidence/C0_02R/phase_f20/`](./evidence/C0_02R/phase_f20/)  
+- Benchmark Manifest: [`benchmark_manifest.tsv`](./evidence/C0_02R/phase_f20/benchmark_manifest.tsv)  
+- Dataset Checksums: [`dataset_checksums.tsv`](./evidence/C0_02R/phase_f20/dataset_checksums.tsv)  
+- Binary Checksums: [`binary_checksums.tsv`](./evidence/C0_02R/phase_f20/binary_checksums.tsv)  
+- Benchmark Script: [`benchmark_commands.sh`](./evidence/C0_02R/phase_f20/benchmark_commands.sh)  
+- Slurm Ledger: [`slurm_job_ledger.tsv`](./evidence/C0_02R/phase_f20/slurm_job_ledger.tsv)  
+- Slurm Accounting: [`slurm_accounting.tsv`](./evidence/C0_02R/phase_f20/slurm_accounting.tsv)  
+- Assembly Metrics (56 fields): [`assembly_metrics.tsv`](./evidence/C0_02R/phase_f20/assembly_metrics.tsv)  
+- Acceptance Evaluation: [`acceptance.tsv`](./evidence/C0_02R/phase_f20/acceptance.tsv)  
+- Planner Report: [`benchmark_planner_output.md`](./evidence/C0_02R/phase_f20/benchmark_planner_output.md)  
+- Assembly Comparison Report: [`assembly_comparison.md`](./evidence/C0_02R/phase_f20/assembly_comparison.md)  
+- Scientific Interpretation: [`codex_benchmark_analysis.md`](./evidence/C0_02R/phase_f20/codex_benchmark_analysis.md)  
+- Independent Audit Report: [`codex_independent_benchmark_audit.md`](./evidence/C0_02R/phase_f20/codex_independent_benchmark_audit.md) (`AUDIT-20261022-015`)  
 **Coordinator / Orchestrator**: Antigravity CLI  
-**Primary Implementer & Auditor**: Codex CLI (`gpt-6.1-sol`, medium reasoning effort, read-only sandbox)  
+**External AI Resource**: Codex CLI (`gpt-6.1-sol`) for planning, data summary, interpretation, and audit  
 **Last Updated**: 2026-10-22  
 
 ---
 
-## 1. Sub-Task Verification Summary
+## 1. Quantitative Benchmark Results Summary
 
-### F19-A (`F18-P2-001`): Oracle Reciprocal Selection & Tie Rejection — CLOSED
-- Rewrote `independent_resolve_edge` in `tests/test_c0_02r_repeat_completeness_gate.rs`:
-  - Evaluates all reverse edges targeting `from.twin()` without premature overlap prefiltering.
-  - Enforces reciprocal support equality (`rev_max_support == chosen_support`).
-  - Enforces unique reverse winner (`rev_candidates_with_max_support == 1`), rejecting ties.
-- Added `test_oracle_reciprocal_edge_controls` with 5 negative/positive controls.
-- Codex Verdict: **RESOLVED & CLOSED**.
+### Baseline A vs Candidate B Comparison Matrix
 
-### F19-B (`F18-P2-002`): Oracle Initialization Long-Fork Rejection — CLOSED
-- Updated `reference_oracle_search` in `tests/test_c0_02r_repeat_completeness_gate.rs`:
-  - Rejects initial hop if target is a long fork node ($\ge 500$ bp) looping back to itself.
-  - Enforces long unique node invariant across `curr_dir.id()`, `fork_node.id()`, and candidate path.
-- Added `test_oracle_differential_long_fork_self_loop_rejected` (600 bp long loop rejected, 100 bp repeat loop admitted).
-- Codex Verdict: **RESOLVED & CLOSED**.
-
-### F19-C (`F18-P2-003`): Test T30 Decision Reachability & Sensitivity Control — CLOSED
-- Updated `test_t30_multiple_short_prefix_nodes_in_cycle` in `tests/test_c0_02r_state_semantics_gate.rs`:
-  - Fixed junction sequence mismatch ($X$ starts with `j_b`).
-  - Calibrated $C$ length (129 bp) and distances ($d_1 = 110, d_2 = 110 \implies \text{span} = 238 \in [180, 320]$) so Decision 1 commits cleanly and reaches Decision 2 at $P_2$.
-  - At $P_2$, competitor $X$ via cycle actively withholds decoy $D$.
-  - Cloned 6-edge topology sensitivity control proves downstream evidence sensitivity.
-- Codex Verdict: **RESOLVED & CLOSED**.
-
-### F19-D (`F18-P2-004`): Test T37 $\beta$ Boundary Sensitivity — CLOSED
-- Updated `test_t37_beta_distance_boundary` in `tests/test_c0_02r_state_semantics_gate.rs`:
-  - Self-loop repeat re-entry evaluates sharp boundary $\text{sep}_v + \beta == \text{max\_insert}$:
-    - At $L_P = 150$: $\text{sep}_v + \beta = 250 == \text{max\_insert} \implies \text{Probe} \implies \text{Truncated} \implies D$ withheld.
-    - At $L_P = 151$: $\text{sep}_v + \beta = 251 > \text{max\_insert} \implies \text{SafePrune} \implies \text{Complete} \implies D$ commits.
-- Codex Verdict: **RESOLVED & CLOSED**.
-
-### F19-E (`F18-P2-005`): Test T39 Queue Capacity Limit Saturation — PARTIALLY RESOLVED (OPEN P2)
-- Updated `test_t39_queue_capacity_limit_truncates` in `tests/test_c0_02r_state_semantics_gate.rs`:
-  - Evaluated $N = 1025$ branches ($> Q_{\text{MAX}} = 1024$) vs $N = 50$ branches ($\le 1024$).
-- Codex Verdict: **PARTIALLY RESOLVED, REMAINS OPEN AT P2**.
-  - While $N = 1025$ reaches queue capacity saturation, the independent state limit ($S_{\text{MAX}} = 256$) produces identical truncation if the queue guard is removed in black-box test. Requires a queue-specific sensitivity assertion (such as an internal search test) to close.
+| Dataset | Metric | Baseline A (`b9727c3`) | Candidate B (`0606be4`) | $\Delta$ (B - A) | Change (%) | Gate Status |
+| :--- | :--- | :---: | :---: | :---: | :---: | :---: |
+| **R1-001** (*E. coli* K-12 MG1655) | N50 (bp) | 58,318 | 57,462 | -856 | -1.47% | **REGRESSION** |
+| | NGA50 (bp) | 58,318 | 57,127 | -1,191 | -2.04% | **REGRESSION** |
+| | Genome Fraction (%) | 98.364 | 98.281 | -0.083 pp | -0.08% | **REGRESSION** |
+| | Misassemblies | 4 | 5 | +1 | +25.0% | **REGRESSION** |
+| | Local Misassemblies | 0 | 0 | 0 | 0.0% | **PASS** |
+| | Mismatches/100kbp | 2.14 | 2.38 | +0.24 | +11.2% | **REGRESSION** |
+| | Indels/100kbp | 0.48 | 1.03 | +0.55 | +114.6% | **REGRESSION** |
+| | Valid k / k-1 Joins | 987 / 18 | 947 / 10 | -40 / -8 | - | - |
+| | Active Unitigs Residual | 315 | 1,728 | +1,413 | 5.49× | - |
+| **R1-003** (*E. coli* BW25113) | N50 (bp) | 67,452 | 70,868 | +3,416 | +5.06% | **PASS** |
+| | NGA50 (bp) | 63,648 | 70,010 | +6,362 | +10.00% | **PASS** |
+| | Genome Fraction (%) | 98.330 | 98.233 | -0.097 pp | -0.10% | **REGRESSION** |
+| | Misassemblies | 2 | 1 | -1 | -50.0% | **PASS (IMPROVED)** |
+| | Local Misassemblies | 1 | 1 | 0 | 0.0% | **PASS** |
+| | Mismatches/100kbp | 1.51 | 1.08 | -0.43 | -28.5% | **PASS (IMPROVED)** |
+| | Indels/100kbp | 0.04 | 0.00 | -0.04 | -100.0% | **PASS (IMPROVED)** |
+| | Valid k / k-1 Joins | 564 / 7 | 497 / 2 | -67 / -5 | - | - |
+| | Active Unitigs Residual | 300 | 704 | +404 | 2.35× | - |
 
 ---
 
-## 2. Compute Node (`vnode1`) Verification Evidence
+## 2. Key Scientific Findings & Interpretation
 
-| Phase / Step | Scope | Job ID | Result | Details |
-| :--- | :--- | :---: | :---: | :--- |
-| **Oracle Differential Gate** | Repaired independent oracle suite | `3001438` | **8 PASSED (GREEN)** | All 8 differential tests passed cleanly with independent oracle |
-| **Full Gate Verification** | Repeat completeness + State semantics | `3001447` | **50 PASSED (GREEN)** | 8 oracle tests + 42 state semantics tests passed cleanly |
-| **Full Release Regression** | `cargo test --release` (all 16 suites) | `3001450` | **183 PASSED, 0 FAILED, 0 IGNORED** | Full repository test suite passes cleanly across all 16 suites |
+1. **R1-003 Marked Improvement**:
+   - Extensive misassemblies cut in half (2 $\to$ 1, -50%).
+   - Mismatch rate decreased by 28.5% (1.51 $\to$ 1.08 per 100 kbp).
+   - Indel rate dropped to 0.00 per 100 kbp (100% elimination).
+   - Contiguity significantly improved: N50 +5.06%, NGA50 +10.00%.
+   - Confirms that the unified search admissibility contract ($\beta(\text{curr})$ lower bound and Complete/Truncated semantics) suppresses false-positive chimeric repeat bridging on this genome.
+2. **R1-001 Quality Regression**:
+   - One extra extensive misassembly introduced (4 $\to$ 5, +25%).
+   - Indels increased from 0.48 to 1.03 per 100 kbp (+114.6%).
+   - Mismatches rose slightly from 2.14 to 2.38 per 100 kbp (+11.2%).
+   - Active unitigs retained post-exspander increased 5.49× (315 $\to$ 1,728).
+   - Hypothesis: Conservative withholding on ambiguous repeat structures prevented false joins, leaving fragmented unitigs that fell below the 500 bp output cutoff. The shift in contig terminal boundaries altered read recruitment during consensus polishing, shifting base-level calls against the reference genome.
+3. **Independent Audit Verdict (`AUDIT-20261022-015`)**:
+   - Verdict: **FAIL (REGRESSION DETECTED)**.
+   - Status: `BENCHMARK_REGRESSION_REVIEW_REQUIRED`.
+   - C0-02R strictly maintained **NOT ACCEPTED**.
+   - Prohibits expanding to the 18-dataset suite until the extra misassembly on R1-001 is forensically characterized.
+
+---
+
+## 3. Prior Phase Milestone Registry
+
+| Phase | Scope | Baseline / Target | Status | Key Milestone / Commit |
+| :--- | :--- | :--- | :---: | :--- |
+| **Phase F18** | Independent Codex Audit of F17-I Unified Search Admissibility | `c37ef6e` | **CONDITIONAL PASS** | Audit `AUDIT-20261022-013`: 0 P0, 0 P1, 5 P2 test findings. Commit `39f11ca`. |
+| **Phase F19** | Codex-Led P2 Verification Repair | `39f11ca` | **AUDITED (4/5 CLOSED, 1 P2 OPEN)** | Repaired oracle and sensitivity tests (`a993047`). Audit `AUDIT-20261022-014`. Commit `0606be4`. 183 tests pass on `vnode1`. |
+| **Phase F20** | Codex-Led Selective Real-Data A/B Benchmark (R1-001, R1-003) | `0606be4` vs `b9727c3` | **COMPLETED (REGRESSION DETECTED)** | Slurm job `3001561` on `vnode1`. R1-003 improved; R1-001 regressed (+1 misassembly, indels 0.48 $\to$ 1.03). Audit `AUDIT-20261022-015`. C0-02R NOT ACCEPTED. |

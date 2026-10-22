@@ -1,0 +1,7 @@
+dataset_id	file_role	path	sha256
+R1-001	fastq_r1	/hpcfs/fhome/caizhh/Desktop/03_Tool_Development/04_ProkaDiff/data/prjna1088182/fastq/SRR28349173/SRR28349173_1.fastq.gz	e25760e43d1126b9b56d4ee9de79a42cfd28b1de1dd54224bcc24319bbbe5ebf
+R1-001	fastq_r2	/hpcfs/fhome/caizhh/Desktop/03_Tool_Development/04_ProkaDiff/data/prjna1088182/fastq/SRR28349173/SRR28349173_2.fastq.gz	ccf7c2627919cf2df6eb03c06c322d8dea241ad0ce9bdc34e7c6c13f4b983701
+R1-001	reference_fasta	/hpcfs/fhome/caizhh/Desktop/03_Tool_Development/04_ProkaDiff/data/references/m6_identity/NC_000913.3.fasta	6b195feda4c66140f6762742eb8b30c2652f02b45878b174f5b00ef85ecc95d7
+R1-003	fastq_r1	/hpcfs/fhome/caizhh/Desktop/03_Tool_Development/04_ProkaDiff/data/prjna1088182/fastq/SRR28349164/SRR28349164_1.fastq.gz	dd43192faf592582c30dfcf71938d6450f6525b54ca254276dbd8ea16672011b
+R1-003	fastq_r2	/hpcfs/fhome/caizhh/Desktop/03_Tool_Development/04_ProkaDiff/data/prjna1088182/fastq/SRR28349164/SRR28349164_2.fastq.gz	94fd5d094315c46725840a5ce8abbff4fc4842df748930b5b8f4bff9497fc3d1
+R1-003	reference_fasta	/hpcfs/fhome/caizhh/Desktop/03_Tool_Development/04_ProkaDiff/data/references/m6_identity/CP009273.1.fasta	37eade01311f1f81659fad53bf907a93139075a75d115fd3aec2ef09beac2e90

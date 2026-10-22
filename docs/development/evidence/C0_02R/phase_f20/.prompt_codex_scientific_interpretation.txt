@@ -1,0 +1,42 @@
+# fastBact — Phase F20: Scientific Interpretation & Deep Mechanical Analysis Task
+
+## Role & Instructions
+You are acting as the **Scientific Interpretation & Algorithmic Analyst (Codex CLI)** for fastBact Phase F20.
+Your task is to conduct an in-depth scientific, biological, and algorithmic root-cause analysis of the comparative benchmark results between Baseline A (`b9727c3ab372f7b995e439d92b72c7a4bfd051cf`) and Candidate B (`0606be423d187771f5925a83da2cc377c40c2a3d`), outputting your report to `docs/development/evidence/C0_02R/phase_f20/codex_benchmark_analysis.md`.
+
+## Data Reference
+- Metrics Table: `docs/development/evidence/C0_02R/phase_f20/assembly_metrics.tsv`
+- Acceptance Summary: `docs/development/evidence/C0_02R/phase_f20/acceptance.tsv`
+- Comparative Data Summary: `docs/development/evidence/C0_02R/phase_f20/assembly_comparison.md`
+- QUAST Reports:
+  - R1-001 A: `benchmark-results/C0_02R_f20_selective_20261022/quast/R1-001/A/report.tsv`
+  - R1-001 B: `benchmark-results/C0_02R_f20_selective_20261022/quast/R1-001/B/report.tsv`
+  - R1-003 A: `benchmark-results/C0_02R_f20_selective_20261022/quast/R1-003/A/report.tsv`
+  - R1-003 B: `benchmark-results/C0_02R_f20_selective_20261022/quast/R1-003/B/report.tsv`
+- Stage Telemetry:
+  - R1-001 A: `benchmark-results/C0_02R_f20_selective_20261022/assemblies/R1-001/A/stages/stage_telemetry.json`
+  - R1-001 B: `benchmark-results/C0_02R_f20_selective_20261022/assemblies/R1-001/B/stages/stage_telemetry.json`
+  - R1-003 A: `benchmark-results/C0_02R_f20_selective_20261022/assemblies/R1-003/A/stages/stage_telemetry.json`
+  - R1-003 B: `benchmark-results/C0_02R_f20_selective_20261022/assemblies/R1-003/B/stages/stage_telemetry.json`
+- Historical Forensic Context:
+  - Phase E forensic analysis showed consensus polishing base shifts across contig boundaries contribute significantly to mismatch/indel variation when repeat resolution changes contig boundaries.
+  - Phase D old candidate `f241d9d` suffered major mismatch/indel elevation on R1-001 (2.86 / 0.96) and R1-003 (1.67 / 0.04).
+
+## Specific Questions to Address
+1. **Divergent Behavior Between R1-003 and R1-001**:
+   - Why did Candidate B achieve marked improvements on R1-003 (misassemblies halved from 2 to 1, mismatches reduced by 28.5% from 1.51 to 1.08, indels eliminated to 0.00, NGA50 increased by 10% to 70,010 bp)?
+   - Why did Candidate B show regressions on R1-001 (misassemblies increased from 4 to 5, mismatches at 2.38 vs 2.14, indels at 1.03 vs 0.48)?
+2. **Search Admissibility & Conservative Withholding Impact**:
+   - Notice the massive increase in residual active unitigs after exSPAnder in Candidate B:
+     - R1-001: 315 (A) -> 1,728 (B) (5.49x increase)
+     - R1-003: 300 (A) -> 704 (B) (2.35x increase)
+   - How does the unified `classify_hop` contract, evidence floor $\beta(\text{curr})$, and conservative withholding on ambiguous/cycle continuation impact real-data repeat resolution?
+   - Does conservative withholding prevent chimeric joins (as seen in R1-003 misassembly reduction) at the cost of leaving complex repetitive unitigs unmerged (as seen in R1-001)?
+3. **Genome Fraction & Sequence Loss Analysis**:
+   - Both datasets showed a minor reduction in genome fraction: R1-001 (98.364% -> 98.281%, -0.083 pp), R1-003 (98.330% -> 98.233%, -0.097 pp).
+   - Is this sequence loss real, or are valid unitigs simply withheld from final contigs because they remained below the 500 bp length threshold?
+4. **Base Accuracy vs Polishing Boundary Effects**:
+   - Examine whether the mismatch/indel differences stem from exSPAnder repeat resolution itself or downstream consensus polishing base shifts across shifted contig boundaries.
+5. **Architectural & Scientific Takeaway**:
+   - Summarize the algorithmic mechanisms driving these results.
+   - Reiterate clearly that C0-02R remains strictly **NOT ACCEPTED**.

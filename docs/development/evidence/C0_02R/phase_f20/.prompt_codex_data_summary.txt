@@ -1,0 +1,61 @@
+# fastBact — Phase F20: Data Summary and Comparative Report Task
+
+## Role & Instructions
+You are acting as the **Data Summary / Report Specialist (Codex CLI)** for fastBact Phase F20.
+Your task is to analyze the raw benchmark results from `assembly_metrics.tsv` and `acceptance.tsv` (located in `docs/development/evidence/C0_02R/phase_f20/` and `benchmark-results/C0_02R_f20_selective_20261022/`), and write a comprehensive, quantitative markdown comparative report to `docs/development/evidence/C0_02R/phase_f20/assembly_comparison.md`.
+
+## Raw Benchmark Metrics
+File: `docs/development/evidence/C0_02R/phase_f20/assembly_metrics.tsv`
+```tsv
+dataset	version	replicate	min_contig_bp	N50_bp	NGA50_bp	genome_fraction_pct	misassemblies	local_misassemblies	mismatches_per_100kbp	indels_per_100kbp	assembly_wall_s	assembly_peak_rss_kib	junction_valid_k	junction_valid_k_minus_1	junction_rejected_ambiguous	junction_rejected_invalid	active_unitigs_after_exspander
+R1-001	A	1	200	58318	58318	98.364	4	0	2.14	0.48	150.30	1543760	987	18	0	0	315
+R1-001	B	1	200	57462	57127	98.281	5	0	2.38	1.03	148.87	1479280	947	10	0	0	1728
+R1-003	B	1	200	70868	70010	98.233	1	1	1.08	0.00	221.48	1757880	497	2	0	0	704
+R1-003	A	1	200	67452	63648	98.330	2	1	1.51	0.04	219.60	1861880	564	7	0	0	300
+```
+
+File: `docs/development/evidence/C0_02R/phase_f20/acceptance.tsv`
+```tsv
+dataset	metric_column	A	B	result
+R1-001	5	58318	57462	REGRESSION
+R1-001	6	58318	57127	REGRESSION
+R1-001	7	98.364	98.281	REGRESSION
+R1-001	8	4	5	REGRESSION
+R1-001	9	0	0	PASS
+R1-001	10	2.14	2.38	REGRESSION
+R1-001	11	0.48	1.03	REGRESSION
+R1-003	5	67452	70868	PASS
+R1-003	6	63648	70010	PASS
+R1-003	7	98.33	98.233	REGRESSION
+R1-003	8	2	1	PASS
+R1-003	9	1	1	PASS
+R1-003	10	1.51	1.08	PASS
+R1-003	11	0.04	0	PASS
+```
+
+## Slurm Job Execution Data
+- Job ID: `3001561`
+- Node: `vnode1` (Partition `qfree`)
+- Total Elapsed: `00:13:13`
+- All 8 sub-steps completed exit code `0:0` with 0 failures, 0 cancellations, 0 OOMs.
+
+## Required Report Structure
+In `docs/development/evidence/C0_02R/phase_f20/assembly_comparison.md`:
+1. **Executive Summary & Baseline Provenance**:
+   - Baseline A: Commit `b9727c3ab372f7b995e439d92b72c7a4bfd051cf` (Binary SHA `2b184db0f108cb508ca7e591240eddb551bea8ebad90ac5eb8ee360bac78ea38`).
+   - Candidate B: Commit `0606be423d187771f5925a83da2cc377c40c2a3d` / `a9930471a73612159a83694d3d661f060042efc8` (Production Tree `30967bf4940844aeb6b744732bcad6d2a72daab4`, Binary SHA `4fbafeeeffe94abeef42efaa5710f75dbd0af8b234edd2bffba43cc4f50198f0`).
+   - Overall Verdict: `REGRESSION_DETECTED` (R1-001 failed acceptance gates on misassemblies, indels, mismatches, N50; R1-003 passed misassemblies, mismatches, indels, N50, NGA50, but slight GF drop).
+2. **Quantitative Comparison Tables**:
+   - For each dataset (R1-001 and R1-003), compute $\Delta = B - A$ and $\% = 100 \times (B - A) / A$.
+   - Explicitly classify each metric as: `IMPROVED`, `UNCHANGED`, or `REGRESSED`.
+3. **Multi-Domain Metric Analysis**:
+   - Structural Correctness (Misassemblies, Local Misassemblies).
+   - Base-Level Accuracy (Mismatches/100kbp, Indels/100kbp).
+   - Assembly Completeness & Contiguity (N50, NGA50, Genome Fraction).
+   - Graph Simplification & Junction Telemetry (Valid k joins, valid k-1 joins, active unitigs after exSPAnder).
+   - Computing Cost (Wall clock time, Peak RSS).
+4. **Historical Comparison**:
+   - Compare Candidate B vs Phase D old candidate `f241d9d` on R1-001 and R1-003.
+   - Note that R1-001 mismatches improved from 2.86 (Phase D) to 2.38 (Phase F20), but remain above Baseline A (2.14).
+   - Note that R1-003 misassemblies dropped from 2 to 1, and mismatches dropped from 1.51 to 1.08.
+5. **Clear Disposition**: C0-02R remains strictly **NOT ACCEPTED**.

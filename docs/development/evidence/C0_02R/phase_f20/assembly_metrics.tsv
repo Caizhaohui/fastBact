@@ -1,0 +1,5 @@
+dataset	version	replicate	min_contig_bp	N50_bp	NGA50_bp	genome_fraction_pct	misassemblies	local_misassemblies	mismatches_per_100kbp	indels_per_100kbp	assembly_wall_s	assembly_peak_rss_kib	junction_valid_k	junction_valid_k_minus_1	junction_rejected_ambiguous	junction_rejected_invalid	active_unitigs_after_exspander
+R1-001	A	1	200	58318	58318	98.364	4	0	2.14	0.48	150.30	1543760	987	18	0	0	315
+R1-001	B	1	200	57462	57127	98.281	5	0	2.38	1.03	148.87	1479280	947	10	0	0	1728
+R1-003	B	1	200	70868	70010	98.233	1	1	1.08	0.00	221.48	1757880	497	2	0	0	704
+R1-003	A	1	200	67452	63648	98.330	2	1	1.51	0.04	219.60	1861880	564	7	0	0	300

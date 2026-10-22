@@ -1,0 +1,57 @@
+# fastBact — Phase F20: Benchmark Planning Task
+
+## Role & Mission
+You are acting as the **Benchmark Planner (Codex CLI)** for fastBact Phase F20.
+Your task is to formulate the rigorous, reproducible, fail-closed benchmark execution plan for selective real-data A/B evaluation of `R1-001` and `R1-003`.
+
+## Target Commits & Binaries
+- **Baseline Version A**:
+  - Historical Commit: `b9727c3ab372f7b995e439d92b72c7a4bfd051cf` (C0-02 baseline)
+  - Frozen Binary: `/hpcfs/fhome/caizhh/Desktop/03_Tool_Development/01_fastBact/benchmark-results/C0_02R_pe_fix_20261019/targets/B/release/fastBact`
+  - Binary SHA-256: `2b184db0f108cb508ca7e591240eddb551bea8ebad90ac5eb8ee360bac78ea38`
+  - Compiler: `rustc 1.89.0 (29483883e 2025-08-04)`
+- **Candidate Version B**:
+  - Current F19 HEAD Commit: `0606be423d187771f5925a83da2cc377c40c2a3d` (Code commit: `a9930471a73612159a83694d3d661f060042efc8`)
+  - Production Tree SHA: `30967bf4940844aeb6b744732bcad6d2a72daab4` (Identical to F18 audited production tree)
+  - Current Release Binary: `/hpcfs/fhome/caizhh/Desktop/03_Tool_Development/fastBact-phase-f19-codex-worktree/target/release/fastBact`
+  - Binary SHA-256: `4fbafeeeffe94abeef42efaa5710f75dbd0af8b234edd2bffba43cc4f50198f0`
+  - Compiler: `rustc 1.89.0 (29483883e 2025-08-04)`
+  - Cargo.lock SHA-256: `b4f683cbab9eabc7a484ae459641372082b486dccb26b90b14fa840bf4d40295` (Bit-identical to baseline)
+
+## Verified Datasets & Inputs (Checksum Verified on Cluster)
+- **R1-001** (*E. coli* K-12 MG1655 isolate resequencing, 2.4M pairs, ~78x coverage):
+  - FASTQ R1: `/hpcfs/fhome/caizhh/Desktop/03_Tool_Development/04_ProkaDiff/data/prjna1088182/fastq/SRR28349173/SRR28349173_1.fastq.gz`
+    (SHA-256: `e25760e43d1126b9b56d4ee9de79a42cfd28b1de1dd54224bcc24319bbbe5ebf`)
+  - FASTQ R2: `/hpcfs/fhome/caizhh/Desktop/03_Tool_Development/04_ProkaDiff/data/prjna1088182/fastq/SRR28349173/SRR28349173_2.fastq.gz`
+    (SHA-256: `ccf7c2627919cf2df6eb03c06c322d8dea241ad0ce9bdc34e7c6c13f4b983701`)
+  - Reference: `/hpcfs/fhome/caizhh/Desktop/03_Tool_Development/04_ProkaDiff/data/references/m6_identity/NC_000913.3.fasta`
+    (SHA-256: `6b195feda4c66140f6762742eb8b30c2652f02b45878b174f5b00ef85ecc95d7`)
+- **R1-003** (*E. coli* BW25113 lambdaRed, 4.1M pairs, ~132x coverage):
+  - FASTQ R1: `/hpcfs/fhome/caizhh/Desktop/03_Tool_Development/04_ProkaDiff/data/prjna1088182/fastq/SRR28349164/SRR28349164_1.fastq.gz`
+    (SHA-256: `dd43192faf592582c30dfcf71938d6450f6525b54ca254276dbd8ea16672011b`)
+  - FASTQ R2: `/hpcfs/fhome/caizhh/Desktop/03_Tool_Development/04_ProkaDiff/data/prjna1088182/fastq/SRR28349164/SRR28349164_2.fastq.gz`
+    (SHA-256: `94fd5d094315c46725840a5ce8abbff4fc4842df748930b5b8f4bff9497fc3d1`)
+  - Reference: `/hpcfs/fhome/caizhh/Desktop/03_Tool_Development/04_ProkaDiff/data/references/m6_identity/CP009273.1.fasta`
+    (SHA-256: `37eade01311f1f81659fad53bf907a93139075a75d115fd3aec2ef09beac2e90`)
+
+## Execution Directory Structure
+- Results root: `/hpcfs/fhome/caizhh/Desktop/03_Tool_Development/01_fastBact/benchmark-results/C0_02R_f20_selective_20261022`
+  - `assemblies/R1-001/A`
+  - `assemblies/R1-001/B`
+  - `assemblies/R1-003/A`
+  - `assemblies/R1-003/B`
+  - `quast/R1-001/A`
+  - `quast/R1-001/B`
+  - `quast/R1-003/A`
+  - `quast/R1-003/B`
+  - `logs/`
+- Evidence root: `/hpcfs/fhome/caizhh/Desktop/03_Tool_Development/01_fastBact/docs/development/evidence/C0_02R/phase_f20`
+
+## Specific Planning Instructions
+1. Review the inputs and parameters.
+2. Outline the exact execution script `benchmark_commands.sh` to be executed via Slurm on `vnode1` (`qfree`, 8 cores, 12 GB RAM).
+3. Specify the assembly invocations: `fastBact -1 <R1> -2 <R2> -o <outdir> -t 8 --dump-stages <outdir>/stages`.
+4. Specify QUAST invocations: `quast.py -R <ref> <contigs.fa> -o <quast_dir> --threads 8 --min-contig 200 --silent` (and optional `--min-contig 500`).
+5. Define the metric extraction format for `assembly_metrics.tsv` (N50, NGA50, Genome Fraction, Misassemblies, Local Misassemblies, Mismatches/100kbp, Indels/100kbp, Wall Time, Peak RSS, Junction Stats).
+6. State explicit stop conditions and acceptance boundaries.
+7. Output your complete plan to `docs/development/evidence/C0_02R/phase_f20/benchmark_planner_output.md`.
