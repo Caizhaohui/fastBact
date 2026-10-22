@@ -177,6 +177,7 @@ const MAX_CANDIDATE_DEPTH: usize = 4;
 const MAX_CANDIDATE_PATHS: usize = 32;
 const MAX_DFS_STATES: usize = 256;
 const MAX_EXTENSION_STEPS: usize = 64;
+const MAX_QUEUE_CAPACITY: usize = 1024;
 
 #[derive(Clone, Debug)]
 struct CandidatePath {
@@ -197,6 +198,129 @@ enum SearchStatus {
     Truncated,
 }
 
+/// Admission class of one directed hop. Every search walker consumes this and
+/// nothing else, so the hop rule cannot drift between them.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum HopClass {
+    Live {
+        edge: GraphEdge,
+        sep: i64,
+        shadow: bool,
+    },
+    Probe {
+        edge: GraphEdge,
+        sep: i64,
+        shadow: bool,
+    },
+    SafePrune,
+    Inadmissible,
+    Unresolved,
+}
+
+/// Minimum `dist_u1_exit + dist_u2_entry` over evidence anchored at `curr_dir`.
+///
+/// Any later endpoint has `span >= sep + beta`. A hop with `sep + beta > max_insert`
+/// cannot hide an in-window competitor. No anchored evidence yields 0, which
+/// keeps the historical `sep <= max_insert` test.
+fn separation_beta(matrix: &PairLinkMatrix, curr_dir: DirUnitigId) -> i64 {
+    matrix
+        .links
+        .iter()
+        .filter(|((u1, _), _)| *u1 == curr_dir)
+        .flat_map(|(_, evs)| {
+            evs.iter()
+                .map(|ev| ev.dist_u1_exit as i64 + ev.dist_u2_entry as i64)
+        })
+        .min()
+        .unwrap_or(0)
+}
+
+fn distinct_outgoing(graph: &CdbgGraph, node: DirUnitigId) -> Vec<DirUnitigId> {
+    let mut targets = Vec::new();
+    for edge in graph.nodes[node.id() as usize].edges(node.is_rc()) {
+        if !targets.contains(&edge.target) {
+            targets.push(edge.target);
+        }
+    }
+    targets
+}
+
+/// Stateless hop admission. `step_depth == 0` means `u` is the fork and `sep_u`
+/// is already `init_sep`; later hops add `len(u) - overlap`.
+fn classify_hop(
+    graph: &CdbgGraph,
+    u: DirUnitigId,
+    v: DirUnitigId,
+    sep_u: i64,
+    visited: &[u32],
+    step_depth: usize,
+    shadow_u: bool,
+    curr_dir: DirUnitigId,
+    ext_nodes: &HashSet<u32>,
+    used_unique: &HashSet<u32>,
+    consumed_nodes: &HashSet<u32>,
+    max_separation: i64,
+    beta: i64,
+) -> HopClass {
+    // Self-anchor scoring is applied by the walkers. `curr_dir` stays in the
+    // contract so every call site passes the same anchor the bound was built for.
+    let _ = curr_dir;
+    let EdgeResolveResult::Valid(edge) = resolve_edge_between(graph, u, v) else {
+        return HopClass::Inadmissible;
+    };
+
+    let sep_v = (if step_depth == 0 {
+        sep_u
+    } else {
+        sep_u + graph.nodes[u.id() as usize].seq_len as i64
+    }) - edge.overlap_k as i64;
+
+    let v_node = &graph.nodes[v.id() as usize];
+    // Raw insert budget. Equality remains admissible.
+    if sep_v > max_separation {
+        return HopClass::SafePrune;
+    }
+    // Evidence floor on short re-entries only. A repeat hop with
+    // `sep + β > max_insert` cannot hide an in-window endpoint, so the probe
+    // must not walk it (this keeps T26/T27 from false truncation). A first
+    // visit stays inside the raw budget: the depth cap still has to see that
+    // chain, and `β` is passed as 0 by the depth-cap check itself.
+    let repeat_reentry = v_node.seq_len < 500 && visited.contains(&v.id()) && step_depth >= 1;
+    if repeat_reentry && sep_v + beta > max_separation {
+        return HopClass::SafePrune;
+    }
+
+    if v_node.is_deleted && !consumed_nodes.contains(&v.id()) {
+        return HopClass::Inadmissible;
+    }
+
+    if v_node.is_circular {
+        return HopClass::Unresolved;
+    }
+
+    if v_node.seq_len >= 500 && (ext_nodes.contains(&v.id()) || visited.contains(&v.id())) {
+        return HopClass::SafePrune;
+    }
+
+    let shadow_v = shadow_u
+        || (v_node.is_deleted && consumed_nodes.contains(&v.id()))
+        || (v_node.seq_len >= 500 && used_unique.contains(&v.id()));
+
+    if v_node.seq_len < 500 && visited.contains(&v.id()) && step_depth >= 1 {
+        return HopClass::Probe {
+            edge,
+            sep: sep_v,
+            shadow: shadow_v,
+        };
+    }
+
+    HopClass::Live {
+        edge,
+        sep: sep_v,
+        shadow: shadow_v,
+    }
+}
+
 /// Bounded multi-hop candidate path search from `fork_node` to endpoints supported by read pairs with `curr_dir`.
 fn find_candidate_paths(
     graph: &CdbgGraph,
@@ -210,78 +334,75 @@ fn find_candidate_paths(
     ext_nodes: &HashSet<u32>,
 ) -> (Vec<CandidatePath>, SearchStatus) {
     let max_separation = dist.max_insert as i64;
+    let beta = separation_beta(matrix, curr_dir);
     let mut candidate_paths = Vec::new();
     let mut search_status = SearchStatus::Complete;
-    let mut states_visited = 0;
-
-    let fork_node_ref = &graph.nodes[fork_node.id() as usize];
-    let outgoing = fork_node_ref.edges(fork_node.is_rc());
-    let mut unique_targets = Vec::new();
-    for e in outgoing {
-        if !unique_targets.contains(&e.target) {
-            unique_targets.push(e.target);
-        }
-    }
+    let mut states_visited = 0usize;
 
     let mut queue = VecDeque::new();
-    for target in unique_targets {
-        if let EdgeResolveResult::Valid(edge) = resolve_edge_between(graph, fork_node, target) {
-            let sep = init_sep - edge.overlap_k as i64;
-            if sep <= max_separation {
-                let mut visited: SmallVec<[u32; 8]> = SmallVec::new();
-                visited.push(curr_dir.id());
-                visited.push(fork_node.id());
+    for target in distinct_outgoing(graph, fork_node) {
+        let mut visited: SmallVec<[u32; 8]> = SmallVec::new();
+        visited.push(curr_dir.id());
+        visited.push(fork_node.id());
+        match classify_hop(
+            graph,
+            fork_node,
+            target,
+            init_sep,
+            &visited,
+            0,
+            false,
+            curr_dir,
+            ext_nodes,
+            used_unique,
+            consumed_nodes,
+            max_separation,
+            beta,
+        ) {
+            HopClass::Live { edge, sep, shadow } => {
+                if queue.len() >= MAX_QUEUE_CAPACITY {
+                    search_status = SearchStatus::Truncated;
+                    break;
+                }
                 let mut steps: SmallVec<[(DirUnitigId, GraphEdge); 4]> = SmallVec::new();
                 steps.push((target, edge));
-                queue.push_back((target, sep, steps, visited, false));
+                queue.push_back((target, sep, steps, visited, shadow));
             }
+            HopClass::Unresolved => {
+                search_status = SearchStatus::Truncated;
+                break;
+            }
+            HopClass::Probe { .. } | HopClass::SafePrune | HopClass::Inadmissible => {}
         }
     }
 
-    while let Some((u, sep_u, steps, mut visited, mut through_consumed)) = queue.pop_front() {
+    'bfs: while let Some((u, sep_u, steps, mut visited, through_consumed)) = queue.pop_front() {
         states_visited += 1;
         if states_visited > MAX_DFS_STATES {
             search_status = SearchStatus::Truncated;
             break;
         }
 
-        let u_node = &graph.nodes[u.id() as usize];
-        // Cleanup protection never filters search. A node deleted upstream of this
-        // resolver is skipped; a node this resolver already spliced stays visible
-        // as a shadow so its pairs can still block a weaker live exit.
-        if u_node.is_circular {
-            continue;
-        }
-        if u_node.is_deleted {
-            if consumed_nodes.contains(&u.id()) {
-                through_consumed = true;
-            } else {
-                continue;
-            }
-        }
-        if u.id() == curr_dir.id() {
-            continue;
-        }
-        if u_node.seq_len >= 500 && ext_nodes.contains(&u.id()) {
-            continue;
-        }
-        if u_node.seq_len >= 500 && used_unique.contains(&u.id()) {
-            through_consumed = true;
-        }
-
         visited.push(u.id());
 
-        // Check if u is an endpoint with read-pair support from curr_dir
-        let support = matrix.get_support(curr_dir, u);
-        if support > 0 {
-            let (count, weight) = score_candidate_path(matrix, dist, curr_dir, u, sep_u);
-            if count > 0 {
+        // A return to the anchor is evidence about this anchor, not an extension
+        // endpoint. In-window support makes the decision unresolved; either way
+        // the walk continues so a later exit can still be scored.
+        if u.id() == curr_dir.id() {
+            let (support_count, _) = score_candidate_path(matrix, dist, curr_dir, u, sep_u);
+            if support_count > 0 {
+                search_status = SearchStatus::Truncated;
+            }
+        } else {
+            let (support_count, total_weight) =
+                score_candidate_path(matrix, dist, curr_dir, u, sep_u);
+            if support_count > 0 {
                 candidate_paths.push(CandidatePath {
                     steps: steps.clone(),
                     endpoint: u,
                     separation: sep_u,
-                    support_count: count,
-                    total_weight: weight,
+                    support_count,
+                    total_weight,
                     through_consumed,
                 });
                 if candidate_paths.len() >= MAX_CANDIDATE_PATHS {
@@ -291,70 +412,77 @@ fn find_candidate_paths(
             }
         }
 
-        // Recurse to outgoing neighbors if within depth and separation bounds.
-        // At the depth bound, an admissible continuation means the search is incomplete:
-        // committing a shallower shortcut would ignore that unseen route.
-        // The budget is the overlap-adjusted exit, not sep_u + len(u) alone.
         if steps.len() < MAX_CANDIDATE_DEPTH {
-            let outgoing = u_node.edges(u.is_rc());
-            let mut next_targets = Vec::new();
-            for e in outgoing {
-                if !next_targets.contains(&e.target) {
-                    next_targets.push(e.target);
-                }
-            }
-
-            for next_target in next_targets {
-                // BFS does not unroll cycles. A short node may still recur on a
-                // path the splicer accepts. Skipping that hop hides a competitor
-                // only when the re-entry can reach paired-end support inside the
-                // insert-size window; a return that dies outside the window does not.
-                if visited.contains(&next_target.id()) {
-                    if pruned_repeat_hides_supported_endpoint(
-                        graph,
-                        matrix,
-                        dist,
-                        curr_dir,
-                        u,
-                        next_target,
-                        sep_u,
-                        steps.len(),
-                        &visited,
-                        ext_nodes,
-                        max_separation,
-                        consumed_nodes,
-                    ) {
-                        search_status = SearchStatus::Truncated;
-                        break;
-                    }
-                    continue;
-                }
-                if let EdgeResolveResult::Valid(edge) = resolve_edge_between(graph, u, next_target)
-                {
-                    let sep_next = sep_u + u_node.seq_len as i64 - edge.overlap_k as i64;
-                    if sep_next <= max_separation {
-                        let mut next_steps = steps.clone();
-                        next_steps.push((next_target, edge));
-                        queue.push_back((
-                            next_target,
-                            sep_next,
-                            next_steps,
-                            visited.clone(),
+            for neighbor in distinct_outgoing(graph, u) {
+                match classify_hop(
+                    graph,
+                    u,
+                    neighbor,
+                    sep_u,
+                    &visited,
+                    steps.len(),
+                    through_consumed,
+                    curr_dir,
+                    ext_nodes,
+                    used_unique,
+                    consumed_nodes,
+                    max_separation,
+                    beta,
+                ) {
+                    HopClass::Probe { .. } => {
+                        if pruned_repeat_hides_supported_endpoint(
+                            graph,
+                            matrix,
+                            dist,
+                            curr_dir,
+                            u,
+                            neighbor,
+                            sep_u,
+                            steps.len(),
+                            &visited,
+                            ext_nodes,
+                            used_unique,
+                            max_separation,
+                            consumed_nodes,
+                            beta,
                             through_consumed,
-                        ));
+                        ) {
+                            search_status = SearchStatus::Truncated;
+                            break 'bfs;
+                        }
                     }
+                    HopClass::Live { edge, sep, shadow } => {
+                        if queue.len() >= MAX_QUEUE_CAPACITY {
+                            search_status = SearchStatus::Truncated;
+                            break 'bfs;
+                        }
+                        let mut next_steps = steps.clone();
+                        next_steps.push((neighbor, edge));
+                        queue.push_back((neighbor, sep, next_steps, visited.clone(), shadow));
+                    }
+                    HopClass::Unresolved => {
+                        search_status = SearchStatus::Truncated;
+                        break 'bfs;
+                    }
+                    HopClass::SafePrune | HopClass::Inadmissible => {}
                 }
-            }
-            if let SearchStatus::Truncated = search_status {
-                break;
             }
         } else if depth_limit_hides_continuation(
             graph,
             u,
             sep_u,
             &visited,
-            max_separation,
+            steps.len(),
+            through_consumed,
+            curr_dir,
+            ext_nodes,
+            used_unique,
             consumed_nodes,
+            max_separation,
+            // The cap asks whether any raw-budget hop is still unexplored.
+            // The evidence floor applies inside the repeat probe, which is
+            // what decides whether that hop can actually score.
+            0,
         ) {
             search_status = SearchStatus::Truncated;
             break;
@@ -364,45 +492,12 @@ fn find_candidate_paths(
     (candidate_paths, search_status)
 }
 
-/// True when cycle pruning drops a repeat hop `validate_and_splice_path` would accept.
-///
-/// Nodes shorter than 500 bp may recur. A circular node is not a route. A node
-/// deleted upstream of this resolver is not a route; a node this resolver already
-/// spliced still is. The hop must also be sequence-valid and inside the
-/// overlap-adjusted insert-size budget, the same exit test used when enqueueing.
-fn admissible_repeat_continuation(
-    graph: &CdbgGraph,
-    from: DirUnitigId,
-    next_target: DirUnitigId,
-    sep_u: i64,
-    max_separation: i64,
-    consumed_nodes: &HashSet<u32>,
-) -> bool {
-    let next_id = next_target.id();
-    let next_node = &graph.nodes[next_id as usize];
-    if next_node.is_circular || next_node.seq_len >= 500 {
-        return false;
-    }
-    if next_node.is_deleted && !consumed_nodes.contains(&next_id) {
-        return false;
-    }
-    let from_len = graph.nodes[from.id() as usize].seq_len;
-    if let EdgeResolveResult::Valid(edge) = resolve_edge_between(graph, from, next_target) {
-        let sep_next = sep_u + from_len as i64 - edge.overlap_k as i64;
-        sep_next <= max_separation
-    } else {
-        false
-    }
-}
-
 /// True when unrolling pruned short-repeat hops would score an endpoint the
-/// acyclic search cannot see.
+/// acyclic search cannot see, or would run into an unresolved hop.
 ///
-/// Nodes shorter than 500 bp may recur along the probe for as long as the
-/// splicer would accept the hop. A node of at least 500 bp may appear at most
-/// once. The walk must land inside the insert-size window with paired-end
-/// support from `curr_dir`, or reach the depth cap with a still-admissible
-/// continuation. That cap is the same budget the main search refuses to close.
+/// The walk uses `classify_hop`, so a short node may recur and a node of at
+/// least 500 bp may appear at most once. Landing inside the insert window with
+/// paired-end support, including support for the anchor itself, abstains.
 fn pruned_repeat_hides_supported_endpoint(
     graph: &CdbgGraph,
     matrix: &PairLinkMatrix,
@@ -412,65 +507,56 @@ fn pruned_repeat_hides_supported_endpoint(
     next_target: DirUnitigId,
     sep_u: i64,
     steps_before: usize,
-    visited: &SmallVec<[u32; 8]>,
+    visited: &[u32],
     ext_nodes: &HashSet<u32>,
+    used_unique: &HashSet<u32>,
     max_separation: i64,
     consumed_nodes: &HashSet<u32>,
+    beta: i64,
+    shadow_u: bool,
 ) -> bool {
-    if !admissible_repeat_continuation(
+    let (entry_sep, entry_shadow) = match classify_hop(
         graph,
         from,
         next_target,
         sep_u,
-        max_separation,
+        visited,
+        steps_before,
+        shadow_u,
+        curr_dir,
+        ext_nodes,
+        used_unique,
         consumed_nodes,
+        max_separation,
+        beta,
     ) {
-        return false;
-    }
-    let next_node = &graph.nodes[next_target.id() as usize];
-    if next_target.id() == curr_dir.id()
-        || (next_node.seq_len >= 500 && ext_nodes.contains(&next_target.id()))
-    {
-        return false;
-    }
-
-    let from_len = graph.nodes[from.id() as usize].seq_len;
-    let EdgeResolveResult::Valid(entry_edge) = resolve_edge_between(graph, from, next_target)
-    else {
-        return false;
+        HopClass::Live { sep, shadow, .. } | HopClass::Probe { sep, shadow, .. } => (sep, shadow),
+        HopClass::Unresolved => return true,
+        HopClass::SafePrune | HopClass::Inadmissible => return false,
     };
-    let sep_entry = sep_u + from_len as i64 - entry_edge.overlap_k as i64;
 
     let mut queue = VecDeque::new();
-    queue.push_back((next_target, sep_entry, steps_before + 1, visited.clone()));
+    let entry_visited: SmallVec<[u32; 8]> = SmallVec::from_slice(visited);
+    queue.push_back((
+        next_target,
+        entry_sep,
+        steps_before + 1,
+        entry_visited,
+        entry_shadow,
+    ));
     let mut states = 0usize;
 
-    while let Some((node, sep, steps, mut node_visited)) = queue.pop_front() {
+    while let Some((node, sep, steps, mut node_visited, shadow)) = queue.pop_front() {
         states += 1;
-        if states > MAX_DFS_STATES {
+        if states > MAX_DFS_STATES || queue.len() >= MAX_QUEUE_CAPACITY {
             return true;
         }
 
-        let node_ref = &graph.nodes[node.id() as usize];
-        if node_ref.is_circular {
-            continue;
-        }
-        if node_ref.is_deleted && !consumed_nodes.contains(&node.id()) {
-            continue;
-        }
-        let node_len = node_ref.seq_len;
-        if node.id() == curr_dir.id()
-            || (node_len >= 500 && ext_nodes.contains(&node.id()))
-        {
-            continue;
-        }
         node_visited.push(node.id());
 
-        if matrix.get_support(curr_dir, node) > 0 {
-            let (count, _) = score_candidate_path(matrix, dist, curr_dir, node, sep);
-            if count > 0 {
-                return true;
-            }
+        let (count, _) = score_candidate_path(matrix, dist, curr_dir, node, sep);
+        if count > 0 {
+            return true;
         }
 
         if steps >= MAX_CANDIDATE_DEPTH {
@@ -479,110 +565,101 @@ fn pruned_repeat_hides_supported_endpoint(
                 node,
                 sep,
                 &node_visited,
-                max_separation,
+                steps,
+                shadow,
+                curr_dir,
+                ext_nodes,
+                used_unique,
                 consumed_nodes,
+                max_separation,
+                beta,
             ) {
                 return true;
             }
             continue;
         }
 
-        let mut next_targets = Vec::new();
-        for edge in graph.nodes[node.id() as usize].edges(node.is_rc()) {
-            if !next_targets.contains(&edge.target) {
-                next_targets.push(edge.target);
-            }
-        }
-        for neighbor in next_targets {
-            // A node of at least 500 bp can appear at most once. A shorter
-            // repeat may recur: the splicer accepts it, and dropping every
-            // later visit hides tandem and alternating-cycle exits.
-            if node_visited.contains(&neighbor.id()) {
-                let neighbor_node = &graph.nodes[neighbor.id() as usize];
-                if neighbor.id() == curr_dir.id()
-                    || (neighbor_node.seq_len >= 500 && ext_nodes.contains(&neighbor.id()))
-                {
-                    continue;
+        for neighbor in distinct_outgoing(graph, node) {
+            match classify_hop(
+                graph,
+                node,
+                neighbor,
+                sep,
+                &node_visited,
+                steps,
+                shadow,
+                curr_dir,
+                ext_nodes,
+                used_unique,
+                consumed_nodes,
+                max_separation,
+                beta,
+            ) {
+                HopClass::Live {
+                    sep: sep_next,
+                    shadow: shadow_next,
+                    ..
                 }
-                if !admissible_repeat_continuation(
-                    graph,
-                    node,
-                    neighbor,
-                    sep,
-                    max_separation,
-                    consumed_nodes,
-                ) {
-                    continue;
+                | HopClass::Probe {
+                    sep: sep_next,
+                    shadow: shadow_next,
+                    ..
+                } => {
+                    if queue.len() >= MAX_QUEUE_CAPACITY {
+                        return true;
+                    }
+                    queue.push_back((
+                        neighbor,
+                        sep_next,
+                        steps + 1,
+                        node_visited.clone(),
+                        shadow_next,
+                    ));
                 }
-            } else {
-                let neighbor_node = &graph.nodes[neighbor.id() as usize];
-                if neighbor_node.is_deleted && !consumed_nodes.contains(&neighbor.id()) {
-                    continue;
-                }
-            }
-            if let EdgeResolveResult::Valid(edge) = resolve_edge_between(graph, node, neighbor) {
-                let sep_next = sep + node_len as i64 - edge.overlap_k as i64;
-                if sep_next <= max_separation {
-                    queue.push_back((neighbor, sep_next, steps + 1, node_visited.clone()));
-                }
+                HopClass::Unresolved => return true,
+                HopClass::SafePrune | HopClass::Inadmissible => {}
             }
         }
     }
     false
 }
 
-/// True when `u` still has a continuation the depth cap did not enqueue.
+/// True when `u` still has a hop the depth cap did not enqueue.
 ///
-/// Mirrors the enqueue filters: separation budget and a sequence-valid edge.
-/// An unvisited target is a continuation. A visited target is a continuation
-/// only when it is an admissible short repeat still inside the budget. A node
-/// deleted upstream of this resolver is not a continuation. A node this resolver
-/// already spliced still is, so an unseen shadow hop leaves the search incomplete.
+/// Live, probe, and unresolved hops are unfinished business. Safe prunes and
+/// inadmissible hops are not.
 fn depth_limit_hides_continuation(
     graph: &CdbgGraph,
     u: DirUnitigId,
     sep_u: i64,
-    visited: &SmallVec<[u32; 8]>,
-    max_separation: i64,
+    visited: &[u32],
+    step_depth: usize,
+    shadow_u: bool,
+    curr_dir: DirUnitigId,
+    ext_nodes: &HashSet<u32>,
+    used_unique: &HashSet<u32>,
     consumed_nodes: &HashSet<u32>,
+    max_separation: i64,
+    beta: i64,
 ) -> bool {
-    let u_node = &graph.nodes[u.id() as usize];
-
-    let mut next_targets = Vec::new();
-    for edge in u_node.edges(u.is_rc()) {
-        if !next_targets.contains(&edge.target) {
-            next_targets.push(edge.target);
-        }
-    }
-
-    for next_target in next_targets {
-        if visited.contains(&next_target.id()) {
-            if admissible_repeat_continuation(
-                graph,
-                u,
-                next_target,
-                sep_u,
-                max_separation,
-                consumed_nodes,
-            ) {
-                return true;
-            }
-            continue;
-        }
-        // Mirror dequeue: upstream deletions are not routes. A node spliced by
-        // this resolver still is, so an unseen shadow hop keeps the search incomplete.
-        let next_node = &graph.nodes[next_target.id() as usize];
-        if next_node.is_circular {
-            continue;
-        }
-        if next_node.is_deleted && !consumed_nodes.contains(&next_target.id()) {
-            continue;
-        }
-        if let EdgeResolveResult::Valid(edge) = resolve_edge_between(graph, u, next_target) {
-            let sep_next = sep_u + u_node.seq_len as i64 - edge.overlap_k as i64;
-            if sep_next <= max_separation {
-                return true;
-            }
+    for next_target in distinct_outgoing(graph, u) {
+        match classify_hop(
+            graph,
+            u,
+            next_target,
+            sep_u,
+            visited,
+            step_depth,
+            shadow_u,
+            curr_dir,
+            ext_nodes,
+            used_unique,
+            consumed_nodes,
+            max_separation,
+            beta,
+        ) {
+            HopClass::Live { .. } | HopClass::Probe { .. } | HopClass::Unresolved => return true,
+            HopClass::SafePrune | HopClass::Inadmissible => {}
         }
     }
     false
@@ -642,6 +719,17 @@ fn extend_one_direction(
             // The node in hand is the last merged step. Its outgoing neighbors were
             // not consumed; keep them out of orphan cleanup after the prefix commit.
             protect_unmerged_frontier(graph, curr_dir, &ext, cleanup_protected_nodes);
+            break;
+        }
+
+        // Pairs that close on this anchor are not an extension endpoint. An
+        // in-window hit at separation 0 means splicing forward would commit the
+        // anchor as if that evidence were not there.
+        let (self_support, _) = score_candidate_path(matrix, dist, curr_dir, curr_dir, 0);
+        if self_support > 0 {
+            if !ext.is_empty() {
+                protect_unmerged_frontier(graph, curr_dir, &ext, cleanup_protected_nodes);
+            }
             break;
         }
 
@@ -917,8 +1005,8 @@ fn extend_one_direction(
         } else {
             (best.total_weight / second_weight) >= params.decision_threshold
         };
-        let is_decision_valid = rivals_agree
-            && !shadow_blocks_decision(best, &shadow_paths, params.decision_threshold);
+        let is_decision_valid =
+            rivals_agree && !shadow_blocks_decision(best, &shadow_paths, params.decision_threshold);
 
         let all_steps_valid = best.steps.iter().all(|(step_dir, _)| {
             let step_node = &graph.nodes[step_dir.id() as usize];
@@ -1033,10 +1121,8 @@ pub fn validate_and_splice_path(
             }
 
             // 2. Edge truly exists in predecessor outgoing edges
-            let candidate_edges: Vec<&GraphEdge> = outgoing
-                .iter()
-                .filter(|e| e.target == step.dir)
-                .collect();
+            let candidate_edges: Vec<&GraphEdge> =
+                outgoing.iter().filter(|e| e.target == step.dir).collect();
             if candidate_edges.is_empty() {
                 return Err("Incoming edge does not exist in predecessor outgoing edges");
             }
@@ -1053,10 +1139,16 @@ pub fn validate_and_splice_path(
 
             match resolve_edge_between(graph, prev.dir, step.dir) {
                 EdgeResolveResult::Valid(selected) if selected == *edge => {}
-                EdgeResolveResult::Valid(_) => return Err("Incoming edge is not the selected edge"),
+                EdgeResolveResult::Valid(_) => {
+                    return Err("Incoming edge is not the selected edge")
+                }
                 EdgeResolveResult::Ambiguous => return Err("Ambiguous incoming edge"),
-                EdgeResolveResult::InvalidSequenceOverlap => return Err("Sequence overlap mismatch at junction"),
-                EdgeResolveResult::NoEdge => return Err("Incoming edge does not exist in predecessor outgoing edges"),
+                EdgeResolveResult::InvalidSequenceOverlap => {
+                    return Err("Sequence overlap mismatch at junction")
+                }
+                EdgeResolveResult::NoEdge => {
+                    return Err("Incoming edge does not exist in predecessor outgoing edges")
+                }
             }
             match resolve_edge_between(graph, step.dir.twin(), prev.dir.twin()) {
                 EdgeResolveResult::Valid(reciprocal)
@@ -1065,7 +1157,9 @@ pub fn validate_and_splice_path(
                 EdgeResolveResult::Valid(_)
                 | EdgeResolveResult::Ambiguous
                 | EdgeResolveResult::InvalidSequenceOverlap
-                | EdgeResolveResult::NoEdge => return Err("Missing or inconsistent reciprocal edge"),
+                | EdgeResolveResult::NoEdge => {
+                    return Err("Missing or inconsistent reciprocal edge")
+                }
             }
 
             // 7. Real sequence base-by-base match
@@ -1102,10 +1196,16 @@ impl std::fmt::Display for ExspanderError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::AlreadyResolved => {
-                write!(f, "repeat resolution has already been executed on this graph")
+                write!(
+                    f,
+                    "repeat resolution has already been executed on this graph"
+                )
             }
             Self::ResolutionInProgress => {
-                write!(f, "repeat resolution is currently in progress on this graph")
+                write!(
+                    f,
+                    "repeat resolution is currently in progress on this graph"
+                )
             }
             Self::ResolutionPreviouslyFailed => {
                 write!(f, "repeat resolution previously failed on this graph")
@@ -1261,7 +1361,8 @@ fn execute_repeat_resolution(
                 let target_dir = bwd_ext[step_idx - 1].dir.twin();
 
                 let source_node = &graph.nodes[source_dir.id() as usize];
-                let reciprocal = source_node.find_edge(source_dir.is_rc(), target_dir, step.overlap as u8);
+                let reciprocal =
+                    source_node.find_edge(source_dir.is_rc(), target_dir, step.overlap as u8);
 
                 if let Some(&edge) = reciprocal {
                     full_path.push(PathStep {
@@ -1287,7 +1388,8 @@ fn execute_repeat_resolution(
                 let target_dir = seed_fwd;
 
                 let source_node = &graph.nodes[source_dir.id() as usize];
-                let reciprocal = source_node.find_edge(source_dir.is_rc(), target_dir, step0.overlap as u8);
+                let reciprocal =
+                    source_node.find_edge(source_dir.is_rc(), target_dir, step0.overlap as u8);
 
                 if let Some(&edge) = reciprocal {
                     full_path.push(PathStep {
@@ -1417,14 +1519,22 @@ fn execute_repeat_resolution(
     let mut connected = HashSet::new();
     for node in graph.nodes.iter().filter(|node| !node.is_deleted) {
         for edge in node.edges_fwd.iter().chain(&node.edges_rev) {
-            if graph.nodes.get(edge.target.id() as usize).is_some_and(|target| !target.is_deleted) {
+            if graph
+                .nodes
+                .get(edge.target.id() as usize)
+                .is_some_and(|target| !target.is_deleted)
+            {
                 connected.insert(node.id);
                 connected.insert(edge.target.id());
             }
         }
     }
     for node in graph.nodes.iter_mut() {
-        if !node.is_circular && node.seq_len < 500 && !cleanup_protected_nodes.contains(&node.id) && !connected.contains(&node.id) {
+        if !node.is_circular
+            && node.seq_len < 500
+            && !cleanup_protected_nodes.contains(&node.id)
+            && !connected.contains(&node.id)
+        {
             node.is_deleted = true;
         }
     }
