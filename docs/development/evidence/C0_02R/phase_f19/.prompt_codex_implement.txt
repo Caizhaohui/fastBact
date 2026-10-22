@@ -1,0 +1,146 @@
+# fastBact — Phase F19: Codex Implementation Instructions for P2 Verification Repairs
+
+You are acting as the Primary Implementer (Codex CLI with `gpt-6.1-sol`, medium reasoning effort, `workspace-write` sandbox).
+Your task is to implement the exact verification and test repairs addressing all 5 P2 findings from Phase F18 Independent Audit (`AUDIT-20261022-013`).
+
+## Working Directory & Constraints
+- Worktree: `/hpcfs/fhome/caizhh/Desktop/03_Tool_Development/fastBact-phase-f19-codex-worktree`
+- Branch: `feature/c0-02r-phase-f19-codex`
+- Baseline: `39f11ca463e2646d6b2f6fbf6398bfa2e8df81c8`
+- **STRICT PROHIBITION**: Do NOT modify production code in `src/`. All production logic in `src/resolve/exspander.rs` is frozen and verified sound by Phase F18.
+- You are strictly modifying:
+  - `tests/test_c0_02r_repeat_completeness_gate.rs`
+  - `tests/test_c0_02r_state_semantics_gate.rs`
+- Do NOT delete, weaken, or ignore existing tests.
+
+---
+
+## Detailed Implementation Tasks
+
+### 1. F19-A (`F18-P2-001`) — Repair Oracle Reciprocal Selection
+In `tests/test_c0_02r_repeat_completeness_gate.rs`:
+Update `independent_resolve_edge(graph: &CdbgGraph, from: DirUnitigId, to: DirUnitigId) -> Option<usize>`:
+- Forward pass:
+  1. Inspect all edges from `from` with target `to`.
+  2. Filter to valid sequence overlaps ($ov > 0$, $ov \le from\_seq.len() \land ov \le to\_seq.len()$, and $from\_seq[from\_seq.len()-ov..] == to\_seq[..ov]$).
+  3. If empty, return `None`.
+  4. Find `max_support = valid_edges.iter().map(|e| e.support).max().unwrap_or(0)`.
+  5. Retain edges with `support == max_support`. If count != 1, return `None` (tie rejection).
+  6. Let `chosen_ov = matching_edges[0].overlap_k as usize` and `chosen_support = max_support`.
+- Reverse pass (reciprocal edge):
+  1. Inspect all edges from `to.twin()` with target `from.twin()`.
+  2. Filter to valid sequence overlaps: $ov > 0$, $ov \le rev\_from\_seq.len() \land ov \le rev\_to\_seq.len()$, and $rev\_from\_seq[rev\_from\_seq.len()-ov..] == rev\_to\_seq[..ov]$.
+     **DO NOT filter by `ov == chosen_ov` before resolving reverse support!**
+  3. If empty, return `None`.
+  4. Find `rev_max_support = rev_matching_edges.iter().map(|e| e.support).max().unwrap_or(0)`.
+  5. Retain reverse edges with `support == rev_max_support`.
+  6. If count != 1, return `None` (reverse tie rejection).
+  7. Require:
+     - `rev_matching_edges[0].overlap_k as usize == chosen_ov` (reciprocal overlap equality)
+     - `rev_max_support == chosen_support` (reciprocal support equality, matching production line 1156!)
+  8. If all checks pass, return `Some(chosen_ov)`, else `None`.
+- Add unit tests for `independent_resolve_edge`:
+  - `test_oracle_reciprocal_edge_controls`:
+    - Normal symmetric reciprocal edge returns `Some(ov)`.
+    - Asymmetric reciprocal support (fwd support 10, rev support 5) returns `None`.
+    - Tied forward support returns `None`.
+    - Competing reverse overlap (fwd picks ov 31 with support 10; rev has ov 30 with higher support 20) returns `None`.
+
+---
+
+### 2. F19-B (`F18-P2-002`) — Repair Oracle Initialization & Long-Fork Reuse
+In `tests/test_c0_02r_repeat_completeness_gate.rs`:
+In `reference_oracle_search`:
+- In the initial queue population from `fork_node`:
+  - If `edge.target.id() == fork_node.id() && graph.nodes[fork_node.id() as usize].seq_len >= 500`, skip! (A long fork node cannot loop back to itself).
+  - Also ensure that any node $v$ with `seq_len >= 500` is rejected if $v.id() == curr_dir.id() \lor v.id() == fork_node.id() \lor path.iter().any(|d| d.id() == v.id())$.
+- Add differential test `test_oracle_differential_long_fork_self_loop_rejected`:
+  - Construct graph with seed $S$, long fork $F$ ($\ge 500$ bp, e.g. 600 bp) with a self-loop $F \to F$, and exit $F \to D$.
+  - Assert that `reference_oracle_search` rejects the $F \to F$ reuse and does NOT emit candidate paths reusing $F$.
+  - Positive control: With short repeat $P$ ($< 500$ bp, e.g. 100 bp), the self-loop $P \to P \to D$ IS admitted.
+
+---
+
+### 3. F19-C (`F18-P2-003`) — Repair T30 Decision Reachability
+In `tests/test_c0_02r_state_semantics_gate.rs`:
+In `test_t30_multiple_short_prefix_nodes_in_cycle`:
+- Restructure the coordinates and evidence so that the initial $S$-anchored decision proceeds legally to $P_2$:
+  - $S \to P_1 \to P_2$:
+    - $s(P_2) = -31 + 80 - 31 = 18$.
+    - Set `(s_id, p2_id)` with `dist_u1_exit = 110, dist_u2_entry = 110`, count = 20, $N=75$.
+    - Implied fragment span = $110 + 18 + 110 = 238 \in [180, 320]$ (in-window, near median 250!).
+    - Thus Decision 1 from $S$ cleanly and unambiguously selects and commits $P_2$.
+  - At $P_2$:
+    - Fork branches to decoy $D$ ($P_2 \to D$) and cycle continuation $P_2 \to C \to P_1 \to X$.
+    - Set `(p2_id, d_id)`: $s(D) = -31$, `dist_u1_exit = 140, dist_u2_entry = 140`, count = 5.
+      Span = $140 - 31 + 140 = 249 \approx 250 \in [180, 320]$.
+    - Set `(p2_id, x_id)`: $s(X) = -31 + 49 + 49 + 49 = 116$.
+      `dist_u1_exit = 65, dist_u2_entry = 65`, count = 20.
+      Span = $65 + 116 + 65 = 246 \approx 250 \in [180, 320]$.
+    - At $P_2$, competitor $X$ (through cycle reusing short prefix node $P_1$) wins with 20 pairs vs 5 pairs, withholding decoy $D$!
+  - Add explicit assertion verifying that $P_1$ was consumed / committed (proving Decision 1 was executed).
+  - Assert `!graph.nodes[d_node].is_deleted` (decoy $D$ withheld).
+  - Sensitivity control:
+    - Keep the **EXACT SAME TOPOLOGY** (nodes $S, P_1, P_2, C, D, X$ and all 6 edges: $S \to P_1, P_1 \to P_2, P_2 \to D, P_2 \to C, C \to P_1, P_1 \to X$).
+    - Only OMIT the evidence for competitor $X$ (`p2_id -> x_id`).
+    - Resolve repeats.
+    - Assert `graph.nodes[cd.id() as usize].is_deleted` (decoy $D$ commits when competitor evidence is removed!).
+
+---
+
+### 4. F19-D (`F18-P2-004`) — Repair T37 Beta Boundary
+In `tests/test_c0_02r_state_semantics_gate.rs`:
+In `test_t37_beta_distance_boundary`:
+- Replace the linear fixture with an authentic repeat re-entry fixture that genuinely enters `classify_hop` with `repeat_reentry = true` (`v_node.seq_len < 500 && visited.contains(&v.id()) && step_depth >= 1`):
+  - Fork at $C$ ($C$ is short node, e.g. 100 bp).
+  - Fork has two exits:
+    1. $C \to D$ (decoy with evidence from $C$).
+    2. $C \to P$ ($P$ is short repeat node, 100 bp).
+    3. $P \to C$ (repeat re-entry loop back to $C$).
+    4. $C \to X$ (continuation to competitor $X$ with evidence from $C$).
+  - From $C$:
+    Evidence anchored at $C$:
+    - For $D$: `dist_u1_exit = 100, dist_u2_entry = 100` (count = 5), so $\beta(C) = 200$.
+    - For $X$: evidence with `dist_u1_exit = 100, dist_u2_entry = 100` (count = 20).
+    - Insert size distribution: `median: 240.0, max_insert: 250`.
+  - Let $P$ have length $L_P$:
+    On edge $P \to C$:
+    Separation at $C$ revisit is $\text{sep}_C = \text{sep}_P + L_P - 31$.
+    With initial hop $C \to P$, $\text{sep}_P = -31$.
+    So $\text{sep}_C = -31 + L_P - 31 = L_P - 62$.
+    Then $\text{sep}_C + \beta(C) = (L_P - 62) + 200 = L_P + 138$.
+  - Subtest A (Equality Boundary: $\text{sep} + \beta == \text{max\_insert}$):
+    Set $L_P = 112$ bp $\implies \text{sep}_C + \beta = 112 + 138 = 250 == \text{max\_insert}$.
+    Because $250 > 250$ is FALSE, `classify_hop` does NOT SafePrune! It returns `HopClass::Probe`!
+    The repeat probe explores $P \to C \to X$, finds competitor $X$, returns `true` (truncation), and decoy $D$ is WITHHELD (`!graph.nodes[d_id.id() as usize].is_deleted`)!
+  - Subtest B (Greater-Than Boundary: $\text{sep} + \beta == \text{max\_insert} + 1$):
+    Set $L_P = 113$ bp (+1 bp) $\implies \text{sep}_C + \beta = 113 + 138 = 251 > 250$.
+    Because $251 > 250$ is TRUE, `classify_hop` returns `HopClass::SafePrune`!
+    The repeat probe is safely pruned! Competitor $X$ is not explored.
+    Decoy $D$ is the sole candidate and COMMITS (`graph.nodes[d_id.id() as usize].is_deleted`)!
+- This gives single-base sensitivity proof of the $\beta$ boundary!
+
+---
+
+### 5. F19-E (`F18-P2-005`) — Repair T39 Queue Capacity Test
+In `tests/test_c0_02r_state_semantics_gate.rs`:
+In `test_t39_queue_capacity_limit_truncates`:
+- Fork node $S$ has 1025 branches: $S \to D$ (decoy with support) plus 1024 dummy branches $S \to T_0 \dots T_{1023}$.
+- Add paired-end evidence for decoy $D$ from $S$ (e.g. 10 pairs, in-window).
+- When resolving repeats:
+  - `distinct_outgoing` iterates through all branches.
+  - On the 1025th branch, `queue.len() >= MAX_QUEUE_CAPACITY (1024)` triggers `search_status = SearchStatus::Truncated; break;`.
+  - Because `search_status == SearchStatus::Truncated`, decoy $D$ is WITHHELD (`!graph.nodes[d_id.id() as usize].is_deleted`).
+- Sensitivity control:
+  - With only 50 branches (queue does not saturate), the exact same evidence allows $D$ to COMMIT (`graph.nodes[cd.id() as usize].is_deleted`).
+  - This proves that $D$ is withheld specifically because queue capacity saturated to 1024!
+
+---
+
+## Instructions for Codex
+1. Inspect the target files:
+   - `tests/test_c0_02r_repeat_completeness_gate.rs`
+   - `tests/test_c0_02r_state_semantics_gate.rs`
+2. Implement the updates directly into those files.
+3. Ensure syntax is valid, clean, and rustfmt-compliant.
+4. Report changes made clearly.

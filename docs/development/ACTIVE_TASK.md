@@ -1,99 +1,69 @@
-# ACTIVE TASK: fastBact C0-02R Phase E (Evidence, Root Cause & Minimal Repair)
+# ACTIVE TASK: fastBact C0-02R Phase F19 (Codex-Led P2 Verification Repair)
 
-**Status**: PHASE_E_COMPLETED  
-**Overall Acceptance Status**: **NOT ACCEPTED** (C0-02R blocked by Phase D gate failures & P1 vulnerability)  
-**Main Branch**: `fix/c0-02r-final-gate` (HEAD `460541b`)  
-**P2 Feature Branch**: `feature/c0-02r-p2-estimator` (HEAD `b4472a1` in worktree `fastBact-p2-worktree`)  
-**Slurm Benchmark Job**: `2980439` (Status: `COMPLETED`, Elapsed: `00:29:32`, ExitCode: 1:0)  
-**Diagnostic QUAST Job**: `2980935` (Status: `COMPLETED`, ExitCode: 0:0)  
-**Phase D Benchmark Verdict**: **FAIL** (Gate failures on R1-001 and R1-003)  
-**Coordinator**: Antigravity CLI  
-**Last Updated**: 2026-10-19
-
----
-
-## 1. Task Objective & Scope Boundary
-
-Execute Phase E (Evidence, Root Cause & Minimal Repair) under strict constraints:
-- C0-02R remains **NOT ACCEPTED**.
-- No external AI calls (Codex, Claude, Cursor prohibited).
-- No production algorithm refactoring of P1 in Phase E.
-- No auto-merging main or modifying baseline history.
-- All conclusions strictly classified: `VERIFIED`, `UNVERIFIED`, `BLOCKED`.
+**Status**: PHASE_F19_AUDITED_P2_PARTIALLY_OPEN  
+**F18 Audit Baseline**: **AUDIT-20261022-013 (Conditional Pass, 0 P0, 0 P1, 5 P2)**  
+**F19 Independent Audit**: **COMPLETED (AUDIT-20261022-014, Verdict: FAIL on 100% resolution claim; 4 of 5 P2 closed, 1 P2 open)**  
+**Production Correctness**: **VERIFIED SOUND & IMMUTABLE (0 lines changed in `src/`). 0 P0, 0 P1 confirmed blockers**.  
+**Test Suite Status**: **183 passed, 0 failed, 0 ignored across all 16 test targets on compute node `vnode1`**  
+**Overall Acceptance Status**: **NOT ACCEPTED** (C0-02R maintained strictly NOT ACCEPTED pending final gate resolution)  
+**Main Branch**: `fix/c0-02r-final-gate`  
+**Phase F19 Feature Branch**: `feature/c0-02r-phase-f19-codex` (worktree `fastBact-phase-f19-codex-worktree`, HEAD `a993047`)  
+**Baseline Commit**: `39f11ca90a5de13a5b3d5572d29c191c40d9c03d`  
+**Audited HEAD Commit**: `a9930471a73612159a83694d3d661f060042efc8`  
+**F19 Execution Report**: [`phase_f19_execution_report.md`](./evidence/C0_02R/phase_f19/phase_f19_execution_report.md)  
+**F19 Independent Audit Report**: [`codex_f19_incremental_audit.md`](./evidence/C0_02R/phase_f19/codex_f19_incremental_audit.md) (`AUDIT-20261022-014`)  
+**Prior Audits**: [`AUDIT-20261021-006`](./AUDIT_FINDINGS.md#audit-20261021-006) through [`AUDIT-20261022-014`](./AUDIT_FINDINGS.md#audit-20261022-014)  
+**Next Milestone**: **PHASE_F20_T39_SENSITIVITY_CLOSURE_OR_SELECTIVE_BENCHMARK** (Awaiting user instructions)  
+**Coordinator / Orchestrator**: Antigravity CLI  
+**Primary Implementer & Auditor**: Codex CLI (`gpt-6.1-sol`, medium reasoning effort, read-only sandbox)  
+**Last Updated**: 2026-10-22  
 
 ---
 
-## 2. Phase E Deliverables & Verification Evidence
+## 1. Sub-Task Verification Summary
 
-### E1 — Benchmark Final Evidence & R1-001 Root Cause (`VERIFIED`)
-- **Slurm Benchmark Job `2980439` Outcome**:
-  - 18/18 assembly and QUAST evaluations completed.
-  - S1-COV-150X, S1-COV-003, S1-COV-015, S1-COV-030: Zero misassemblies, invariant FASTA identity on 150X and 003.
-  - **Gate Failures (3 total)**:
-    - R1-001: `mismatches_per_100kbp` increased vs B (2.14 $\to$ 2.86).
-    - R1-001: `indels_per_100kbp` increased vs B (0.48 $\to$ 0.96).
-    - R1-003: `mismatches_per_100kbp` increased vs B (1.51 $\to$ 1.67).
-- **R1-001 517 bp Contig Investigation (`VERIFIED`)**:
-  - Extra contig `contig_164` (517 bp) in C aligned with **100.0% identity (0 mismatches, 0 indels)** against `NC_000913.3`.
-  - Diagnostic QUAST on compute node `vnode1` (Job `2980935`) with `contig_164` removed yielded **identical error rates** (2.86 mismatches, 0.96 indels).
-  - **Root Cause Confirmed**: The regression was **not** caused by `contig_164`, but by small consensus polishing sequence shifts across 10 other contigs (e.g. `contig_51`, `contig_105`) arising from anchor selection differences.
+### F19-A (`F18-P2-001`): Oracle Reciprocal Selection & Tie Rejection — CLOSED
+- Rewrote `independent_resolve_edge` in `tests/test_c0_02r_repeat_completeness_gate.rs`:
+  - Evaluates all reverse edges targeting `from.twin()` without premature overlap prefiltering.
+  - Enforces reciprocal support equality (`rev_max_support == chosen_support`).
+  - Enforces unique reverse winner (`rev_candidates_with_max_support == 1`), rejecting ties.
+- Added `test_oracle_reciprocal_edge_controls` with 5 negative/positive controls.
+- Codex Verdict: **RESOLVED & CLOSED**.
 
-### E2 — P2 Insert-Size Estimator Repair (`VERIFIED`)
-- **Worktree**: `/hpcfs/fhome/caizhh/Desktop/03_Tool_Development/fastBact-p2-worktree` (`feature/c0-02r-p2-estimator`).
-- **Deterministic Red Tests**: `tests/test_c0_02r_p2_estimator.rs` demonstrated systematic +119 bp and +59 bp estimation biases on unpatched code due to unrecovered k-mer seed step offsets and missing strand orientation checks.
-- **Minimal Fix**: Updated `map_read` in `src/resolve/mapper.rs` to track seed `step` and compute true fragment span with inward-facing (FR) concordancy enforcement:
-  - Subcase A: R1 fwd, R2 rev $\implies \text{span} = (\text{pos}_2 + k + \text{step}_2) - (\text{pos}_1 - \text{step}_1)$.
-  - Subcase B: R1 rev, R2 fwd $\implies \text{span} = (\text{pos}_1 + k + \text{step}_1) - (\text{pos}_2 - \text{step}_2)$.
-  - Same-strand (FF/RR) and outward pairs rejected.
-- **Green Validation**: All 5 deterministic P2 tests passed; full 106 test release regression suite passed on Slurm compute node `vnode1`.
-- **Commit**: `480ff5f`.
+### F19-B (`F18-P2-002`): Oracle Initialization Long-Fork Rejection — CLOSED
+- Updated `reference_oracle_search` in `tests/test_c0_02r_repeat_completeness_gate.rs`:
+  - Rejects initial hop if target is a long fork node ($\ge 500$ bp) looping back to itself.
+  - Enforces long unique node invariant across `curr_dir.id()`, `fork_node.id()`, and candidate path.
+- Added `test_oracle_differential_long_fork_self_loop_rejected` (600 bp long loop rejected, 100 bp repeat loop admitted).
+- Codex Verdict: **RESOLVED & CLOSED**.
 
-### E3 — P1 Production Counterexample (`VERIFIED`)
-- **Deterministic Test**: `tests/test_c0_02r_p1_counterexample.rs` (commit `b4472a1`).
-- **Graph Topology**: $A \to R \to B$ (erroneous shortcut, span 391 bp) vs $A \to R \to C \to B$ (true path, span 600 bp).
-- **Library Span**: Calibrated median 600 bp, $\text{min\_insert} = 530$, $\text{max\_insert} = 670$.
-- **Finding**: Through full production pipeline (`map_paired_reads` $\to$ `PairLinkMatrix` $\to$ `resolve_repeats_exspander_with_stats`), exSPAnder chose the shortcut $A \to R \to B$ (assembled unitig length 1038 bp) because `PairLinkMatrix` only stored aggregate counts `(A, B) = 25`, deleting intermediate unitig $C$ (240 bp).
-- **Conclusion**: Codex Finding P1 is **empirically VERIFIED** in the production pipeline.
+### F19-C (`F18-P2-003`): Test T30 Decision Reachability & Sensitivity Control — CLOSED
+- Updated `test_t30_multiple_short_prefix_nodes_in_cycle` in `tests/test_c0_02r_state_semantics_gate.rs`:
+  - Fixed junction sequence mismatch ($X$ starts with `j_b`).
+  - Calibrated $C$ length (129 bp) and distances ($d_1 = 110, d_2 = 110 \implies \text{span} = 238 \in [180, 320]$) so Decision 1 commits cleanly and reaches Decision 2 at $P_2$.
+  - At $P_2$, competitor $X$ via cycle actively withholds decoy $D$.
+  - Cloned 6-edge topology sensitivity control proves downstream evidence sensitivity.
+- Codex Verdict: **RESOLVED & CLOSED**.
 
-### E4 — P1 Minimal Design Proposal (`COMPLETED`)
-- Formulated non-invasive, lightweight fragment coordinate architecture:
-  - Document: [`docs/development/P1_MINIMAL_DESIGN_PROPOSAL.md`](./P1_MINIMAL_DESIGN_PROPOSAL.md).
-  - Stores compact 4-byte `FragmentTerminalDistance` (`dist_from_u1_exit: u16, dist_from_u2_entry: u16`) in `SmallVec`.
-  - Enables $O(1)$ candidate path span verification against `[min_insert, max_insert]`.
-  - Memory overhead $< 0.1\%$ peak RSS; computation overhead $< 0.05\%$.
-  - Preserves backwards compatibility; safe non-resolution fallback.
+### F19-D (`F18-P2-004`): Test T37 $\beta$ Boundary Sensitivity — CLOSED
+- Updated `test_t37_beta_distance_boundary` in `tests/test_c0_02r_state_semantics_gate.rs`:
+  - Self-loop repeat re-entry evaluates sharp boundary $\text{sep}_v + \beta == \text{max\_insert}$:
+    - At $L_P = 150$: $\text{sep}_v + \beta = 250 == \text{max\_insert} \implies \text{Probe} \implies \text{Truncated} \implies D$ withheld.
+    - At $L_P = 151$: $\text{sep}_v + \beta = 251 > \text{max\_insert} \implies \text{SafePrune} \implies \text{Complete} \implies D$ commits.
+- Codex Verdict: **RESOLVED & CLOSED**.
+
+### F19-E (`F18-P2-005`): Test T39 Queue Capacity Limit Saturation — PARTIALLY RESOLVED (OPEN P2)
+- Updated `test_t39_queue_capacity_limit_truncates` in `tests/test_c0_02r_state_semantics_gate.rs`:
+  - Evaluated $N = 1025$ branches ($> Q_{\text{MAX}} = 1024$) vs $N = 50$ branches ($\le 1024$).
+- Codex Verdict: **PARTIALLY RESOLVED, REMAINS OPEN AT P2**.
+  - While $N = 1025$ reaches queue capacity saturation, the independent state limit ($S_{\text{MAX}} = 256$) produces identical truncation if the queue guard is removed in black-box test. Requires a queue-specific sensitivity assertion (such as an internal search test) to close.
 
 ---
 
-## 3. Work in Progress / Next Steps
+## 2. Compute Node (`vnode1`) Verification Evidence
 
-1. [x] E1: Slurm Job 2980439 completion and R1-001 root-cause verification.
-2. [x] E2: P2 estimator deterministic red/green fix and full regression on `vnode1` (Commit `480ff5f`).
-3. [x] E3: P1 production counterexample verifying shortcut vulnerability (Commit `b4472a1`).
-4. [x] E4: P1 minimal design proposal drafted (`P1_MINIMAL_DESIGN_PROPOSAL.md`).
-5. [x] E5: Synchronize `ACTIVE_TASK.md`, `HANDOFF.md`, and `AUDIT_FINDINGS.md`.
-6. [ ] Await user guidance on initiating Phase F (production implementation of P1 span verification).
-
----
-
-## 4. External Model Invocation Governance & Registry
-
-### Routing & Security Status
-- **Codex CLI**: Verified local binary (`~/.local/bin/codex`), Auth: ChatGPT token subscription. Regular execution configured with `-c model_reasoning_effort="medium"`.
-- **Claude Code**: Verified wrapper (`~/.local/share/omniakey/bin/claude`). **Security Finding**: Routes to third-party API gateway `https://api.omniakey.com` via API key `~/.config/omniakey/claude-api-key` (not web subscription OAuth). **Status: Automatic invocation strictly PROHIBITED; requires explicit user approval.**
-- **Cursor Agent**: Verified local binary (`~/.local/bin/agent`). Default `--mode=ask` enforced for read-only. Status: Capability-checked only.
-
-### Executed Audits
-- **[AUDIT-20261019-001] Codex Medium Read-Only Review for PE Fidelity & Insert-Size Bounds**:
-  - **Task ID**: `C0-02R-PE-FIX-AUDIT`
-  - **Agent**: Codex CLI (`gpt-6.1-sol`, medium reasoning effort, read-only)
-  - **Exit Code**: 0 (63,169 tokens)
-  - **Verdict**: **FAIL**
-  - **Findings**:
-    - Orientation handling verified correct; no mixing or double counting.
-    - **P1**: Unitig-pair count aggregation allows shortcuts when alternate longer traversals share endpoints (`src/resolve/exspander.rs:223`, `src/resolve/mapper.rs:144`).
-    - **P2**: Insert size estimator uses k-mer anchor coordinates instead of read endpoints (`src/resolve/mapper.rs:116`).
-    - **Sufficiency of `gap <= max_insert`**: **NO** (scalar gap is only boundary separation, not fragment span; does not establish that authentic fragments span the selected traversal).
-  - **Full Report**: [`docs/development/evidence/C0_02R/phase_d/codex_review_pe_fix.md`](./evidence/C0_02R/phase_d/codex_review_pe_fix.md)
-  - **Ledger Record**: [`docs/development/AUDIT_FINDINGS.md`](./AUDIT_FINDINGS.md)
-
+| Phase / Step | Scope | Job ID | Result | Details |
+| :--- | :--- | :---: | :---: | :--- |
+| **Oracle Differential Gate** | Repaired independent oracle suite | `3001438` | **8 PASSED (GREEN)** | All 8 differential tests passed cleanly with independent oracle |
+| **Full Gate Verification** | Repeat completeness + State semantics | `3001447` | **50 PASSED (GREEN)** | 8 oracle tests + 42 state semantics tests passed cleanly |
+| **Full Release Regression** | `cargo test --release` (all 16 suites) | `3001450` | **183 PASSED, 0 FAILED, 0 IGNORED** | Full repository test suite passes cleanly across all 16 suites |

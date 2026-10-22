@@ -1,0 +1,99 @@
+# fastBact — Phase F19: Independent Incremental Diff Audit of P2 Verification Repairs
+
+## Context & Audit Target
+
+You are acting as the **Independent Auditor (Codex CLI)** for fastBact Phase F19.
+You are conducting a strict, independent, code-level correctness, graph invariant, mathematical soundness, and test validity audit of the incremental verification repairs in **Phase F19 (Codex-Led P2 Verification Repair)** implemented on branch `feature/c0-02r-phase-f19-codex` in worktree `fastBact-phase-f19-codex-worktree`.
+
+### Git DAG & Target Commits
+- Audit Target HEAD: `a993047a0640d85a111164923e2b9f67a211fe9c` (Commit `a993047`: test(resolve): repair oracle reciprocal selection, long-fork initialization, T30 reachability, T37 beta boundary, and T39 queue saturation (F19-A-E))
+- Baseline Commit: `39f11ca463e2646d6b2f6fbf6398bfa2e8df81c8` (Phase F18 evidence HEAD recording AUDIT-20261022-013)
+- Phase F18 Independent Codex Audit: `AUDIT-20261022-013` (`docs/development/evidence/C0_02R/phase_f18/codex_f17_independent_audit.md`, Verdict: `CONDITIONAL PASS`)
+- Prior Findings to Audit: 5 secondary P2 verification findings (`F18-P2-001` through `F18-P2-005`)
+- Target Branch: `feature/c0-02r-phase-f19-codex`
+- Target Worktree: `fastBact-phase-f19-codex-worktree`
+
+### Scope of Files to Review
+Inspect the actual repository and diff directly:
+`git diff 39f11ca..HEAD`
+Modified test suites and test oracles:
+- `tests/test_c0_02r_repeat_completeness_gate.rs` (F19-A: oracle reciprocal selection & tie rejection; F19-B: oracle initialization long-fork rejection)
+- `tests/test_c0_02r_state_semantics_gate.rs` (F19-C: T30 reachability & sensitivity control; F19-D: T37 beta boundary sensitivity; F19-E: T39 queue capacity limit saturation)
+Production code in `src/`:
+- MUST BE COMPLETELY UNCHANGED (`git diff 39f11ca..HEAD -- src/` must be 0 lines).
+
+**Notice**: Your audit must be based strictly on actual Rust source code analysis, graph invariant tracing, mathematical proofs, and test sensitivity analysis. Do NOT rely on self-assessments or prior reviewer conclusions. C0-02R acceptance status remains **NOT ACCEPTED**.
+
+---
+
+## Detailed Audit Mandates
+
+### 1. Verification of F18-P2-001: Oracle Reciprocal Selection Ambiguity & Tie Rejection
+Examine the changes to `independent_resolve_edge` in `tests/test_c0_02r_repeat_completeness_gate.rs` and the new test `test_oracle_reciprocal_edge_controls`.
+1. Did `independent_resolve_edge` remove the premature filtering `ov == chosen_ov` before resolving reverse support?
+2. Does it inspect all reverse edges from `to.twin()` with target `from.twin()`?
+3. Does it enforce reciprocal support equality (`rev_max_support == chosen_support`)?
+4. Does it enforce strict unique winner on the reverse strand (`rev_candidates_with_max_support == 1`), rejecting ties?
+5. Does `test_oracle_reciprocal_edge_controls` comprehensively cover:
+   - Symmetric positive control (valid reciprocal edge with identical support)
+   - Asymmetric support negative control (reverse support does not match forward support)
+   - Tied forward support negative control (two forward edges have tied maximum support)
+   - Competing reverse overlap with higher support (reverse has another edge with greater support)
+   - Tied reverse support negative control (reverse has two edges with tied maximum support)?
+Is `F18-P2-001` fully resolved?
+
+### 2. Verification of F18-P2-002: Oracle Initialization Long-Fork Reuse
+Examine the changes to `reference_oracle_search` in `tests/test_c0_02r_repeat_completeness_gate.rs` and the new test `test_oracle_differential_long_fork_self_loop_rejected`.
+1. In `reference_oracle_search`, does the initial hop admission check if `target.id() == fork_node.id() && target_node.seq_len >= 500` or if `target.id() == curr_dir.id()`?
+2. Does it strictly enforce the long unique node invariant (`target_node.seq_len >= 500`) across `curr_dir.id()`, `fork_node.id()`, and `path`?
+3. In `test_oracle_differential_long_fork_self_loop_rejected`, does it verify that:
+   - A long fork node (seq_len = 600 bp >= 500) with a self-loop is rejected by the oracle (returns `Ambiguous` or `SafePrune`)?
+   - A short repeat node (seq_len = 100 bp < 500) with a self-loop is admitted as an unrolled candidate?
+Is `F18-P2-002` fully resolved?
+
+### 3. Verification of F18-P2-003: Test T30 Decision Reachability & Sensitivity Control
+Examine `test_t30_multiple_short_prefix_nodes_in_cycle` in `tests/test_c0_02r_state_semantics_gate.rs`.
+1. Was the junction sequence mismatch between $P_1$ and $X$ repaired (prefix `j_b`)?
+2. Was intermediate node $C$ length and distance calibration adjusted so that Decision 1 ($S \to P_1 \to P_2$) commits cleanly within `[min_insert, max_insert]` without false truncation?
+3. At Decision 2 (fork at $P_2$), does competitor path $P_2 \to C \to P_1 \to X$ score within `[180, 320]` and withhold decoy $D$?
+4. Is the sensitivity control constructed using the exact same 6-edge graph topology (`ctrl_graph = graph.clone()`), omitting only evidence for competitor $X$, and asserting that decoy $D$ commits?
+5. Does this eliminate the false confidence where T30 previously withheld at an earlier $S$-anchored step?
+Is `F18-P2-003` fully resolved?
+
+### 4. Verification of F18-P2-004: Test T37 $\beta$ Boundary Sensitivity
+Examine `test_t37_beta_distance_boundary` in `tests/test_c0_02r_state_semantics_gate.rs`.
+1. Does the test evaluate the exact sharp boundary $\text{sep}_v + \beta == \text{max\_insert}$ vs $\text{max\_insert} + 1$?
+2. Is repeat re-entry triggered using a short repeat node $P$ with a self-loop $P \to P$ where `v_node.seq_len < 500 && visited.contains(&v.id()) && step_depth >= 1`?
+3. With parameters `max_insert = 250`, $\beta(S) = 162$:
+   - For $L_P = 150$: $\text{sep}_v + \beta = (150 - 62) + 162 = 250 == \text{max\_insert} \implies \text{HopClass::Probe} \implies \text{Truncated} \implies D$ withheld (`!d_deleted`)?
+   - For $L_P = 151$: $\text{sep}_v + \beta = (151 - 62) + 162 = 251 > \text{max\_insert} \implies \text{HopClass::SafePrune} \implies \text{Complete} \implies D$ commits (`d_deleted`)?
+4. Does this prove the boundary sensitivity of $\beta$ in production `classify_hop`?
+Is `F18-P2-004` fully resolved?
+
+### 5. Verification of F18-P2-005: Test T39 Queue Capacity Limit Saturation
+Examine `test_t39_queue_capacity_limit_truncates` in `tests/test_c0_02r_state_semantics_gate.rs`.
+1. Does the test verify both:
+   - $N = 1025$ branches ($> Q_{\text{MAX}} = 1024$), saturating the queue capacity $\implies \text{SearchStatus::Truncated} \implies D$ withheld, 0 joins?
+   - $N = 50$ branches ($\le 1024$), not saturating the queue $\implies D$ commits?
+2. Does this eliminate the vacuous passing where $N = 50$ never approached the 1024 capacity limit?
+Is `F18-P2-005` fully resolved?
+
+### 6. Production & Test Regression Integrity
+1. Confirm `git diff 39f11ca..HEAD -- src/` is strictly empty (0 lines changed in production).
+2. Confirm that no production contract or invariant was weakened.
+3. Review whether any new P0, P1, or P2 defect was introduced by the test repairs.
+
+---
+
+## Required Report Structure
+
+Produce a comprehensive, rigorous Markdown audit report formatted as:
+1. Executive Summary & Audit Baseline (Audit ID: `AUDIT-20261022-014`, Auditor: Codex CLI, Model: `gpt-6.1-sol`, Reasoning Effort: `medium`, Sandbox: `read-only`, Overall Verdict: `PASS` or `FAIL`, C0-02R status: `NOT ACCEPTED`).
+2. Evaluation of F18-P2-001 (Oracle reciprocal selection & tie rejection).
+3. Evaluation of F18-P2-002 (Oracle initialization long-fork reuse).
+4. Evaluation of F18-P2-003 (T30 decision reachability & sensitivity control).
+5. Evaluation of F18-P2-004 (T37 $\beta$ boundary sensitivity).
+6. Evaluation of F18-P2-005 (T39 queue capacity limit saturation).
+7. Regression & Contract Integrity Assessment.
+8. Remaining Findings Ledger (P0, P1, P2).
+9. Final Recommendation for Stage C0-02R.

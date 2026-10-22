@@ -72,3 +72,38 @@ Every cross-model execution MUST record the following fields:
 
 *(None currently pending approval)*
 
+
+---
+
+### [AUDIT-20261022-014] Codex Independent Incremental Audit of P2 Verification Repairs
+
+- **Task ID**: `C0-02R Phase F19`
+- **Agent**: Codex CLI (v0.163.0)
+- **Model**: `gpt-6.1-sol`
+- **Reasoning Effort**: `medium` (`-c model_reasoning_effort="medium"`)
+- **Permission Level**: `READ_ONLY` (`-s read-only`)
+- **Target Branch**: `feature/c0-02r-phase-f19-codex`
+- **Worktree**: `/hpcfs/fhome/caizhh/Desktop/03_Tool_Development/fastBact-phase-f19-codex-worktree`
+- **Audit Target HEAD**: `a9930471a73612159a83694d3d661f060042efc8` (Commit `a993047`)
+- **Baseline Commit**: `39f11ca90a5de13a5b3d5572d29c191c40d9c03d` (Commit `39f11ca`)
+- **CLI Command**:
+  ```bash
+  codex exec -C /hpcfs/fhome/caizhh/Desktop/03_Tool_Development/fastBact-phase-f19-codex-worktree \
+    -s read-only -m gpt-6.1-sol -c model_reasoning_effort="medium" \
+    -o /hpcfs/fhome/caizhh/Desktop/03_Tool_Development/fastBact-phase-f19-codex-worktree/docs/development/evidence/C0_02R/phase_f19/codex_f19_incremental_audit.md \
+    - < docs/development/evidence/C0_02R/phase_f19/.prompt_codex_incremental_audit.txt
+  ```
+- **Exit Code**: `0` (Completed; 89,794 tokens used)
+- **Output Path**: [`docs/development/evidence/C0_02R/phase_f19/codex_f19_incremental_audit.md`](./evidence/C0_02R/phase_f19/codex_f19_incremental_audit.md)
+- **Overall Verdict**: **FAIL** (on claim of 100% resolution of all 5 P2 findings; 4 resolved, 1 open P2)
+- **Production Code Status**: **COMPLETELY IMMUTABLE & VERIFIED SOUND** (`git diff 39f11ca..HEAD -- src/` is 0 lines). Zero P0 and zero P1 confirmed blockers.
+- **C0-02R Acceptance**: **NOT ACCEPTED** (Strictly maintained pending final gate resolution)
+- **Finding Dispositions**:
+  1. **F18-P2-001 (Oracle Reciprocal Selection)**: **CLOSED**. `independent_resolve_edge` now evaluates all reverse edges to `from.twin()`, removes premature filtering, enforces reciprocal support equality (`rev_max_support == chosen_support`), and enforces strict uniqueness on the reverse strand. All 5 controls verified sound.
+  2. **F18-P2-002 (Oracle Initialization Long-Fork Reuse)**: **CLOSED**. `reference_oracle_search` rejects initial hop if target is a long fork node self-looping back to itself; preserves short repeat unrolling. Both cases verified in differential test.
+  3. **F18-P2-003 (T30 Reachability & Sensitivity Control)**: **CLOSED**. Repaired junction sequence mismatch ($X$ starts with `j_b`), adjusted $C$ length to 129 bp so Decision 1 commits cleanly and reaches Decision 2 at $P_2$. Cloned 6-edge topology sensitivity control proves downstream evidence sensitivity.
+  4. **F18-P2-004 (T37 $\beta$ Boundary Sensitivity)**: **CLOSED**. Self-loop repeat re-entry evaluates sharp mathematical boundary $\text{sep}_v + \beta == \text{max\_insert}$ ($L_P = 150 \implies \text{Probe} \implies \text{Withheld}$, $L_P = 151 \implies \text{SafePrune} \implies \text{Committed}$).
+  5. **F18-P2-005 (T39 Queue Capacity Limit)**: **PARTIALLY RESOLVED (Open P2)**. Queue saturation at $N = 1025$ is reached, but state budget limit ($S_{\text{MAX}} = 256$) produces identical truncation if queue capacity guard is removed in black-box test. Requires a queue-specific sensitivity assertion (such as an internal search test) to close.
+- **Next Action**:
+  - Maintain C0-02R strictly as **NOT ACCEPTED**.
+  - Await user guidance on whether to address the T39 queue-specific sensitivity assertion or proceed directly to selective real-data benchmarking (`R1-001`, `R1-003`).
