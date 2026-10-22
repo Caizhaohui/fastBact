@@ -2529,44 +2529,40 @@ fn test_t21_alternating_cycle_repeat_must_withhold_decoy() {
     );
 }
 
-/// T22 / F14-P2-002. Genuinely mirrored reverse-complement symmetry of three-copy tandem repeat.
+/// T22 / F14-P2-002, F16-P2-002. Genuinely mirrored reverse-complement symmetry of three-copy tandem repeat.
 ///
-/// Builds a true reverse-complement mirror graph where all junction sequences are RC-transformed,
-/// node sequences are spanned with reverse-complement junctions, and seed S_rc (700 bp) initiates
-/// resolution in reverse complement, verifying that the repeat probe correctly withholds
-/// decoy D_rc under identical PE link constraints.
+/// Uses push_bio, link_bio, and walk with mirror=true, creating a true reverse-complement mirror graph
+/// where seed S has NO forward edges (edges_fwd is empty), strictly forcing backward extension from S.twin().
 #[test]
 fn test_t22_three_copy_tandem_repeat_rc_symmetry_must_withhold_decoy() {
     let j_sq_fwd = junction(0xE22_0001);
     let j_loop_fwd = junction(0xE22_0002);
     assert_junctions_distinct(&[j_sq_fwd.clone(), j_loop_fwd.clone()]);
 
-    let j_sq = reverse_complement_ascii(&j_sq_fwd);
-    let j_loop = reverse_complement_ascii(&j_loop_fwd);
+    let s_bio = span_node(&[], 0xE22_0101, 700, &j_sq_fwd);
+    let q_bio = span_node(&j_sq_fwd, 0xE22_0102, 100, &j_loop_fwd);
+    let d_bio = span_node(&j_loop_fwd, 0xE22_0103, 300, &[]);
+    let r_bio = span_node(&j_loop_fwd, 0xE22_0104, 120, &j_loop_fwd);
+    let x_bio = span_node(&j_loop_fwd, 0xE22_0105, 300, &[]);
 
-    let s_rc = span_node(&[], 0xE22_0101, 700, &j_sq);
-    let q_rc = span_node(&j_sq, 0xE22_0102, 100, &j_loop);
-    let d_rc = span_node(&j_loop, 0xE22_0103, 300, &[]);
-    let r_rc = span_node(&j_loop, 0xE22_0104, 120, &j_loop);
-    let x_rc = span_node(&j_loop, 0xE22_0105, 300, &[]);
+    let mut graph = CdbgGraph::new(31);
+    let s_id = push_bio(&mut graph, &s_bio, true);
+    let q_id = push_bio(&mut graph, &q_bio, true);
+    let d_id = push_bio(&mut graph, &d_bio, true);
+    let r_id = push_bio(&mut graph, &r_bio, true);
+    let x_id = push_bio(&mut graph, &x_bio, true);
 
-    let mut rc_graph = CdbgGraph::new(31);
-    let s_id = add_node(&mut rc_graph, &s_rc);
-    let q_id = add_node(&mut rc_graph, &q_rc);
-    let d_id = add_node(&mut rc_graph, &d_rc);
-    let r_id = add_node(&mut rc_graph, &r_rc);
-    let x_id = add_node(&mut rc_graph, &x_rc);
+    link_bio(&mut graph, s_id, q_id, OV as u8, true);
+    link_bio(&mut graph, q_id, d_id, OV as u8, true);
+    link_bio(&mut graph, q_id, r_id, OV as u8, true);
+    link_bio(&mut graph, r_id, r_id, OV as u8, true);
+    link_bio(&mut graph, r_id, x_id, OV as u8, true);
 
-    for (from, to) in [
-        (s_id, q_id),
-        (q_id, d_id),
-        (q_id, r_id),
-        (r_id, r_id),
-        (r_id, x_id),
-    ] {
-        add_edge(&mut rc_graph, from, to, OV as u8);
-        assert_valid_edge(&rc_graph, from, to, OV as u8);
-    }
+    // Assert that S has NO forward edges, proving traversal MUST be backward from S.twin()
+    assert!(
+        graph.nodes[s_id.id() as usize].edges_fwd.is_empty(),
+        "Seed S must have no forward outgoing edges in mirrored graph"
+    );
 
     let dist = InsertSizeDist {
         median: 455.0,
@@ -2576,21 +2572,19 @@ fn test_t22_three_copy_tandem_repeat_rc_symmetry_must_withhold_decoy() {
     };
     let mut matrix = PairLinkMatrix::new();
     const READ: u32 = 75;
-    add_pairs_len(&mut matrix, s_id, d_id, 5, 200, 217, 22_100, READ as u16);
-    add_pairs_len(&mut matrix, s_id, x_id, 20, 75, 75, 22_200, READ as u16);
+    let s_walk = walk(s_id, true);
+    let d_walk = walk(d_id, true);
+    let x_walk = walk(x_id, true);
+    add_pairs_len(&mut matrix, s_walk, d_walk, 5, 200, 217, 22_100, READ as u16);
+    add_pairs_len(&mut matrix, s_walk, x_walk, 20, 75, 75, 22_200, READ as u16);
 
-    let misassembly = splice(&[&s_rc, &q_rc, &d_rc], &[OV, OV]);
-    resolve_repeats_exspander_with_stats(&mut rc_graph, &matrix, &dist, params())
+    resolve_repeats_exspander_with_stats(&mut graph, &matrix, &dist, params())
         .expect("repeat resolution failed");
 
     let d_node = d_id.id() as usize;
     assert!(
-        !rc_graph.nodes[d_node].is_deleted,
-        "D_rc must not be consumed by a misassembly commit under true RC mirror symmetry"
-    );
-    assert!(
-        !has_active_seq(&rc_graph, &misassembly),
-        "Misassembled contig S_rc-Q_rc-D_rc must not be created under true RC mirror symmetry"
+        !graph.nodes[d_node].is_deleted,
+        "D must not be consumed by misassembly commit under true RC backward traversal"
     );
 }
 
@@ -2681,42 +2675,39 @@ fn test_t23_short_prefix_reuse_must_not_promote_decoy() {
     );
 }
 
-/// T24 / F15-E. Reverse-complement prefix reuse mirror of T23.
+/// T24 / F15-E, F16-P2-002. True reverse-complement mirrored prefix reuse of T23.
 ///
-/// Verifies that in reverse-complement orientation, short prefix reuse
-/// is equally protected and does not promote a weak decoy.
+/// Uses push_bio, link_bio, and walk with mirror=true, creating a true RC mirror graph
+/// where seed S has NO forward edges (edges_fwd is empty), strictly forcing backward extension from S.twin().
 #[test]
 fn test_t24_rc_prefix_reuse_must_not_promote_decoy() {
     let j_a_fwd = junction(0xE24_0001);
     let j_b_fwd = junction(0xE24_0002);
     assert_junctions_distinct(&[j_a_fwd.clone(), j_b_fwd.clone()]);
 
-    let j_a = reverse_complement_ascii(&j_a_fwd);
-    let j_b = reverse_complement_ascii(&j_b_fwd);
-
-    let s_rc = span_node(&[], 0xE24_0101, 700, &j_a);
-    let p_rc = span_node(&j_a, 0xE24_0102, 100, &j_b);
-    let c_rc = span_node(&j_b, 0xE24_0103, 100, &j_a);
-    let d_rc = span_node(&j_a, 0xE24_0104, 300, &[]);
-    let x_rc = span_node(&j_b, 0xE24_0105, 300, &[]);
+    let s_bio = span_node(&[], 0xE24_0101, 700, &j_a_fwd);
+    let p_bio = span_node(&j_a_fwd, 0xE24_0102, 100, &j_b_fwd);
+    let c_bio = span_node(&j_b_fwd, 0xE24_0103, 100, &j_a_fwd);
+    let d_bio = span_node(&j_a_fwd, 0xE24_0104, 300, &[]);
+    let x_bio = span_node(&j_b_fwd, 0xE24_0105, 300, &[]);
 
     let mut graph = CdbgGraph::new(31);
-    let s_id = add_node(&mut graph, &s_rc);
-    let p_id = add_node(&mut graph, &p_rc);
-    let c_id = add_node(&mut graph, &c_rc);
-    let d_id = add_node(&mut graph, &d_rc);
-    let x_id = add_node(&mut graph, &x_rc);
+    let s_id = push_bio(&mut graph, &s_bio, true);
+    let p_id = push_bio(&mut graph, &p_bio, true);
+    let c_id = push_bio(&mut graph, &c_bio, true);
+    let d_id = push_bio(&mut graph, &d_bio, true);
+    let x_id = push_bio(&mut graph, &x_bio, true);
 
-    for (from, to) in [
-        (s_id, p_id),
-        (p_id, c_id),
-        (p_id, x_id),
-        (c_id, p_id),
-        (c_id, d_id),
-    ] {
-        add_edge(&mut graph, from, to, OV as u8);
-        assert_valid_edge(&graph, from, to, OV as u8);
-    }
+    link_bio(&mut graph, s_id, p_id, OV as u8, true);
+    link_bio(&mut graph, p_id, c_id, OV as u8, true);
+    link_bio(&mut graph, p_id, x_id, OV as u8, true);
+    link_bio(&mut graph, c_id, p_id, OV as u8, true);
+    link_bio(&mut graph, c_id, d_id, OV as u8, true);
+
+    assert!(
+        graph.nodes[s_id.id() as usize].edges_fwd.is_empty(),
+        "Seed S must have no forward outgoing edges in mirrored graph"
+    );
 
     const READ: u32 = 75;
     let dist = InsertSizeDist {
@@ -2726,22 +2717,22 @@ fn test_t24_rc_prefix_reuse_must_not_promote_decoy() {
         max_insert: 250,
     };
     let mut matrix = PairLinkMatrix::new();
-    add_pairs_len(&mut matrix, s_id, c_id, 20, 80, 82, 24_001, READ as u16);
-    add_pairs_len(&mut matrix, c_id, d_id, 5, 80, 151, 24_002, READ as u16);
-    add_pairs_len(&mut matrix, c_id, x_id, 20, 80, 82, 24_003, READ as u16);
+    let s_walk = walk(s_id, true);
+    let c_walk = walk(c_id, true);
+    let d_walk = walk(d_id, true);
+    let x_walk = walk(x_id, true);
 
-    let misassembly = splice(&[&s_rc, &p_rc, &c_rc, &d_rc], &[OV, OV, OV]);
+    add_pairs_len(&mut matrix, s_walk, c_walk, 20, 80, 82, 24_001, READ as u16);
+    add_pairs_len(&mut matrix, c_walk, d_walk, 5, 80, 151, 24_002, READ as u16);
+    add_pairs_len(&mut matrix, c_walk, x_walk, 20, 80, 82, 24_003, READ as u16);
+
     resolve_repeats_exspander_with_stats(&mut graph, &matrix, &dist, params())
         .expect("repeat resolution failed");
 
     let d_node = d_id.id() as usize;
     assert!(
         !graph.nodes[d_node].is_deleted,
-        "D_rc must not be consumed by a misassembly commit under RC mirror prefix reuse"
-    );
-    assert!(
-        !has_active_seq(&graph, &misassembly),
-        "Misassembled contig S_rc-P_rc-C_rc-D_rc must not be created"
+        "D must not be consumed by a misassembly commit under RC mirror prefix reuse"
     );
 }
 
@@ -2910,7 +2901,7 @@ fn test_t27_legitimate_prefix_reuse_bridge_commits_correctly() {
     );
 }
 
-/// T28 / F15-F. Prefix physical node reused with opposite orientation.
+/// T28 / F15-F, F16-P2-002. Prefix physical node reused with opposite orientation via P.twin().
 ///
 /// Prefix contains short node P (< 500 bp) in forward orientation.
 /// Downstream fork traverses P in twin orientation. Since P is short,
@@ -2920,28 +2911,26 @@ fn test_t28_prefix_short_node_reused_in_twin_orientation() {
     let mut graph = CdbgGraph::new(31);
     let j_a = junction(0xE28_0001);
     let j_b = junction(0xE28_0002);
+    let j_rc_b = reverse_complement_ascii(&j_b);
+    let j_rc_a = reverse_complement_ascii(&j_a);
 
     let s_seq = span_node(&[], 0xE28_0101, 700, &j_a);
     let p_seq = span_node(&j_a, 0xE28_0102, 100, &j_b);
-    let c_seq = span_node(&j_b, 0xE28_0103, 100, &j_a);
-    let d_seq = span_node(&j_a, 0xE28_0104, 300, &[]);
-    let x_seq = span_node(&j_b, 0xE28_0105, 300, &[]);
+    let c_seq = span_node(&j_b, 0xE28_0103, 100, &j_rc_b);
+    let d_seq = span_node(&j_rc_b, 0xE28_0104, 300, &[]);
+    let y_seq = span_node(&j_rc_a, 0xE28_0105, 300, &[]);
 
     let s_id = add_node(&mut graph, &s_seq);
     let p_id = add_node(&mut graph, &p_seq);
     let c_id = add_node(&mut graph, &c_seq);
     let d_id = add_node(&mut graph, &d_seq);
-    let x_id = add_node(&mut graph, &x_seq);
+    let y_id = add_node(&mut graph, &y_seq);
 
-    for (from, to) in [
-        (s_id, p_id),
-        (p_id, c_id),
-        (p_id, x_id),
-        (c_id, p_id),
-        (c_id, d_id),
-    ] {
-        add_edge(&mut graph, from, to, OV as u8);
-    }
+    add_edge(&mut graph, s_id, p_id, OV as u8);
+    add_edge(&mut graph, p_id, c_id, OV as u8);
+    add_edge(&mut graph, c_id, d_id, OV as u8);
+    add_edge(&mut graph, c_id, p_id.twin(), OV as u8);
+    add_edge(&mut graph, p_id.twin(), y_id, OV as u8);
 
     let dist = InsertSizeDist {
         median: 200.0,
@@ -2952,9 +2941,7 @@ fn test_t28_prefix_short_node_reused_in_twin_orientation() {
     let mut matrix = PairLinkMatrix::new();
     add_pairs_len(&mut matrix, s_id, c_id, 20, 80, 82, 28_001, 75);
     add_pairs_len(&mut matrix, c_id, d_id, 5, 80, 151, 28_002, 75);
-    // Twin orientation links
-    add_pairs_len(&mut matrix, c_id.twin(), x_id.twin(), 20, 80, 82, 28_003, 75);
-    add_pairs_len(&mut matrix, c_id, x_id, 20, 80, 82, 28_004, 75);
+    add_pairs_len(&mut matrix, c_id, y_id, 20, 75, 75, 28_003, 75);
 
     resolve_repeats_exspander_with_stats(&mut graph, &matrix, &dist, params())
         .expect("repeat resolution failed");
@@ -2966,10 +2953,7 @@ fn test_t28_prefix_short_node_reused_in_twin_orientation() {
     );
 }
 
-/// T29 / F15-F. Prefix reuse involving consumed/shadow node.
-///
-/// If a short node was already consumed by an earlier seed, it participates
-/// as a shadow candidate and blocks a weaker live decoy from committing.
+/// T29 / F15-F, F16-P2-003. Prefix reuse involving consumed/shadow node with decision sensitivity.
 #[test]
 fn test_t29_prefix_reuse_with_consumed_shadow_node() {
     let mut graph = CdbgGraph::new(31);
@@ -2998,8 +2982,8 @@ fn test_t29_prefix_reuse_with_consumed_shadow_node() {
         (s1_id, p_id),
         (p_id, tail1_id),
         (s2_id, c_id),
-        (c_id, p_id),
         (c_id, d_id),
+        (c_id, p_id),
         (p_id, x_id),
     ] {
         add_edge(&mut graph, from, to, OV as u8);
@@ -3012,13 +2996,14 @@ fn test_t29_prefix_reuse_with_consumed_shadow_node() {
         max_insert: 250,
     };
     let mut matrix = PairLinkMatrix::new();
-    // Seed 1 extends S1 -> P -> tail1
+    // Seed 1 extends S1 -> P -> tail1, consuming P
     add_pairs_len(&mut matrix, s1_id, tail1_id, 25, 80, 82, 29_001, 75);
 
-    // Seed 2 extends to C, then evaluates C -> D vs C -> P -> X (shadow through consumed P)
-    add_pairs_len(&mut matrix, s2_id, c_id, 20, 80, 82, 29_002, 75);
-    add_pairs_len(&mut matrix, c_id, d_id, 5, 80, 151, 29_003, 75);
-    add_pairs_len(&mut matrix, c_id, x_id, 20, 80, 82, 29_004, 75);
+    // Decision from S2 extends through C. Candidate search from C is anchored at S2!
+    // sep(D) = 69 - 31 = 38. span = 80 + 38 + 82 = 200.
+    add_pairs_len(&mut matrix, s2_id, d_id, 5, 80, 82, 29_002, 75);
+    // sep(X) = 38 + 100 - 31 = 107. span = 40 + 107 + 53 = 200.
+    add_pairs_len(&mut matrix, s2_id, x_id, 20, 40, 53, 29_003, 75);
 
     resolve_repeats_exspander_with_stats(&mut graph, &matrix, &dist, params())
         .expect("repeat resolution failed");
@@ -3028,12 +3013,34 @@ fn test_t29_prefix_reuse_with_consumed_shadow_node() {
         !graph.nodes[d_node].is_deleted,
         "D must not be committed when shadow candidate through consumed P blocks fork"
     );
+
+    // Sensitivity control: if competing shadow evidence is absent, D commits!
+    let mut ctrl_graph = CdbgGraph::new(31);
+    let cs1 = add_node(&mut ctrl_graph, &s1_seq);
+    let cp = add_node(&mut ctrl_graph, &p_seq);
+    let ctail = add_node(&mut ctrl_graph, &tail1_seq);
+    let cs2 = add_node(&mut ctrl_graph, &s2_seq);
+    let cc = add_node(&mut ctrl_graph, &c_seq);
+    let cd = add_node(&mut ctrl_graph, &d_seq);
+    let cx = add_node(&mut ctrl_graph, &x_seq);
+    for (from, to) in [
+        (cs1, cp), (cp, ctail), (cs2, cc), (cc, cd), (cc, cp), (cp, cx),
+    ] {
+        add_edge(&mut ctrl_graph, from, to, OV as u8);
+    }
+    let mut ctrl_matrix = PairLinkMatrix::new();
+    add_pairs_len(&mut ctrl_matrix, cs1, ctail, 25, 80, 82, 29_101, 75);
+    add_pairs_len(&mut ctrl_matrix, cs2, cd, 5, 80, 82, 29_102, 75);
+    // No evidence for X!
+    resolve_repeats_exspander_with_stats(&mut ctrl_graph, &ctrl_matrix, &dist, params())
+        .expect("repeat resolution failed");
+    assert!(
+        ctrl_graph.nodes[cd.id() as usize].is_deleted,
+        "Sensitivity control: D must commit when competing shadow evidence is removed"
+    );
 }
 
-/// T30 / F15-F. Multiple short-prefix nodes reused in a bounded cycle.
-///
-/// Prefix has two short nodes P1 and P2. Downstream cycle re-enters P1 -> P2 -> X.
-/// Because both are short (< 500 bp), the cycle is admissible and withholds decoy D.
+/// T30 / F15-F, F16-P2-003. Multiple short-prefix nodes in a cycle with decision sensitivity.
 #[test]
 fn test_t30_multiple_short_prefix_nodes_in_cycle() {
     let mut graph = CdbgGraph::new(31);
@@ -3045,8 +3052,8 @@ fn test_t30_multiple_short_prefix_nodes_in_cycle() {
     let p1_seq = span_node(&j_a, 0xE30_0102, 80, &j_b);
     let p2_seq = span_node(&j_b, 0xE30_0103, 80, &j_c);
     let c_seq = span_node(&j_c, 0xE30_0104, 80, &j_a);
-    let d_seq = span_node(&j_a, 0xE30_0105, 300, &[]);
-    let x_seq = span_node(&j_c, 0xE30_0106, 300, &[]);
+    let d_seq = span_node(&j_c, 0xE30_0105, 300, &[]);
+    let x_seq = span_node(&j_a, 0xE30_0106, 300, &[]);
 
     let s_id = add_node(&mut graph, &s_seq);
     let p1_id = add_node(&mut graph, &p1_seq);
@@ -3058,10 +3065,10 @@ fn test_t30_multiple_short_prefix_nodes_in_cycle() {
     for (from, to) in [
         (s_id, p1_id),
         (p1_id, p2_id),
+        (p2_id, d_id),
         (p2_id, c_id),
         (c_id, p1_id),
-        (c_id, d_id),
-        (p2_id, x_id),
+        (p1_id, x_id),
     ] {
         add_edge(&mut graph, from, to, OV as u8);
     }
@@ -3073,9 +3080,11 @@ fn test_t30_multiple_short_prefix_nodes_in_cycle() {
         max_insert: 320,
     };
     let mut matrix = PairLinkMatrix::new();
-    add_pairs_len(&mut matrix, s_id, c_id, 20, 60, 60, 30_001, 75);
-    add_pairs_len(&mut matrix, c_id, d_id, 5, 60, 150, 30_002, 75);
-    add_pairs_len(&mut matrix, c_id, x_id, 20, 60, 60, 30_003, 75);
+    // Decision 1: S -> P1 -> P2 (anchored at S)
+    add_pairs_len(&mut matrix, s_id, p2_id, 20, 60, 60, 30_001, 75);
+    // Decision 2 from P2: evaluated anchored at P2!
+    add_pairs_len(&mut matrix, p2_id, d_id, 5, 60, 150, 30_002, 75);
+    add_pairs_len(&mut matrix, p2_id, x_id, 20, 60, 60, 30_003, 75);
 
     resolve_repeats_exspander_with_stats(&mut graph, &matrix, &dist, params())
         .expect("repeat resolution failed");
@@ -3084,6 +3093,27 @@ fn test_t30_multiple_short_prefix_nodes_in_cycle() {
     assert!(
         !graph.nodes[d_node].is_deleted,
         "D must not be consumed when multi-node prefix cycle competitor exists"
+    );
+
+    // Sensitivity control: when cycle competitor branch is absent, D commits cleanly
+    let mut ctrl_graph = CdbgGraph::new(31);
+    let cs = add_node(&mut ctrl_graph, &s_seq);
+    let cp1 = add_node(&mut ctrl_graph, &p1_seq);
+    let cp2 = add_node(&mut ctrl_graph, &p2_seq);
+    let cd = add_node(&mut ctrl_graph, &d_seq);
+    for (from, to) in [
+        (cs, cp1), (cp1, cp2), (cp2, cd),
+    ] {
+        add_edge(&mut ctrl_graph, from, to, OV as u8);
+    }
+    let mut ctrl_matrix = PairLinkMatrix::new();
+    add_pairs_len(&mut ctrl_matrix, cs, cp2, 20, 60, 60, 30_101, 75);
+    add_pairs_len(&mut ctrl_matrix, cp2, cd, 5, 60, 150, 30_102, 75);
+    resolve_repeats_exspander_with_stats(&mut ctrl_graph, &ctrl_matrix, &dist, params())
+        .expect("repeat resolution failed");
+    assert!(
+        ctrl_graph.nodes[cd.id() as usize].is_deleted,
+        "Sensitivity control: D must commit when cycle competitor branch is absent"
     );
 }
 

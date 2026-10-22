@@ -108,22 +108,53 @@ pub fn independent_resolve_edge(
     let from_seq = graph.get_stranded_seq(from);
     let to_seq = graph.get_stranded_seq(to);
     let edges = graph.nodes[from.id() as usize].edges(from.is_rc());
-    let mut matching_overlaps = Vec::new();
+    let mut matching_edges = Vec::new();
     for e in edges {
         if e.target == to {
             let ov = e.overlap_k as usize;
-            if ov <= from_seq.len() && ov <= to_seq.len() {
+            if ov > 0 && ov <= from_seq.len() && ov <= to_seq.len() {
                 if from_seq[from_seq.len() - ov..] == to_seq[..ov] {
-                    matching_overlaps.push(ov);
+                    matching_edges.push(e);
                 }
             }
         }
     }
-    if matching_overlaps.is_empty() {
-        None
-    } else {
-        Some(matching_overlaps[0])
+    if matching_edges.is_empty() {
+        return None;
     }
+    // Ambiguity resolution: highest support wins, tie rejects
+    let max_support = matching_edges.iter().map(|e| e.support).max().unwrap_or(0);
+    matching_edges.retain(|e| e.support == max_support);
+    if matching_edges.len() != 1 {
+        return None;
+    }
+    let chosen_ov = matching_edges[0].overlap_k as usize;
+
+    // Reciprocal edge consistency
+    let rev_from_seq = graph.get_stranded_seq(to.twin());
+    let rev_to_seq = graph.get_stranded_seq(from.twin());
+    let rev_edges = graph.nodes[to.twin().id() as usize].edges(to.twin().is_rc());
+    let mut rev_matching_edges = Vec::new();
+    for e in rev_edges {
+        if e.target == from.twin() {
+            let ov = e.overlap_k as usize;
+            if ov == chosen_ov && ov <= rev_from_seq.len() && ov <= rev_to_seq.len() {
+                if rev_from_seq[rev_from_seq.len() - ov..] == rev_to_seq[..ov] {
+                    rev_matching_edges.push(e);
+                }
+            }
+        }
+    }
+    if rev_matching_edges.is_empty() {
+        return None;
+    }
+    let rev_max_support = rev_matching_edges.iter().map(|e| e.support).max().unwrap_or(0);
+    rev_matching_edges.retain(|e| e.support == rev_max_support);
+    if rev_matching_edges.len() != 1 || rev_matching_edges[0].overlap_k as usize != chosen_ov {
+        return None;
+    }
+
+    Some(chosen_ov)
 }
 
 /// Independent candidate path scoring.
@@ -208,12 +239,18 @@ pub fn reference_oracle_search(
 
     while let Some((node, sep, path)) = queue.pop_front() {
         let node_ref = &graph.nodes[node.id() as usize];
-        if node_ref.is_circular || node.id() == curr_dir.id() {
+        if node_ref.is_circular {
+            has_continuation = true;
             continue;
         }
 
-        // Check endpoint support from curr_dir
-        if matrix.get_support(curr_dir, node) > 0 {
+        // Self-anchor rule: node matching curr_dir is not committed as candidate
+        if node.id() == curr_dir.id() {
+            let (count, _) = independent_score_candidate(matrix, dist, curr_dir, node, sep);
+            if count > 0 {
+                has_continuation = true;
+            }
+        } else if matrix.get_support(curr_dir, node) > 0 {
             let (count, weight) = independent_score_candidate(matrix, dist, curr_dir, node, sep);
             if count > 0 {
                 candidates.push(OracleCandidate {
@@ -230,10 +267,15 @@ pub fn reference_oracle_search(
             for edge in node_ref.edges(node.is_rc()) {
                 let target = edge.target;
                 let target_node = &graph.nodes[target.id() as usize];
-                if target_node.is_circular || target.id() == curr_dir.id() {
+                if target_node.is_circular {
+                    has_continuation = true;
                     continue;
                 }
-                if target_node.seq_len >= 500 && path.iter().any(|d| d.id() == target.id()) {
+                // Long unique node restriction
+                if target_node.seq_len >= 500
+                    && (target.id() == curr_dir.id()
+                        || path.iter().any(|d| d.id() == target.id()))
+                {
                     continue;
                 }
                 if let Some(overlap) = independent_resolve_edge(graph, node, target) {
@@ -250,11 +292,15 @@ pub fn reference_oracle_search(
         for edge in node_ref.edges(node.is_rc()) {
             let neighbor = edge.target;
             let neighbor_node = &graph.nodes[neighbor.id() as usize];
-            if neighbor_node.is_circular || neighbor.id() == curr_dir.id() {
+            if neighbor_node.is_circular {
+                has_continuation = true;
                 continue;
             }
             // Unique node restriction: >= 500 bp can only appear once in path
-            if neighbor_node.seq_len >= 500 && path.iter().any(|d| d.id() == neighbor.id()) {
+            if neighbor_node.seq_len >= 500
+                && (neighbor.id() == curr_dir.id()
+                    || path.iter().any(|d| d.id() == neighbor.id()))
+            {
                 continue;
             }
             if let Some(overlap) = independent_resolve_edge(graph, node, neighbor) {
