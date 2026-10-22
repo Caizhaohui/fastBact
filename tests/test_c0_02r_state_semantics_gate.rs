@@ -39,7 +39,9 @@ use std::collections::BTreeSet;
 
 use fastbact::common::bitseq::reverse_complement_ascii;
 use fastbact::common::sketch::splitmix64;
-use fastbact::graph::cdbg::{CdbgGraph, DirUnitigId, GraphEdge, ResolverLifecycleState, UnitigNode};
+use fastbact::graph::cdbg::{
+    CdbgGraph, DirUnitigId, GraphEdge, ResolverLifecycleState, UnitigNode,
+};
 use fastbact::polish::output::curate_contigs;
 use fastbact::resolve::exspander::{
     resolve_edge_between, resolve_repeats_exspander_with_stats, score_candidate_path,
@@ -189,7 +191,8 @@ fn params() -> ExspanderParams {
 }
 
 fn resolve(graph: &mut CdbgGraph, matrix: &PairLinkMatrix, dist: &InsertSizeDist) {
-    resolve_repeats_exspander_with_stats(graph, matrix, dist, params()).expect("repeat resolution failed");
+    resolve_repeats_exspander_with_stats(graph, matrix, dist, params())
+        .expect("repeat resolution failed");
 }
 
 fn default_dist() -> InsertSizeDist {
@@ -1215,7 +1218,8 @@ fn test_t7_validation_failure_is_atomic() {
         &PairLinkMatrix::new(),
         &InsertSizeDist::default(),
         params(),
-    ).expect("repeat resolution failed");
+    )
+    .expect("repeat resolution failed");
     assert_eq!(
         stats.valid_k_joins + stats.valid_k_minus_1_joins + stats.valid_other_joins,
         0
@@ -2037,7 +2041,8 @@ fn test_t14_tandem_repeat_cycle_must_not_allow_decoy() {
     );
 
     let misassembly = splice(&[&s_seq, &q_seq, &d_seq], &[OV, OV]);
-    resolve_repeats_exspander_with_stats(&mut graph, &matrix, &dist, params()).expect("repeat resolution failed");
+    resolve_repeats_exspander_with_stats(&mut graph, &matrix, &dist, params())
+        .expect("repeat resolution failed");
 
     let d_node = d_id.id() as usize;
     assert!(
@@ -2237,7 +2242,10 @@ fn test_t18_independent_graphs_resolve_separately() {
     assert_eq!(structural_fingerprint(&graph_b), b_before);
 
     let res_b = resolve_repeats_exspander_with_stats(&mut graph_b, &matrix, &dist, params());
-    assert!(res_b.is_ok(), "graph B must resolve independently of graph A");
+    assert!(
+        res_b.is_ok(),
+        "graph B must resolve independently of graph A"
+    );
     assert_eq!(graph_b.resolver_state(), ResolverLifecycleState::Completed);
 
     let fp_a = structural_fingerprint(&graph_a);
@@ -2359,7 +2367,11 @@ fn test_t19_three_copy_tandem_repeat_must_withhold_decoy() {
     let (c1, w1) = score_candidate_path(&matrix, &dist, s_id, x_id, sep_r1);
     assert_eq!((c1, w1), (0, 0.0), "1 copy of R must be outside [380, 520]");
     let (c2, w2) = score_candidate_path(&matrix, &dist, s_id, x_id, sep_r2);
-    assert_eq!((c2, w2), (0, 0.0), "2 copies of R must be outside [380, 520]");
+    assert_eq!(
+        (c2, w2),
+        (0, 0.0),
+        "2 copies of R must be outside [380, 520]"
+    );
     let three_weight = assert_score(&matrix, &dist, s_id, x_id, sep_r3, 20);
 
     assert!(
@@ -2575,7 +2587,16 @@ fn test_t22_three_copy_tandem_repeat_rc_symmetry_must_withhold_decoy() {
     let s_walk = walk(s_id, true);
     let d_walk = walk(d_id, true);
     let x_walk = walk(x_id, true);
-    add_pairs_len(&mut matrix, s_walk, d_walk, 5, 200, 217, 22_100, READ as u16);
+    add_pairs_len(
+        &mut matrix,
+        s_walk,
+        d_walk,
+        5,
+        200,
+        217,
+        22_100,
+        READ as u16,
+    );
     add_pairs_len(&mut matrix, s_walk, x_walk, 20, 75, 75, 22_200, READ as u16);
 
     resolve_repeats_exspander_with_stats(&mut graph, &matrix, &dist, params())
@@ -2867,12 +2888,7 @@ fn test_t27_legitimate_prefix_reuse_bridge_commits_correctly() {
     let c_id = add_node(&mut graph, &c_seq);
     let x_id = add_node(&mut graph, &x_seq);
 
-    for (from, to) in [
-        (s_id, p_id),
-        (p_id, c_id),
-        (c_id, p_id),
-        (p_id, x_id),
-    ] {
+    for (from, to) in [(s_id, p_id), (p_id, c_id), (c_id, p_id), (p_id, x_id)] {
         add_edge(&mut graph, from, to, OV as u8);
     }
 
@@ -3024,7 +3040,12 @@ fn test_t29_prefix_reuse_with_consumed_shadow_node() {
     let cd = add_node(&mut ctrl_graph, &d_seq);
     let cx = add_node(&mut ctrl_graph, &x_seq);
     for (from, to) in [
-        (cs1, cp), (cp, ctail), (cs2, cc), (cc, cd), (cc, cp), (cp, cx),
+        (cs1, cp),
+        (cp, ctail),
+        (cs2, cc),
+        (cc, cd),
+        (cc, cp),
+        (cp, cx),
     ] {
         add_edge(&mut ctrl_graph, from, to, OV as u8);
     }
@@ -3040,7 +3061,7 @@ fn test_t29_prefix_reuse_with_consumed_shadow_node() {
     );
 }
 
-/// T30 / F15-F, F16-P2-003. Multiple short-prefix nodes in a cycle with decision sensitivity.
+/// T30 / F15-F, F16-P2-003, F18-P2-003. Multiple short-prefix nodes in a cycle with decision sensitivity.
 #[test]
 fn test_t30_multiple_short_prefix_nodes_in_cycle() {
     let mut graph = CdbgGraph::new(31);
@@ -3051,9 +3072,9 @@ fn test_t30_multiple_short_prefix_nodes_in_cycle() {
     let s_seq = span_node(&[], 0xE30_0101, 700, &j_a);
     let p1_seq = span_node(&j_a, 0xE30_0102, 80, &j_b);
     let p2_seq = span_node(&j_b, 0xE30_0103, 80, &j_c);
-    let c_seq = span_node(&j_c, 0xE30_0104, 80, &j_a);
+    let c_seq = span_node(&j_c, 0xE30_0104, 129, &j_a);
     let d_seq = span_node(&j_c, 0xE30_0105, 300, &[]);
-    let x_seq = span_node(&j_a, 0xE30_0106, 300, &[]);
+    let x_seq = span_node(&j_b, 0xE30_0106, 300, &[]);
 
     let s_id = add_node(&mut graph, &s_seq);
     let p1_id = add_node(&mut graph, &p1_seq);
@@ -3080,40 +3101,37 @@ fn test_t30_multiple_short_prefix_nodes_in_cycle() {
         max_insert: 320,
     };
     let mut matrix = PairLinkMatrix::new();
-    // Decision 1: S -> P1 -> P2 (anchored at S)
-    add_pairs_len(&mut matrix, s_id, p2_id, 20, 60, 60, 30_001, 75);
+    // Decision 1: sep(P2) = 18, span = 110 + 18 + 110 = 238 in-window.
+    add_pairs_len(&mut matrix, s_id, p2_id, 20, 110, 110, 30_001, 75);
     // Decision 2 from P2: evaluated anchored at P2!
-    add_pairs_len(&mut matrix, p2_id, d_id, 5, 60, 150, 30_002, 75);
-    add_pairs_len(&mut matrix, p2_id, x_id, 20, 60, 60, 30_003, 75);
+    // D: sep = -31, span = 140 - 31 + 140 = 249 in-window.
+    // X: sep = -31 + (129-31) + (80-31) = 116, span = 65 + 116 + 65 = 246 in-window.
+    add_pairs_len(&mut matrix, p2_id, d_id, 5, 140, 140, 30_002, 75);
+    add_pairs_len(&mut matrix, p2_id, x_id, 20, 65, 65, 30_003, 75);
+
+    let mut ctrl_graph = graph.clone();
+    let mut ctrl_matrix = PairLinkMatrix::new();
+    add_pairs_len(&mut ctrl_matrix, s_id, p2_id, 20, 110, 110, 30_001, 75);
+    add_pairs_len(&mut ctrl_matrix, p2_id, d_id, 5, 140, 140, 30_002, 75);
 
     resolve_repeats_exspander_with_stats(&mut graph, &matrix, &dist, params())
         .expect("repeat resolution failed");
 
     let d_node = d_id.id() as usize;
     assert!(
+        graph.nodes[p1_id.id() as usize].is_deleted,
+        "P1 must be consumed by the initial S-anchored decision"
+    );
+    assert!(
         !graph.nodes[d_node].is_deleted,
         "D must not be consumed when multi-node prefix cycle competitor exists"
     );
 
-    // Sensitivity control: when cycle competitor branch is absent, D commits cleanly
-    let mut ctrl_graph = CdbgGraph::new(31);
-    let cs = add_node(&mut ctrl_graph, &s_seq);
-    let cp1 = add_node(&mut ctrl_graph, &p1_seq);
-    let cp2 = add_node(&mut ctrl_graph, &p2_seq);
-    let cd = add_node(&mut ctrl_graph, &d_seq);
-    for (from, to) in [
-        (cs, cp1), (cp1, cp2), (cp2, cd),
-    ] {
-        add_edge(&mut ctrl_graph, from, to, OV as u8);
-    }
-    let mut ctrl_matrix = PairLinkMatrix::new();
-    add_pairs_len(&mut ctrl_matrix, cs, cp2, 20, 60, 60, 30_101, 75);
-    add_pairs_len(&mut ctrl_matrix, cp2, cd, 5, 60, 150, 30_102, 75);
     resolve_repeats_exspander_with_stats(&mut ctrl_graph, &ctrl_matrix, &dist, params())
         .expect("repeat resolution failed");
     assert!(
-        ctrl_graph.nodes[cd.id() as usize].is_deleted,
-        "Sensitivity control: D must commit when cycle competitor branch is absent"
+        ctrl_graph.nodes[d_node].is_deleted,
+        "Sensitivity control: D must commit when only competitor evidence is removed"
     );
 }
 
@@ -3211,8 +3229,6 @@ fn test_t32_depth_limit_continuation_produces_conservative_truncated() {
         "Decoy D must not be committed when continuation exists at depth limit"
     );
 }
-
-
 
 /// T33 (Finding F16-P1-001, CE-3):
 /// Short current-node re-entry (C -> C -> X) must not be silently discarded in candidate search.
@@ -3473,37 +3489,58 @@ fn test_t36_opposite_strand_short_reuse() {
 /// T37: Beta distance boundary check (sep + beta == max_insert vs max_insert + 1).
 #[test]
 fn test_t37_beta_distance_boundary() {
-    let mut graph = CdbgGraph::new(31);
-    let j_a = junction(0xE37_0001);
-    let j_b = junction(0xE37_0002);
-    let s_seq = span_node(&[], 0xE37_0101, 700, &j_a);
-    let p_seq = span_node(&j_a, 0xE37_0102, 100, &j_b);
-    let d_seq = span_node(&j_b, 0xE37_0103, 300, &[]);
+    for (p_len, should_commit_decoy) in [(150, false), (151, true)] {
+        let mut graph = CdbgGraph::new(31);
+        let j_a = junction(0xE37_0001);
 
-    let s_id = add_node(&mut graph, &s_seq);
-    let p_id = add_node(&mut graph, &p_seq);
-    let d_id = add_node(&mut graph, &d_seq);
+        let s_seq = span_node(&[], 0xE37_0101, 700, &j_a);
+        let p_seq = span_node(&j_a, 0xE37_0102, p_len, &j_a);
+        let d_seq = span_node(&j_a, 0xE37_0103, 300, &[]);
 
-    add_edge(&mut graph, s_id, p_id, OV as u8);
-    add_edge(&mut graph, p_id, d_id, OV as u8);
+        let s_id = add_node(&mut graph, &s_seq);
+        let p_id = add_node(&mut graph, &p_seq);
+        let d_id = add_node(&mut graph, &d_seq);
 
-    let dist = InsertSizeDist {
-        median: 200.0,
-        mad: 20.0,
-        min_insert: 100,
-        max_insert: 250,
-    };
-    let mut matrix = PairLinkMatrix::new();
-    // sep = 100 - 31 - 31 = 38. If dist1 = 100, dist2 = 112 => span = 250 (exact boundary)
-    add_pairs_len(&mut matrix, s_id, d_id, 10, 100, 112, 37_001, 75);
+        add_edge(&mut graph, s_id, d_id, OV as u8);
+        add_edge(&mut graph, s_id, p_id, OV as u8);
+        add_edge(&mut graph, p_id, p_id, OV as u8);
 
-    resolve_repeats_exspander_with_stats(&mut graph, &matrix, &dist, params())
-        .expect("repeat resolution failed");
+        let dist = InsertSizeDist {
+            median: 240.0,
+            mad: 20.0,
+            min_insert: 180,
+            max_insert: 250,
+        };
+        let mut matrix = PairLinkMatrix::new();
+        // S is seed and curr_dir. Fork at S branches to D and P.
+        // Decoy D: sep = -31, dist1 = 110, dist2 = 130 => span = 209 in-window [180, 250], support = 5
+        // Repeat on P: dist1 = 80, dist2 = 82 => beta(S) = min(240, 162) = 162.
+        // Direct S -> P: sep = -31 => span = 80 - 31 + 82 = 131 < 180 (OUT of window, 0 support).
+        // Repeat hop P -> P: sep_v = -31 + p_len - 31 = p_len - 62.
+        // sep_v + beta(S) = (p_len - 62) + 162 = p_len + 100.
+        // At p_len = 150: sep_v + beta = 250 == max_insert (250).
+        //   classify_hop returns Probe!
+        //   pruned_repeat_hides_supported_endpoint explores P:
+        //   P has support from S with sep = 88: span = 80 + 88 + 82 = 250 in-window!
+        //   pruned_repeat_hides_supported_endpoint returns true! Search truncates!
+        //   Decoy D is WITHHELD (not deleted).
+        // At p_len = 151: sep_v + beta = 251 > max_insert (250).
+        //   classify_hop returns SafePrune!
+        //   Repeat hop P -> P is safely pruned! Probe is not run.
+        //   Decoy D is the sole candidate and COMMITS (is deleted)!
+        add_pairs_len(&mut matrix, s_id, d_id, 5, 110, 130, 37_001, 75);
+        add_pairs_len(&mut matrix, s_id, p_id, 20, 80, 82, 37_002, 75);
 
-    assert!(
-        graph.nodes[d_id.id() as usize].is_deleted,
-        "Candidate at exact max_insert boundary must be supported and committed"
-    );
+        resolve_repeats_exspander_with_stats(&mut graph, &matrix, &dist, params())
+            .expect("repeat resolution failed");
+
+        let d_deleted = graph.nodes[d_id.id() as usize].is_deleted;
+        assert_eq!(
+            d_deleted,
+            should_commit_decoy,
+            "At p_len={p_len}, decoy commit status was {d_deleted}, expected {should_commit_decoy}"
+        );
+    }
 }
 
 /// T38: Self-anchor in-window evidence forces withholding (must not commit as extension endpoint).
@@ -3546,38 +3583,46 @@ fn test_t38_self_anchor_in_window_evidence_withholds() {
     );
 }
 
-/// T39: Queue capacity limit (Q_MAX = 1024) safely truncates high-fanout graph without panic.
 #[test]
 fn test_t39_queue_capacity_limit_truncates() {
-    let mut graph = CdbgGraph::new(31);
-    let j_a = junction(0xE39_0001);
-    let s_seq = span_node(&[], 0xE39_0101, 700, &j_a);
-    let s_id = add_node(&mut graph, &s_seq);
+    for branch_count in [1025, 50] {
+        let mut graph = CdbgGraph::new(31);
+        let j_a = junction(0xE39_0001);
+        let s_seq = span_node(&[], 0xE39_0101, 700, &j_a);
+        let s_id = add_node(&mut graph, &s_seq);
+        let d_seq = span_node(&j_a, 0xE39_0102, 300, &[]);
+        let d_id = add_node(&mut graph, &d_seq);
+        add_edge(&mut graph, s_id, d_id, OV as u8);
 
-    // Create high fanout
-    let mut targets = Vec::new();
-    for i in 0..50 {
-        let t_seq = span_node(&j_a, 0xE39_0200 + i as u64, 100, &[]);
-        let t_id = add_node(&mut graph, &t_seq);
-        add_edge(&mut graph, s_id, t_id, OV as u8);
-        targets.push(t_id);
+        for i in 0..branch_count - 1 {
+            let t_seq = span_node(&j_a, 0xE39_0200 + i as u64, 100, &[]);
+            let t_id = add_node(&mut graph, &t_seq);
+            add_edge(&mut graph, s_id, t_id, OV as u8);
+        }
+
+        let dist = InsertSizeDist {
+            median: 300.0,
+            mad: 50.0,
+            min_insert: 100,
+            max_insert: 500,
+        };
+        let mut matrix = PairLinkMatrix::new();
+        add_pairs_len(&mut matrix, s_id, d_id, 10, 160, 171, 39_001, 75);
+
+        let stats = resolve_repeats_exspander_with_stats(&mut graph, &matrix, &dist, params())
+            .expect("repeat resolution failed");
+        assert_eq!(
+            graph.nodes[d_id.id() as usize].is_deleted,
+            branch_count == 50,
+            "D commits only when the initial queue does not saturate ({branch_count} branches)"
+        );
+        if branch_count == 1025 {
+            assert_eq!(
+                stats.valid_k_joins + stats.valid_k_minus_1_joins + stats.valid_other_joins,
+                0
+            );
+        }
     }
-
-    let dist = InsertSizeDist {
-        median: 300.0,
-        mad: 50.0,
-        min_insert: 100,
-        max_insert: 500,
-    };
-    let matrix = PairLinkMatrix::new();
-
-    // Resolving should finish safely with Truncated/withheld status, no panic
-    let stats = resolve_repeats_exspander_with_stats(&mut graph, &matrix, &dist, params())
-        .expect("repeat resolution failed");
-    assert_eq!(
-        stats.valid_k_joins + stats.valid_k_minus_1_joins + stats.valid_other_joins,
-        0
-    );
 }
 
 /// T40: Case A long fork self-loop (seq_len >= 500) must be rejected from repeat exploration.

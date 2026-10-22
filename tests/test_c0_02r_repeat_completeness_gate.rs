@@ -9,14 +9,12 @@
 //! - Every differential test actively invokes `independent_reference_oracle_search` and compares
 //!   oracle findings (candidates, separations, weights, completeness) with production resolver decisions.
 
-use std::collections::{HashSet, VecDeque};
 use fastbact::common::bitseq::reverse_complement_ascii;
 use fastbact::common::sketch::splitmix64;
 use fastbact::graph::cdbg::{CdbgGraph, DirUnitigId, GraphEdge, UnitigNode};
-use fastbact::resolve::exspander::{
-    resolve_repeats_exspander_with_stats, ExspanderParams,
-};
+use fastbact::resolve::exspander::{resolve_repeats_exspander_with_stats, ExspanderParams};
 use fastbact::resolve::mapper::{InsertSizeDist, PairLinkMatrix, ReadPairEvidence};
+use std::collections::{HashSet, VecDeque};
 
 const OV: usize = 31;
 
@@ -129,6 +127,7 @@ pub fn independent_resolve_edge(
         return None;
     }
     let chosen_ov = matching_edges[0].overlap_k as usize;
+    let chosen_support = max_support;
 
     // Reciprocal edge consistency
     let rev_from_seq = graph.get_stranded_seq(to.twin());
@@ -138,7 +137,7 @@ pub fn independent_resolve_edge(
     for e in rev_edges {
         if e.target == from.twin() {
             let ov = e.overlap_k as usize;
-            if ov == chosen_ov && ov <= rev_from_seq.len() && ov <= rev_to_seq.len() {
+            if ov > 0 && ov <= rev_from_seq.len() && ov <= rev_to_seq.len() {
                 if rev_from_seq[rev_from_seq.len() - ov..] == rev_to_seq[..ov] {
                     rev_matching_edges.push(e);
                 }
@@ -148,9 +147,16 @@ pub fn independent_resolve_edge(
     if rev_matching_edges.is_empty() {
         return None;
     }
-    let rev_max_support = rev_matching_edges.iter().map(|e| e.support).max().unwrap_or(0);
+    let rev_max_support = rev_matching_edges
+        .iter()
+        .map(|e| e.support)
+        .max()
+        .unwrap_or(0);
     rev_matching_edges.retain(|e| e.support == rev_max_support);
-    if rev_matching_edges.len() != 1 || rev_matching_edges[0].overlap_k as usize != chosen_ov {
+    if rev_matching_edges.len() != 1
+        || rev_matching_edges[0].overlap_k as usize != chosen_ov
+        || rev_max_support != chosen_support
+    {
         return None;
     }
 
@@ -229,6 +235,11 @@ pub fn reference_oracle_search(
 
     let outgoing = graph.nodes[fork_node.id() as usize].edges(fork_node.is_rc());
     for edge in outgoing {
+        if graph.nodes[edge.target.id() as usize].seq_len >= 500
+            && (edge.target.id() == curr_dir.id() || edge.target.id() == fork_node.id())
+        {
+            continue;
+        }
         if let Some(overlap) = independent_resolve_edge(graph, fork_node, edge.target) {
             let sep = init_sep - overlap as i64;
             if sep <= max_separation {
@@ -274,6 +285,7 @@ pub fn reference_oracle_search(
                 // Long unique node restriction
                 if target_node.seq_len >= 500
                     && (target.id() == curr_dir.id()
+                        || target.id() == fork_node.id()
                         || path.iter().any(|d| d.id() == target.id()))
                 {
                     continue;
@@ -299,6 +311,7 @@ pub fn reference_oracle_search(
             // Unique node restriction: >= 500 bp can only appear once in path
             if neighbor_node.seq_len >= 500
                 && (neighbor.id() == curr_dir.id()
+                    || neighbor.id() == fork_node.id()
                     || path.iter().any(|d| d.id() == neighbor.id()))
             {
                 continue;
@@ -375,14 +388,35 @@ fn test_oracle_differential_parameterized_tandem_copies() {
         let off_d = (span_d_target - (75 + sep_d)).max(1) as u32;
         add_pairs_len(&mut matrix, s_id, d_id, 5, 75, off_d, 30_100, 75);
         // X has 20 pairs matching exact span_x
-        add_pairs_len(&mut matrix, s_id, x_id, 20, off_s as u32, off_x as u32, 30_200, 75);
+        add_pairs_len(
+            &mut matrix,
+            s_id,
+            x_id,
+            20,
+            off_s as u32,
+            off_x as u32,
+            30_200,
+            75,
+        );
 
         // 1. Run independent reference oracle
         let init_sep = 100 - 31;
-        let oracle = reference_oracle_search(&graph, &matrix, &dist, s_id, q_id, init_sep, 4, dist.max_insert as i64);
+        let oracle = reference_oracle_search(
+            &graph,
+            &matrix,
+            &dist,
+            s_id,
+            q_id,
+            init_sep,
+            4,
+            dist.max_insert as i64,
+        );
 
         // Oracle must find both candidate X and candidate D
-        let x_candidate = oracle.candidates.iter().find(|c| c.path.last() == Some(&x_id));
+        let x_candidate = oracle
+            .candidates
+            .iter()
+            .find(|c| c.path.last() == Some(&x_id));
         assert!(
             x_candidate.is_some(),
             "Oracle must find candidate X for n_copies={n_copies}"
@@ -390,7 +424,10 @@ fn test_oracle_differential_parameterized_tandem_copies() {
         let x_cand = x_candidate.unwrap();
         assert_eq!(x_cand.support_count, 20);
 
-        let d_candidate = oracle.candidates.iter().find(|c| c.path.last() == Some(&d_id));
+        let d_candidate = oracle
+            .candidates
+            .iter()
+            .find(|c| c.path.last() == Some(&d_id));
         assert!(
             d_candidate.is_some(),
             "Oracle must find candidate D for n_copies={n_copies}"
@@ -450,7 +487,16 @@ fn test_oracle_differential_depth_boundary_truncation() {
     add_pairs_len(&mut matrix, s_id, x_id, 20, 20, 20, 31_200, 75);
 
     let init_sep = 100 - 31;
-    let oracle = reference_oracle_search(&graph, &matrix, &dist, s_id, q_id, init_sep, 4, dist.max_insert as i64);
+    let oracle = reference_oracle_search(
+        &graph,
+        &matrix,
+        &dist,
+        s_id,
+        q_id,
+        init_sep,
+        4,
+        dist.max_insert as i64,
+    );
 
     // Oracle detects continuation at depth limit
     assert!(
@@ -515,7 +561,16 @@ fn test_oracle_differential_separation_budget_bounds() {
 
     // Oracle search independently confirms whether R is out of separation budget
     let init_sep = 100 - 31;
-    let oracle = reference_oracle_search(&graph, &matrix, &dist, s_id, q_id, init_sep, 4, dist.max_insert as i64);
+    let oracle = reference_oracle_search(
+        &graph,
+        &matrix,
+        &dist,
+        s_id,
+        q_id,
+        init_sep,
+        4,
+        dist.max_insert as i64,
+    );
 
     // Oracle should find D as the sole candidate within max_separation=250
     assert_eq!(oracle.candidates.len(), 1);
@@ -548,11 +603,7 @@ fn test_oracle_differential_zero_evidence_repeat_does_not_falsely_truncate() {
     let d_id = add_node(&mut graph, &d_seq);
     let r_id = add_node(&mut graph, &r_seq);
 
-    for (from, to) in [
-        (s_id, q_id),
-        (q_id, d_id),
-        (q_id, r_id),
-    ] {
+    for (from, to) in [(s_id, q_id), (q_id, d_id), (q_id, r_id)] {
         add_edge(&mut graph, from, to, OV as u8);
     }
 
@@ -567,7 +618,16 @@ fn test_oracle_differential_zero_evidence_repeat_does_not_falsely_truncate() {
     add_pairs_len(&mut matrix, s_id, d_id, 10, 200, 217, 33_100, 75);
 
     let init_sep = 100 - 31;
-    let oracle = reference_oracle_search(&graph, &matrix, &dist, s_id, q_id, init_sep, 4, dist.max_insert as i64);
+    let oracle = reference_oracle_search(
+        &graph,
+        &matrix,
+        &dist,
+        s_id,
+        q_id,
+        init_sep,
+        4,
+        dist.max_insert as i64,
+    );
 
     // Oracle confirms that only D is scored and no continuation exists
     assert_eq!(oracle.candidates.len(), 1);
@@ -602,12 +662,7 @@ fn test_oracle_differential_long_node_cycle_inadmissible() {
     let d_id = add_node(&mut graph, &d_seq);
     let r_id = add_node(&mut graph, &r_seq);
 
-    for (from, to) in [
-        (s_id, q_id),
-        (q_id, d_id),
-        (q_id, r_id),
-        (r_id, r_id),
-    ] {
+    for (from, to) in [(s_id, q_id), (q_id, d_id), (q_id, r_id), (r_id, r_id)] {
         add_edge(&mut graph, from, to, OV as u8);
     }
 
@@ -622,7 +677,16 @@ fn test_oracle_differential_long_node_cycle_inadmissible() {
     add_pairs_len(&mut matrix, s_id, d_id, 10, 200, 217, 34_100, 75);
 
     let init_sep = 100 - 31;
-    let oracle = reference_oracle_search(&graph, &matrix, &dist, s_id, q_id, init_sep, 4, dist.max_insert as i64);
+    let oracle = reference_oracle_search(
+        &graph,
+        &matrix,
+        &dist,
+        s_id,
+        q_id,
+        init_sep,
+        4,
+        dist.max_insert as i64,
+    );
 
     // Oracle recognizes that long node (550 bp) self loop cannot repeat
     assert_eq!(oracle.candidates.len(), 1);
@@ -665,7 +729,16 @@ fn test_oracle_differential_normal_fork_resolves_cleanly() {
     let mut matrix = PairLinkMatrix::new();
     add_pairs_len(&mut matrix, s_id, a_id, 25, 200, 200, 35_100, 75);
 
-    let oracle = reference_oracle_search(&graph, &matrix, &dist, s_id, s_id, 0, 4, dist.max_insert as i64);
+    let oracle = reference_oracle_search(
+        &graph,
+        &matrix,
+        &dist,
+        s_id,
+        s_id,
+        0,
+        4,
+        dist.max_insert as i64,
+    );
 
     // Oracle finds A as supported candidate (25 pairs) and no continuation
     assert_eq!(oracle.candidates.len(), 1);
@@ -681,4 +754,69 @@ fn test_oracle_differential_normal_fork_resolves_cleanly() {
         graph.nodes[a_node].is_deleted,
         "Normal fork with strong support must resolve cleanly"
     );
+}
+
+#[test]
+fn test_oracle_reciprocal_edge_controls() {
+    for (forward_edges, reverse_edges, expected) in [
+        (vec![(31, 10)], vec![(31, 10)], Some(31)),
+        (vec![(31, 10)], vec![(31, 5)], None),
+        (vec![(31, 10), (30, 10)], vec![(31, 10)], None),
+        (vec![(31, 10)], vec![(31, 10), (30, 20)], None),
+        (vec![(31, 10)], vec![(31, 10), (30, 10)], None),
+    ] {
+        let mut graph = CdbgGraph::new(31);
+        let from = add_node(&mut graph, &[b'A'; 100]);
+        let to = add_node(&mut graph, &[b'A'; 100]);
+        for (overlap, support) in forward_edges {
+            graph.nodes[from.id() as usize].add_edge(false, GraphEdge::new(to, overlap, support));
+        }
+        for (overlap, support) in reverse_edges {
+            graph.nodes[to.id() as usize]
+                .add_edge(true, GraphEdge::new(from.twin(), overlap, support));
+        }
+        assert_eq!(independent_resolve_edge(&graph, from, to), expected);
+    }
+}
+
+#[test]
+fn test_oracle_differential_long_fork_self_loop_rejected() {
+    for fork_len in [600, 100] {
+        let mut graph = CdbgGraph::new(31);
+        let j = junction(0xD08_0001);
+        let s = add_node(&mut graph, &span_node(&[], 0xD08_0101, 700, &j));
+        let f = add_node(&mut graph, &span_node(&j, 0xD08_0102, fork_len, &j));
+        let d = add_node(&mut graph, &span_node(&j, 0xD08_0103, 300, &[]));
+        for (from, to) in [(s, f), (f, f), (f, d)] {
+            add_edge(&mut graph, from, to, OV as u8);
+        }
+        let dist = InsertSizeDist {
+            median: (fork_len + 138) as f64,
+            mad: 40.0,
+            min_insert: 100,
+            max_insert: 2000,
+        };
+        let mut matrix = PairLinkMatrix::new();
+        add_pairs_len(&mut matrix, s, d, 10, 100, 100, 38_001, 75);
+        let oracle = reference_oracle_search(
+            &graph,
+            &matrix,
+            &dist,
+            s,
+            f,
+            fork_len as i64 - OV as i64,
+            4,
+            dist.max_insert as i64,
+        );
+        assert!(oracle.candidates.iter().any(|c| c.path == [d]));
+        if fork_len >= 500 {
+            assert!(oracle.candidates.iter().all(|c| !c.path.contains(&f)));
+            assert!(oracle.is_complete);
+        } else {
+            assert!(oracle.candidates.iter().any(|c| c.path == [f, d]));
+        }
+        resolve_repeats_exspander_with_stats(&mut graph, &matrix, &dist, params())
+            .expect("repeat resolution failed");
+        assert_eq!(graph.nodes[d.id() as usize].is_deleted, fork_len >= 500);
+    }
 }
