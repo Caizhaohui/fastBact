@@ -1,0 +1,65 @@
+You are Cursor Grok 4.7 Extra High Fast acting as the Primary Implementer for fastBact Phase F13.
+
+## Task Overview
+Fix Codex Independent Audit Finding F12-P1-001 (AUDIT-20261022-008) in `src/resolve/exspander.rs`.
+The goal is to generalize the auxiliary repeat probe (`pruned_repeat_hides_supported_endpoint`) to correctly explore admissible multi-copy repeat continuations without silently pruning subsequent repeat transitions.
+
+## Context & Finding F12-P1-001
+In Phase F12, Codex identified that `pruned_repeat_hides_supported_endpoint` admitted only a single re-entry into repeat node R.
+At `src/resolve/exspander.rs:488`:
+```rust
+for neighbor in next_targets {
+    if node_visited.contains(&neighbor.id()) {
+        continue;
+    }
+```
+This check unconditionally drops ANY subsequent visited-node transition along the probe path.
+Consequently:
+If an authentic tandem repeat requires N >= 2 repeat iterations (e.g. S → Q → R → R → R → X, 3 copies of R, 4 candidate steps from Q, within `max_separation` and `MAX_CANDIDATE_DEPTH`), the probe stops exploring after 1 re-entry, fails to reach X, returns false, and the main search returns `SearchStatus::Complete`.
+Weak decoy D is then accepted under the single-candidate rule, and authentic competitor X (with 4x stronger support) is dropped, creating a misassembly.
+
+## Target File
+`src/resolve/exspander.rs` in the current worktree `/hpcfs/fhome/caizhh/Desktop/03_Tool_Development/fastBact-phase-f13-grok-worktree`.
+Do NOT modify `src/graph/cdbg.rs` or any F11-B lifecycle contracts (`ResolverLifecycleState`, `ResolverLifecycleGuard`, `Result<..., ExspanderError>`).
+Do NOT modify `main.rs`.
+
+## Existing RED Tests
+The test suite `tests/test_c0_02r_state_semantics_gate.rs` has deterministic RED tests already committed:
+- `test_t19_three_copy_tandem_repeat_must_withhold_decoy` (3-copy loop R -> R -> R -> X)
+- `test_t20_four_step_tandem_repeat_must_withhold_decoy` (4-step tandem repeat hitting depth limit)
+- `test_t21_alternating_cycle_repeat_must_withhold_decoy` (two-node alternating cycle A <-> B)
+- `test_t22_three_copy_tandem_repeat_rc_symmetry_must_withhold_decoy` (reverse-complement symmetry)
+Currently, all 4 tests fail with: `panicked at ... D must not be consumed by a misassembly commit`.
+
+## Engineering Requirements (C1–C4)
+1. **Admissible Repeat Transitions in Probe**:
+   In `pruned_repeat_hides_supported_endpoint`:
+   When exploring outgoing neighbors from `node`:
+   - Unique nodes (`neighbor_node.seq_len >= 500`): must NOT be repeated along the path if already visited (`node_visited.contains(&neighbor.id())`). In `validate_and_splice_path`, nodes >= 500 bp can appear at most once.
+   - Short repeat nodes (`neighbor_node.seq_len < 500`): CAN be visited multiple times along the path, provided:
+     - `!neighbor_node.is_circular`
+     - `!neighbor_node.is_deleted || consumed_nodes.contains(&neighbor.id())`
+     - `neighbor.id() != curr_dir.id() && !ext_nodes.contains(&neighbor.id())`
+     - Valid sequence-overlap edge exists (`resolve_edge_between(graph, node, neighbor) == EdgeResolveResult::Valid(edge)`)
+     - Separation remains within budget (`sep_next = sep + node_len as i64 - edge.overlap_k as i64 <= max_separation`)
+   - Do NOT unconditionally `continue;` on `node_visited.contains(&neighbor.id())` for short nodes!
+
+2. **Bounded Exploration**:
+   - `steps`: each transition increments `steps + 1`. When `steps >= MAX_CANDIDATE_DEPTH`, do not enqueue further; check `depth_limit_hides_continuation` and return true if continuation exists.
+   - `states`: track `states += 1`. If `states > MAX_DFS_STATES`, return `true` (Truncated).
+   - `separation`: `sep_next <= max_separation` enforced before enqueue.
+   - Directed cycle termination: bounded by `MAX_CANDIDATE_DEPTH = 4`, `max_separation`, and `MAX_DFS_STATES = 256`.
+
+3. **SearchStatus Soundness**:
+   - When probe reaches a node with `matrix.get_support(curr_dir, node) > 0` and `score_candidate_path(...)` returns `count > 0`: return `true`.
+   - When probe hits `steps >= MAX_CANDIDATE_DEPTH` with admissible continuation: return `true`.
+   - When state budget `MAX_DFS_STATES` is exceeded: return `true`.
+   - Main search receives `true` from `pruned_repeat_hides_supported_endpoint` and sets `search_status = SearchStatus::Truncated`.
+   - This causes `extend_one_direction` to withhold the fork decision and protect fork targets, turning T19–T22 GREEN!
+
+4. **Preserve Invariants**:
+   - Do NOT break existing tests T1–T18.
+   - Do NOT modify F11-B lifecycle contracts or Result signatures.
+   - Do NOT change `MAX_CANDIDATE_DEPTH = 4`.
+
+Please apply this minimal, principled fix to `src/resolve/exspander.rs`.
