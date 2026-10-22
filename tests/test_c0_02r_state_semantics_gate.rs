@@ -2593,3 +2593,91 @@ fn test_t22_three_copy_tandem_repeat_rc_symmetry_must_withhold_decoy() {
         "Misassembled contig S-Q-D must not be created under RC symmetry"
     );
 }
+
+/// T23 / F14-P1-001. Short prefix reuse must not promote decoy under Complete status.
+///
+/// Topology:
+/// S(700) → P(100) → C(100) → D(300)
+///           │        │
+///           └→ X(300) └→ P
+///
+/// Overlaps: all 31 bp.
+/// S ends in junction A.
+/// P: prefix A, suffix B. (len 100)
+/// C: prefix B, suffix A. (len 100)
+/// D: prefix A, suffix []. (len 300)
+/// X: prefix B, suffix []. (len 300)
+///
+/// Decision 1: Seed S extends through P to C (20 pairs between S and C, span 200).
+/// Prefix ext = [P, C], curr_dir = C.
+/// ext_nodes = {P, C}.
+///
+/// Decision 2: From C, candidate search evaluates:
+/// - C → D (5 pairs, span 200)
+/// - C → P → X (20 pairs, span 200)
+///
+/// If P is unconditionally skipped due to ext_nodes.contains(&P.id()),
+/// candidate X is dropped, search status returns Complete, and weak decoy D commits!
+/// P is a short node (< 500 bp), so reusing P conforms to validate_and_splice_path.
+#[test]
+fn test_t23_short_prefix_reuse_must_not_promote_decoy() {
+    let mut graph = CdbgGraph::new(31);
+    let j_a = junction(0xE23_0001);
+    let j_b = junction(0xE23_0002);
+    assert_junctions_distinct(&[j_a.clone(), j_b.clone()]);
+
+    let s_seq = span_node(&[], 0xE23_0101, 700, &j_a);
+    let p_seq = span_node(&j_a, 0xE23_0102, 100, &j_b);
+    let c_seq = span_node(&j_b, 0xE23_0103, 100, &j_a);
+    let d_seq = span_node(&j_a, 0xE23_0104, 300, &[]);
+    let x_seq = span_node(&j_b, 0xE23_0105, 300, &[]);
+
+    let s_id = add_node(&mut graph, &s_seq);
+    let p_id = add_node(&mut graph, &p_seq);
+    let c_id = add_node(&mut graph, &c_seq);
+    let d_id = add_node(&mut graph, &d_seq);
+    let x_id = add_node(&mut graph, &x_seq);
+
+    for (from, to) in [
+        (s_id, p_id),
+        (p_id, c_id),
+        (p_id, x_id),
+        (c_id, p_id),
+        (c_id, d_id),
+    ] {
+        add_edge(&mut graph, from, to, OV as u8);
+        assert_valid_edge(&graph, from, to, OV as u8);
+    }
+
+    const READ: u32 = 75;
+    let dist = InsertSizeDist {
+        median: 200.0,
+        mad: 20.0,
+        min_insert: 150,
+        max_insert: 250,
+    };
+    let mut matrix = PairLinkMatrix::new();
+    // Decision 1: S -> P -> C (sep = 100 - 31 - 31 = 38, span = 80 + 38 + 82 = 200)
+    add_pairs_len(&mut matrix, s_id, c_id, 20, 80, 82, 23_001, READ as u16);
+
+    // Decision 2: C -> D (sep = -31, span = 80 - 31 + 151 = 200, 5 pairs)
+    add_pairs_len(&mut matrix, c_id, d_id, 5, 80, 151, 23_002, READ as u16);
+
+    // Decision 2: C -> P -> X (sep = -31 + 100 - 31 = 38, span = 80 + 38 + 82 = 200, 20 pairs)
+    add_pairs_len(&mut matrix, c_id, x_id, 20, 80, 82, 23_003, READ as u16);
+
+    let misassembly = splice(&[&s_seq, &p_seq, &c_seq, &d_seq], &[OV, OV, OV]);
+    resolve_repeats_exspander_with_stats(&mut graph, &matrix, &dist, params())
+        .expect("repeat resolution failed");
+
+    let d_node = d_id.id() as usize;
+    assert!(
+        !graph.nodes[d_node].is_deleted,
+        "D must not be consumed by a misassembly commit when C -> P -> X is an admissible competitor"
+    );
+    assert!(
+        !has_active_seq(&graph, &misassembly),
+        "Misassembled contig S-P-C-D must not be created"
+    );
+}
+
