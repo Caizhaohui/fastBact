@@ -1,0 +1,117 @@
+# fastBact — Phase F15-B: Minimal Production Repair
+
+You are the Primary Implementer (Cursor Grok 4.7 Extra High Fast).
+Your task is to implement the minimal production correctness repair for Finding F14-P1-001 (short prefix reuse) and Finding F14-P2-004 (circular check in depth limit continuation) in `src/resolve/exspander.rs`.
+
+## Context & Finding F14-P1-001
+In Phase F14, independent auditor Codex CLI identified Finding F14-P1-001:
+When extending across forks, `ext_nodes` contains nodes already accepted into the current extension prefix `ext`.
+`validate_and_splice_path` explicitly permits short repeat nodes (< 500 bp) to be reused across `full_path`, only enforcing unique non-repetition for long nodes (>= 500 bp):
+```rust
+if node.seq_len >= 500 && !seen_unique_nodes.insert(step.dir.id()) {
+    return Err("Unauthorized unique node reuse in path");
+}
+```
+However, in `find_candidate_paths` at line 262, the resolver unconditionally executed:
+```rust
+if u.id() == curr_dir.id() || ext_nodes.contains(&u.id()) {
+    continue;
+}
+```
+This unconditionally dropped any short repeat node that was part of an earlier extension prefix. When extending from `C`, a legitimate path `C -> P -> X` (where `P` is a short 100 bp node in `ext_nodes`) was silently skipped. The search found only weak decoy `D`, returned `SearchStatus::Complete`, and committed `S -> P -> C -> D`, dropping the authentic, 4x stronger route `X`.
+
+Furthermore, in `pruned_repeat_hides_supported_endpoint` (lines 427, 455, 493), `ext_nodes.contains` similarly unconditionally dropped short repeat nodes from probe exploration.
+
+And in `depth_limit_hides_continuation` (line 563, Finding F14-P2-004), the continuation check checked `next_node.is_deleted`, but omitted `if next_node.is_circular { continue; }`, inconsistently allowing circular successors that main dequeue discards.
+
+## Target File
+`src/resolve/exspander.rs`
+
+## Required Minimal Edits
+
+1. In `find_candidate_paths` around line 262:
+Change:
+```rust
+        if u.id() == curr_dir.id() || ext_nodes.contains(&u.id()) {
+            continue;
+        }
+```
+To:
+```rust
+        if u.id() == curr_dir.id() {
+            continue;
+        }
+        if u_node.seq_len >= 500 && ext_nodes.contains(&u.id()) {
+            continue;
+        }
+```
+
+2. In `pruned_repeat_hides_supported_endpoint`:
+- At entry filter (around line 427):
+Change:
+```rust
+    if next_target.id() == curr_dir.id() || ext_nodes.contains(&next_target.id()) {
+        return false;
+    }
+```
+To:
+```rust
+    let next_node = &graph.nodes[next_target.id() as usize];
+    if next_target.id() == curr_dir.id()
+        || (next_node.seq_len >= 500 && ext_nodes.contains(&next_target.id()))
+    {
+        return false;
+    }
+```
+
+- At dequeue filter (around line 455):
+Change:
+```rust
+        if node.id() == curr_dir.id() || ext_nodes.contains(&node.id()) {
+            continue;
+        }
+```
+To:
+```rust
+        if node.id() == curr_dir.id()
+            || (node_len >= 500 && ext_nodes.contains(&node.id()))
+        {
+            continue;
+        }
+```
+
+- At neighbor loop (around line 493):
+Change:
+```rust
+            if node_visited.contains(&neighbor.id()) {
+                if neighbor.id() == curr_dir.id() || ext_nodes.contains(&neighbor.id()) {
+                    continue;
+                }
+```
+To:
+```rust
+            if node_visited.contains(&neighbor.id()) {
+                let neighbor_node = &graph.nodes[neighbor.id() as usize];
+                if neighbor.id() == curr_dir.id()
+                    || (neighbor_node.seq_len >= 500 && ext_nodes.contains(&neighbor.id()))
+                {
+                    continue;
+                }
+```
+
+3. In `depth_limit_hides_continuation` around line 563:
+Add circular node check before or with deletion check:
+```rust
+        let next_node = &graph.nodes[next_target.id() as usize];
+        if next_node.is_circular {
+            continue;
+        }
+        if next_node.is_deleted && !consumed_nodes.contains(&next_target.id()) {
+            continue;
+        }
+```
+
+## Strict Constraints
+- ONLY edit `src/resolve/exspander.rs`. Do not edit tests, cargo files, or other modules.
+- Preserve all comments, docstrings, error types, and public APIs.
+- Do NOT run cargo test or cargo build directly.

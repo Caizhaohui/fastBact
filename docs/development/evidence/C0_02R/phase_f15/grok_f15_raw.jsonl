@@ -1,0 +1,10 @@
+`src/resolve/exspander.rs` 已按 Finding F14-P1-001 和 F14-P2-004 做完最小修复，只改了这一个文件。
+
+**F14-P1-001（短前缀重复节点被误丢）**  
+长度不足 500 bp 的节点可以再次进入扩展搜索，与 `validate_and_splice_path` 的短重复允许规则一致。长度达到 500 bp 的节点若已在 `ext_nodes` 中，仍然跳过。
+
+- `find_candidate_paths`：自身节点 `curr_dir` 仍直接跳过；只有 `seq_len >= 500` 且已在 `ext_nodes` 中才跳过。
+- `pruned_repeat_hides_supported_endpoint` 的入口过滤、出队过滤和邻居循环使用同一条长度门槛。出队处把 `node_len` 提前到过滤之前，条件才能使用它。
+
+**F14-P2-004（深度上限后续检查漏掉环状节点）**  
+`depth_limit_hides_continuation` 在删除检查之前增加了 `next_node.is_circular` 跳过，与主搜索出队时丢弃环状后继的行为对齐。
