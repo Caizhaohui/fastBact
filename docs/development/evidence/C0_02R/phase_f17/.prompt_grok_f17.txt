@@ -1,0 +1,182 @@
+# fastBact Phase F17-I: Implement Unified classify_hop Architecture
+
+You are the Primary Implementer (Cursor Grok 4.7 Extra High Fast) for fastBact Phase F17-I.
+Your task is to implement the unified `classify_hop` architecture approved by Claude Opus 5.5 High (`AUDIT-20261022-011`) in `src/resolve/exspander.rs`.
+
+## Objective
+Unify the four drifting search walkers (`find_candidate_paths`, `pruned_repeat_hides_supported_endpoint`, `depth_limit_hides_continuation`) onto a single, stateless, mathematically sound `classify_hop` evaluation contract.
+Resolve Finding `F16-P1-001` (short current-node re-entry exclusion) while preserving test T27 (`S -> P -> C -> P -> X`) via the evidence-aware separation bound beta(curr).
+
+---
+
+## 1. Architecture Requirements in `src/resolve/exspander.rs`
+
+### A. Define `HopClass` and `classify_hop`
+Define private enum:
+```rust
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum HopClass {
+    Live { edge: GraphEdge, sep: i64, shadow: bool },
+    Probe { edge: GraphEdge, sep: i64, shadow: bool },
+    SafePrune,
+    Inadmissible,
+    Unresolved,
+}
+```
+
+Implement private function `classify_hop`:
+```rust
+fn classify_hop(
+    graph: &CdbgGraph,
+    u: DirUnitigId,
+    v: DirUnitigId,
+    sep_u: i64,
+    visited: &[u32],
+    step_depth: usize,
+    shadow_u: bool,
+    curr_dir: DirUnitigId,
+    ext_nodes: &HashSet<u32>,
+    used_unique: &HashSet<u32>,
+    consumed_nodes: &HashSet<u32>,
+    max_separation: i64,
+    beta: i64,
+) -> HopClass {
+    // 1. Edge resolution
+    let EdgeResolveResult::Valid(edge) = resolve_edge_between(graph, u, v) else {
+        return HopClass::Inadmissible;
+    };
+
+    // 2. Separation arithmetic: at initial targets (step_depth == 0), sep_u is init_sep.
+    // For subsequent steps (step_depth >= 1), add len(u) - overlap.
+    let sep_v = (if step_depth == 0 {
+        sep_u
+    } else {
+        sep_u + graph.nodes[u.id() as usize].seq_len as i64
+    }) - edge.overlap_k as i64;
+
+    // 3. Window Bound with beta floor:
+    if sep_v + beta > max_separation {
+        return HopClass::SafePrune;
+    }
+
+    // 4. Upstream deletion check:
+    let v_node = &graph.nodes[v.id() as usize];
+    if v_node.is_deleted && !consumed_nodes.contains(&v.id()) {
+        return HopClass::Inadmissible;
+    }
+
+    // 5. Circular policy:
+    if v_node.is_circular {
+        return HopClass::Unresolved;
+    }
+
+    // 6. Long unique-node restriction (>= 500 bp):
+    if v_node.seq_len >= 500 && (ext_nodes.contains(&v.id()) || visited.contains(&v.id())) {
+        return HopClass::SafePrune;
+    }
+
+    // 7. Shadow status inheritance:
+    let shadow_v = shadow_u
+        || (v_node.is_deleted && consumed_nodes.contains(&v.id()))
+        || (v_node.seq_len >= 500 && used_unique.contains(&v.id()));
+
+    // 8. Short repeat recurrence (< 500 bp in visited):
+    if v_node.seq_len < 500 && visited.contains(&v.id()) && step_depth >= 1 {
+        return HopClass::Probe {
+            edge,
+            sep: sep_v,
+            shadow: shadow_v,
+        };
+    }
+
+    // 9. Default: Live expansion
+    HopClass::Live {
+        edge,
+        sep: sep_v,
+        shadow: shadow_v,
+    }
+}
+```
+
+### B. Beta Distance Floor `beta(curr)`
+Compute `beta` for `curr_dir`:
+```rust
+let beta: i64 = matrix
+    .links
+    .iter()
+    .filter(|((u1, _), _)| *u1 == curr_dir)
+    .flat_map(|(_, evs)| evs.iter().map(|ev| ev.dist_u1_exit as i64 + ev.dist_u2_entry as i64))
+    .min()
+    .unwrap_or(0);
+```
+
+### C. Refactor `find_candidate_paths`
+1. Queue capacity cap:
+   `const MAX_QUEUE_CAPACITY: usize = 1024;`
+   If `queue.len() >= MAX_QUEUE_CAPACITY`, set `search_status = SearchStatus::Truncated; break;`.
+2. Initial targets:
+   Filter through `classify_hop(graph, fork_node, target, init_sep, &visited, 0, false, curr_dir, ext_nodes, used_unique, consumed_nodes, max_separation, beta)`.
+   - If `Live`: push to queue.
+   - If `Unresolved`: set `search_status = SearchStatus::Truncated`.
+3. Dequeue and scoring:
+   Remove hand-coded lines 252-270 (`u_node.is_circular`, `u_node.is_deleted`, `u.id() == curr_dir.id()`, etc.), because `classify_hop` already validated them before enqueuing!
+   Apply Self-Anchor Rule:
+   ```rust
+   visited.push(u.id());
+   if u.id() == curr_dir.id() {
+       let (support_count, _) = score_candidate_path(matrix, dist, curr_dir, u, sep_u);
+       if support_count > 0 {
+           search_status = SearchStatus::Truncated;
+       }
+       // Do not record self-anchor as a committable candidate
+   } else {
+       let (support_count, total_weight) = score_candidate_path(matrix, dist, curr_dir, u, sep_u);
+       if support_count > 0 {
+           candidates.push(CandidatePath {
+               steps: steps.clone(),
+               endpoint: u,
+               separation: sep_u,
+               support_count,
+               total_weight,
+               through_consumed,
+           });
+           if candidates.len() >= MAX_CANDIDATE_PATHS {
+               search_status = SearchStatus::Truncated;
+               break;
+           }
+       }
+   }
+   ```
+4. Expanding neighbors:
+   For each outgoing edge/target `neighbor`:
+   Call `classify_hop(graph, u, neighbor, sep_u, &visited, steps.len(), through_consumed, curr_dir, ext_nodes, used_unique, consumed_nodes, max_separation, beta)`.
+   - `HopClass::Probe { edge, sep, shadow }`:
+     Run `pruned_repeat_hides_supported_endpoint(...)`. If true, set `search_status = SearchStatus::Truncated; break;`.
+   - `HopClass::Live { edge, sep, shadow }`:
+     If `steps.len() < MAX_CANDIDATE_DEPTH`:
+     If `queue.len() >= MAX_QUEUE_CAPACITY`: `search_status = SearchStatus::Truncated; break;`
+     Else push `(neighbor, sep, steps_clone, visited_clone, shadow)`.
+   - `HopClass::Unresolved`:
+     `search_status = SearchStatus::Truncated; break;`.
+   - `HopClass::SafePrune` or `HopClass::Inadmissible`:
+     Ignore (pruned safely).
+5. At depth limit:
+   Call `depth_limit_hides_continuation(...)`. If true, set `search_status = SearchStatus::Truncated`.
+
+### D. Refactor `pruned_repeat_hides_supported_endpoint`
+1. Delete lines 431-435 (`if next_target.id() == curr_dir.id() || ...`), lines 462-466, lines 500-506.
+2. In the probe BFS, use `classify_hop`:
+   - Self-anchor check: if `node.id() == curr_dir.id()`, score candidate. If `count > 0`, return `true` (forces truncate)!
+   - If queue exceeds `MAX_QUEUE_CAPACITY`, return `true`!
+   - For neighbors, call `classify_hop`. If `HopClass::Live` or `HopClass::Probe`, enqueue or probe further. If `HopClass::Unresolved`, return `true`!
+3. `admissible_repeat_continuation` can be merged or simplified to use `classify_hop`.
+
+### E. Refactor `depth_limit_hides_continuation`
+Iterate outgoing edges. Call `classify_hop`. If any neighbor is `HopClass::Live`, `HopClass::Probe`, or `HopClass::Unresolved`, return `true`!
+
+---
+
+## 2. Constraints
+- Only edit `src/resolve/exspander.rs`.
+- Do NOT change `CdbgGraph` public API or signatures in `cdbg.rs` or `mapper.rs`.
+- Ensure all existing tests (T1–T32) pass, T27 stays GREEN, and new tests T33–T35 turn GREEN!

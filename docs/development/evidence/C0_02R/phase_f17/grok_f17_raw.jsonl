@@ -1,0 +1,7 @@
+`classify_hop` 现在是 `src/resolve/exspander.rs` 里唯一的跳准入规则。主搜索、重复探针和深度封顶都只消费它返回的 `HopClass`。
+
+短节点再次进入当前锚点时会被放进主队列并继续扩展。锚点上的窗内配对证据会把搜索标成 `Truncated`，并且不会把锚点本身记成可提交终点。因此 `C → C → X` 会压过弱诱饵 `D`，`S → P → C → P → X` 仍然提交。
+
+`beta(curr)` 是当前锚点上 `dist_u1_exit + dist_u2_entry` 的最小值。它只剪短重复再入：`sep + beta > max_insert` 时，这条重复路径不可能再落到插入片段窗口里。首次访问和深度封顶仍按原始分离上界 `sep <= max_insert` 判断，所以深度 4 上仍在预算内的结构延续会保守截断。队列上限是 1024；环状节点记为 `Unresolved` 并截断。
+
+`test_c0_02r_state_semantics_gate` 的 42 项测试通过，其中包括 T1–T32、T27，以及 T33–T41。350 bp 重复解析和其余 C0-02R 门禁同样通过。
