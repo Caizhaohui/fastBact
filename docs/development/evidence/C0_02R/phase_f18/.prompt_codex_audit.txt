@@ -1,0 +1,200 @@
+# fastBact — Phase F18: Independent Audit of Unified Search Admissibility
+
+## Context & Audit Target
+
+You are acting as the **Independent Auditor (Codex CLI)** for fastBact Phase F18.
+You are conducting a strict, independent, code-level correctness, graph invariant, mathematical soundness, and search completeness audit of **Phase F17-I (Unified Search Admissibility Implementation)** implemented on branch `feature/c0-02r-phase-f17-grok` in worktree `fastBact-phase-f17-grok-worktree`.
+
+### Git DAG & Target Commits
+- Audit Target HEAD: `c37ef6e03475230dc7f8596e0fc6788ba4fc6355` (Commit `c37ef6e`: Phase F17 execution report & telemetry)
+- F17-I7 Oracle & Test Validity Repairs: `f6bb830db7dba1f92b50f5624981dc92378ddb48` (Commit `f6bb830`: repaired independent oracle, RC mirror graphs, and decision-anchored sensitivity controls)
+- F17-I2~I6 Production Implementation: `ac445f63967a0a28e2f91021780f3fc60966bca3` (Commit `ac445f6`: unified `classify_hop` architecture with evidence-aware beta bound)
+- F17-I1 RED Tests: `b553ba19c7239494bfa7dd69e7e078b78eab4d92` (Commit `b553ba1`: deterministic RED tests T33–T41)
+- Baseline Commit: `4d08b380d573b568e67498ef71cff632f8a0ef67` (Phase F15 evidence HEAD)
+- Claude Opus 5.5 Architectural Design: `AUDIT-20261022-011` (`docs/development/evidence/C0_02R/phase_f17/opus55_search_architecture_review.md`, Verdict: `MINIMAL_UNIFICATION_SUFFICIENT`)
+- Prior Codex Audit: `AUDIT-20261022-010` (`docs/development/evidence/C0_02R/phase_f16/codex_f15_independent_audit.md`, Verdict: FAIL)
+- Phase F17 Execution Report: `docs/development/evidence/C0_02R/phase_f17/phase_f17_execution_report.md`
+
+### Scope of Files to Review
+Inspect the actual repository and diff directly:
+`git diff 4d08b38..c37ef6e`
+Primary production implementation:
+- `src/resolve/exspander.rs` (+385 / -275 lines)
+New test suites and regression gates:
+- `tests/test_c0_02r_state_semantics_gate.rs` (Repaired T22, T24, T28, T29, T30; added T33–T41)
+- `tests/test_c0_02r_repeat_completeness_gate.rs` (Rewritten independent reference oracle & differential tests)
+
+**Notice**: Your audit must be based strictly on actual Rust source code analysis, graph invariant tracing, mathematical proofs, and minimal counterexample generation. Do NOT rely on self-assessments or prior reviewer conclusions. C0-02R acceptance status remains **NOT ACCEPTED**.
+
+---
+
+## Detailed Audit Mandates
+
+### 1. Audit A — Mathematical Soundness of Evidence Floor β(curr) (Highest Priority)
+The safe pruning condition in `src/resolve/exspander.rs` is:
+`sep_u + beta(curr) > max_insert => HopClass::SafePrune`
+
+Independently prove or disprove:
+For every path pruned as `SafePrune`, and for any reachable legal candidate endpoint $v$ satisfying current candidate scoring contracts:
+$$\text{span}(v) \ge \text{sep}_u + \beta(\text{curr})$$
+
+#### A1. Evidence Domain
+1. Which exact `ReadPairEvidence` entries does `separation_beta` examine?
+2. Does it inspect all possible candidate evidence originating from directed `curr_dir`?
+3. Could any candidate with smaller implied fragment span be missed due to pre-filtering?
+4. Are read endpoint anchors ($p_1, p_2, r_1, r_2$) consistent between `separation_beta` and `score_candidate_path`?
+5. Does read orientation or twin mapping affect $\beta$?
+6. Do shadow candidates through consumed nodes follow identical distance semantics?
+7. Can $\beta$ be artificially inflated by caching, stale data, or edge deduplication?
+8. How is $\beta$ handled when no evidence exists anchored at `curr_dir`? Does $\beta = 0$ safely degenerate?
+
+#### A2. Coordinate and Separation Proof
+Verify the exact formulas:
+- $\text{dist\_u1\_exit} = |L_1| - p_1$
+- $\text{dist\_u2\_entry} = p_2 + r_2$
+- Cumulative sequence separation along directed edges: $\text{sep}_{\text{next}} = \text{sep}_u + \text{len}(u) - \text{overlap}$.
+- Prove that $\text{sep}$ is monotonically non-decreasing along all valid graph edges (confirm $\text{overlap} \le \text{len}(u)$ in production cDBG).
+- If monotonicity could fail, identify the exact edge topology.
+
+#### A3. Boundary Conditions
+Inspect edge cases:
+- $\text{sep} + \beta == \text{max\_insert}$ (must NOT be pruned!)
+- $\text{sep} + \beta == \text{max\_insert} + 1$ (pruned)
+- $\beta = 0$ (evidence absent)
+- Very short reads ($< 31$ bp) or single-base unitigs.
+- Coordinate overflow safety in integer additions.
+
+#### A4. Production Counterexample Search
+Actively attempt to construct a minimal directed graph counterexample where:
+Strong competitor path pruned by $\beta$ + `SearchStatus::Complete` returned + Weak decoy committed.
+If found, report as a P1 correctness blocker. If sound, state the mathematical proof and supporting invariants.
+
+---
+
+### 2. Audit B — classify_hop Single Authority
+Trace the call graph of `classify_hop` across the three walkers:
+1. `find_candidate_paths` (Main BFS)
+2. `pruned_repeat_hides_supported_endpoint` (Repeat probe)
+3. `depth_limit_hides_continuation` (Depth exhaustion check)
+
+Verify:
+- B1. Do all three walkers uniformly delegate path extension legality to `classify_hop`?
+- B2. Are there any surviving walker-local `curr_dir`, `ext_nodes`, or `visited` exclusion filters?
+- B3. Does `HopClass::SafePrune` have identical semantics across all callers?
+- B4. Is `HopClass::Inadmissible` strictly reserved for structural invariants (e.g., long node reuse $\ge 500$ bp, deleted/unconsumed nodes)?
+- B5. Does `HopClass::Unresolved` always propagate `SearchStatus::Truncated` outward?
+- B6. Does `HopClass::Probe` trigger controlled repeat exploration without infinite loops?
+- B7. Does `HopClass::Live` undergo proper candidate endpoint scoring and validation?
+- B8. Is shadow status (`through_consumed`) monotonically inherited along paths?
+- B9. Are consumed nodes strictly prevented from physical assembly commits?
+- B10. Does any surviving `continue` statement in any walker silently skip an authentic competitor?
+
+---
+
+### 3. Audit C — Complete / Truncated Soundness
+Audit `find_candidate_paths`, `pruned_repeat_hides_supported_endpoint`, `depth_limit_hides_continuation`, and all candidate decision sites:
+1. When `find_candidate_paths` returns `Complete`, are all admissible competing paths either fully evaluated or proven `SafePrune`?
+2. Does any reachable unresolved continuation (e.g. depth limit, circular node, queue exhaustion) guarantee `SearchStatus::Truncated`?
+3. In `pruned_repeat_hides_supported_endpoint`, can reaching `MAX_DFS_STATES` return `false` while the outer search reports `Complete`?
+4. Can main BFS ignore probe incompleteness?
+5. Are circular nodes consistently handled without producing false `Complete`?
+6. Can self-anchors or repeats generate phantom candidates?
+7. Is pair-ID deduplication preserved in candidate scoring?
+8. Can a `SearchStatus::Truncated` be bypassed by single-candidate threshold checks ($W/C \ge 0.05$)?
+9. Are the defect classes from F12 (`F12-P1-001`), F14 (`F14-P1-001`), and F16 (`F16-P1-001`) structurally eliminated?
+
+---
+
+### 4. Audit D — Self-Anchor Safety and T27 Preservation
+Inspect `curr_dir` handling:
+- Confirm `curr_dir` is never emitted as a committable candidate path endpoint (preventing self-splicing loops).
+- Confirm short-node self-loops can be explored as intermediate steps along paths like $C \to C \to X$ or $C \to A \to C \to X$.
+- Confirm in-window evidence linking `curr_dir` to itself forces `SearchStatus::Truncated` without generating false candidates.
+- **Trace Test T27 ($S \to P \to C \to P \to X$)**: Prove why T27 commits cleanly without false truncation under `classify_hop` and $\beta(C) = 162$.
+- **Trace Tests T33, T34, T35**: Confirm T33 withholds decoy $D$, T34 commits $S \cdot P \cdot C \cdot C \cdot X$ as positive control, and T35 withholds decoy $D$ on alternating cycle.
+
+---
+
+### 5. Audit E — Queue Budget and Resource Safety
+Inspect queue bounding:
+- Constant: `MAX_QUEUE_CAPACITY = 1024`
+- E1. Is queue capacity checked before every `push_back`?
+- E2. Can the queue exceed `MAX_QUEUE_CAPACITY`?
+- E3. When the queue is full, does the search unconditionally set `status = SearchStatus::Truncated`?
+- E4. Are remaining unvisited branches correctly accounted for as truncated?
+- E5. Does any cyclic graph without evidence cause unbounded exploration?
+
+---
+
+### 6. Audit F — Reference Oracle Integrity (F16-P2-001 Verification)
+Audit `tests/test_c0_02r_repeat_completeness_gate.rs`:
+- Review `independent_resolve_edge`: verify non-zero overlap ($ov > 0$), ambiguity resolution (unique highest support wins, tie rejects), and reciprocal edge consistency on reverse strand.
+- Review `reference_oracle_search`: verify self-anchor handling, long unique node restrictions, and independent candidate scoring.
+- Verify whether the 6 differential tests genuinely evaluate production behavior against the oracle.
+- Assess whether the oracle would catch an artificially introduced invalid pruning in production code.
+
+---
+
+### 7. Audit G — Reverse/Twin and Fixture Reachability (F16-P2-002, F16-P2-003 Verification)
+Audit `tests/test_c0_02r_state_semantics_gate.rs`:
+- **T22 & T24 (RC Mirroring)**: Verify that the graph is constructed with biological reverse complement symmetry (`push_bio`, `link_bio`, `walk`), asserting `edges_fwd.is_empty()` to prove genuine RC traversal.
+- **T28 & T36 (Twin Reuse)**: Verify that $P.\text{twin}()$ is genuinely traversed.
+- **T29 & T30 (Decision-Anchored Fixtures)**: Verify that evidence anchors correspond to active fork decisions ($S_2$ in T29, $P_1$ in T30) and verify that the negative sensitivity controls prove the fork decision actually depends on competitor evidence.
+
+---
+
+### 8. Audit H — Scope, Diff Size & Regression Integrity
+- Review the F17 production diff (+385 / -275 lines in `src/resolve/exspander.rs`). Are there any unintended changes to graph mutation, polishing, or mapper?
+- Verify test inventory: 172 baseline + 9 new = 181 release tests.
+- Verify that F11-B lifecycle contracts (`ResolverLifecycleState`, RAII guard, `Result<JunctionStats, ExspanderError>`) remain completely intact.
+- Verify small assembly stability on `S0-001` and `S0-003` (100.00% identity, bit-identical contig hashes).
+
+---
+
+## Required Audit Report Format
+
+Your written audit report must follow this exact structure and include:
+
+```markdown
+# fastBact — Phase F18 Independent Codex Audit Report
+
+**Audit ID**: AUDIT-20261022-013
+**Auditor**: Codex CLI (Model: `gpt-6.1-sol`, Reasoning Effort: `medium`, Sandbox: `read-only`)
+**Target Commit**: `c37ef6e03475230dc7f8596e0fc6788ba4fc6355`
+**Baseline Commit**: `4d08b380d573b568e67498ef71cff632f8a0ef67`
+**Target Branch**: `feature/c0-02r-phase-f17-grok`
+**Target Worktree**: `fastBact-phase-f17-grok-worktree`
+
+## 1. Executive Summary
+## 2. Mathematical Soundness Proof of Evidence Floor β(curr)
+## 3. classify_hop Single Authority & Call Graph Tracing
+## 4. SearchStatus Complete / Truncated Correctness Ledger
+## 5. Self-Anchor Handling & T27 / T33 / T34 / T35 Traces
+## 6. Queue Budgeting & Resource Bounds (Q_MAX = 1024)
+## 7. Reference Oracle & Differential Verification Audit
+## 8. Reverse-Complement Mirroring & Fixture Sensitivity Audit
+## 9. Code Scope & Production Regression Audit
+## 10. Subsystem Verdicts Ledger (Subsystems A through K)
+## 11. Findings Inventory (P0 / P1 / P2 with Root Cause, File/Line, Counterexample, and Evidence Status)
+## 12. Overall Verdict & Final Recommendation
+```
+
+### Subsystem Verdicts Required:
+- Subsystem A: $\beta(\text{curr})$ Mathematical Soundness
+- Subsystem B: `classify_hop` Single Authority Consistency
+- Subsystem C: Complete / Truncated Search Soundness
+- Subsystem D: Self-Anchor & Cycle Competitor Handling
+- Subsystem E: Repeat Admissibility & T27 Preservation
+- Subsystem F: Shadow Candidate Safety
+- Subsystem G: Queue Budget & Complexity Safety
+- Subsystem H: Reference Oracle Validity
+- Subsystem I: Reverse-Complement / Twin Reachability
+- Subsystem J: Regression Integrity (181 Tests & S0-001/003)
+- Subsystem K: Real-Data Benchmark Readiness
+
+### Overall Verdict Criteria:
+- **PASS**: All subsystems PASS, zero confirmed P0/P1 blockers.
+- **CONDITIONAL PASS**: No confirmed P0/P1 blockers, minor P2 non-blockers, safe for selective real-data benchmark.
+- **FAIL**: Any confirmed P0/P1 correctness blocker, mathematical unsoundness in $\beta$, surviving silent competitor exclusion, or false `Complete` return.
+
+Deliver your complete, rigorous audit report.
