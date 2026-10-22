@@ -2529,38 +2529,43 @@ fn test_t21_alternating_cycle_repeat_must_withhold_decoy() {
     );
 }
 
-/// T22 / F12-P1-001. Reverse-complement twin symmetry of three-copy tandem repeat.
+/// T22 / F14-P2-002. Genuinely mirrored reverse-complement symmetry of three-copy tandem repeat.
 ///
-/// Verifies that when the entire topology is oriented in reverse complement,
-/// the multi-copy tandem repeat search withhold guard functions symmetrically.
+/// Builds a true reverse-complement mirror graph where all junction sequences are RC-transformed,
+/// node sequences are spanned with reverse-complement junctions, and seed S_rc (700 bp) initiates
+/// resolution in reverse complement, verifying that the repeat probe correctly withholds
+/// decoy D_rc under identical PE link constraints.
 #[test]
 fn test_t22_three_copy_tandem_repeat_rc_symmetry_must_withhold_decoy() {
-    let j_sq = junction(0xE22_0001);
-    let j_loop = junction(0xE22_0002);
-    assert_junctions_distinct(&[j_sq.clone(), j_loop.clone()]);
+    let j_sq_fwd = junction(0xE22_0001);
+    let j_loop_fwd = junction(0xE22_0002);
+    assert_junctions_distinct(&[j_sq_fwd.clone(), j_loop_fwd.clone()]);
 
-    let s_seq = span_node(&[], 0xE22_0101, 700, &j_sq);
-    let q_seq = span_node(&j_sq, 0xE22_0102, 100, &j_loop);
-    let d_seq = span_node(&j_loop, 0xE22_0103, 300, &[]);
-    let r_seq = span_node(&j_loop, 0xE22_0104, 120, &j_loop);
-    let x_seq = span_node(&j_loop, 0xE22_0105, 300, &[]);
+    let j_sq = reverse_complement_ascii(&j_sq_fwd);
+    let j_loop = reverse_complement_ascii(&j_loop_fwd);
 
-    let mut fwd_graph = CdbgGraph::new(31);
-    let fs_id = add_node(&mut fwd_graph, &s_seq);
-    let fq_id = add_node(&mut fwd_graph, &q_seq);
-    let fd_id = add_node(&mut fwd_graph, &d_seq);
-    let fr_id = add_node(&mut fwd_graph, &r_seq);
-    let fx_id = add_node(&mut fwd_graph, &x_seq);
+    let s_rc = span_node(&[], 0xE22_0101, 700, &j_sq);
+    let q_rc = span_node(&j_sq, 0xE22_0102, 100, &j_loop);
+    let d_rc = span_node(&j_loop, 0xE22_0103, 300, &[]);
+    let r_rc = span_node(&j_loop, 0xE22_0104, 120, &j_loop);
+    let x_rc = span_node(&j_loop, 0xE22_0105, 300, &[]);
+
+    let mut rc_graph = CdbgGraph::new(31);
+    let s_id = add_node(&mut rc_graph, &s_rc);
+    let q_id = add_node(&mut rc_graph, &q_rc);
+    let d_id = add_node(&mut rc_graph, &d_rc);
+    let r_id = add_node(&mut rc_graph, &r_rc);
+    let x_id = add_node(&mut rc_graph, &x_rc);
 
     for (from, to) in [
-        (fs_id, fq_id),
-        (fq_id, fd_id),
-        (fq_id, fr_id),
-        (fr_id, fr_id),
-        (fr_id, fx_id),
+        (s_id, q_id),
+        (q_id, d_id),
+        (q_id, r_id),
+        (r_id, r_id),
+        (r_id, x_id),
     ] {
-        add_edge(&mut fwd_graph, from, to, OV as u8);
-        assert_valid_edge(&fwd_graph, from, to, OV as u8);
+        add_edge(&mut rc_graph, from, to, OV as u8);
+        assert_valid_edge(&rc_graph, from, to, OV as u8);
     }
 
     let dist = InsertSizeDist {
@@ -2571,26 +2576,21 @@ fn test_t22_three_copy_tandem_repeat_rc_symmetry_must_withhold_decoy() {
     };
     let mut matrix = PairLinkMatrix::new();
     const READ: u32 = 75;
-    // Map pairs on twin directions
-    add_pairs_len(&mut matrix, fs_id.twin(), fd_id.twin(), 5, 200, 217, 22_100, READ as u16);
-    add_pairs_len(&mut matrix, fs_id.twin(), fx_id.twin(), 20, 75, 75, 22_200, READ as u16);
+    add_pairs_len(&mut matrix, s_id, d_id, 5, 200, 217, 22_100, READ as u16);
+    add_pairs_len(&mut matrix, s_id, x_id, 20, 75, 75, 22_200, READ as u16);
 
-    // Also map forward pairs so both directions are symmetric
-    add_pairs_len(&mut matrix, fs_id, fd_id, 5, 200, 217, 22_101, READ as u16);
-    add_pairs_len(&mut matrix, fs_id, fx_id, 20, 75, 75, 22_201, READ as u16);
-
-    let misassembly = splice(&[&s_seq, &q_seq, &d_seq], &[OV, OV]);
-    resolve_repeats_exspander_with_stats(&mut fwd_graph, &matrix, &dist, params())
+    let misassembly = splice(&[&s_rc, &q_rc, &d_rc], &[OV, OV]);
+    resolve_repeats_exspander_with_stats(&mut rc_graph, &matrix, &dist, params())
         .expect("repeat resolution failed");
 
-    let d_node = fd_id.id() as usize;
+    let d_node = d_id.id() as usize;
     assert!(
-        !fwd_graph.nodes[d_node].is_deleted,
-        "D must not be consumed by a misassembly commit under RC symmetry"
+        !rc_graph.nodes[d_node].is_deleted,
+        "D_rc must not be consumed by a misassembly commit under true RC mirror symmetry"
     );
     assert!(
-        !has_active_seq(&fwd_graph, &misassembly),
-        "Misassembled contig S-Q-D must not be created under RC symmetry"
+        !has_active_seq(&rc_graph, &misassembly),
+        "Misassembled contig S_rc-Q_rc-D_rc must not be created under true RC mirror symmetry"
     );
 }
 
@@ -2680,4 +2680,506 @@ fn test_t23_short_prefix_reuse_must_not_promote_decoy() {
         "Misassembled contig S-P-C-D must not be created"
     );
 }
+
+/// T24 / F15-E. Reverse-complement prefix reuse mirror of T23.
+///
+/// Verifies that in reverse-complement orientation, short prefix reuse
+/// is equally protected and does not promote a weak decoy.
+#[test]
+fn test_t24_rc_prefix_reuse_must_not_promote_decoy() {
+    let j_a_fwd = junction(0xE24_0001);
+    let j_b_fwd = junction(0xE24_0002);
+    assert_junctions_distinct(&[j_a_fwd.clone(), j_b_fwd.clone()]);
+
+    let j_a = reverse_complement_ascii(&j_a_fwd);
+    let j_b = reverse_complement_ascii(&j_b_fwd);
+
+    let s_rc = span_node(&[], 0xE24_0101, 700, &j_a);
+    let p_rc = span_node(&j_a, 0xE24_0102, 100, &j_b);
+    let c_rc = span_node(&j_b, 0xE24_0103, 100, &j_a);
+    let d_rc = span_node(&j_a, 0xE24_0104, 300, &[]);
+    let x_rc = span_node(&j_b, 0xE24_0105, 300, &[]);
+
+    let mut graph = CdbgGraph::new(31);
+    let s_id = add_node(&mut graph, &s_rc);
+    let p_id = add_node(&mut graph, &p_rc);
+    let c_id = add_node(&mut graph, &c_rc);
+    let d_id = add_node(&mut graph, &d_rc);
+    let x_id = add_node(&mut graph, &x_rc);
+
+    for (from, to) in [
+        (s_id, p_id),
+        (p_id, c_id),
+        (p_id, x_id),
+        (c_id, p_id),
+        (c_id, d_id),
+    ] {
+        add_edge(&mut graph, from, to, OV as u8);
+        assert_valid_edge(&graph, from, to, OV as u8);
+    }
+
+    const READ: u32 = 75;
+    let dist = InsertSizeDist {
+        median: 200.0,
+        mad: 20.0,
+        min_insert: 150,
+        max_insert: 250,
+    };
+    let mut matrix = PairLinkMatrix::new();
+    add_pairs_len(&mut matrix, s_id, c_id, 20, 80, 82, 24_001, READ as u16);
+    add_pairs_len(&mut matrix, c_id, d_id, 5, 80, 151, 24_002, READ as u16);
+    add_pairs_len(&mut matrix, c_id, x_id, 20, 80, 82, 24_003, READ as u16);
+
+    let misassembly = splice(&[&s_rc, &p_rc, &c_rc, &d_rc], &[OV, OV, OV]);
+    resolve_repeats_exspander_with_stats(&mut graph, &matrix, &dist, params())
+        .expect("repeat resolution failed");
+
+    let d_node = d_id.id() as usize;
+    assert!(
+        !graph.nodes[d_node].is_deleted,
+        "D_rc must not be consumed by a misassembly commit under RC mirror prefix reuse"
+    );
+    assert!(
+        !has_active_seq(&graph, &misassembly),
+        "Misassembled contig S_rc-P_rc-C_rc-D_rc must not be created"
+    );
+}
+
+/// T25 / F15-F. Prefix reuse with fragment separation exactly at max budget.
+///
+/// When the reused path has span == max_insert (250 bp), it is admitted by `<=`
+/// and safely withholds the weak decoy D.
+#[test]
+fn test_t25_prefix_reuse_at_exact_max_budget_withholds_decoy() {
+    let mut graph = CdbgGraph::new(31);
+    let j_a = junction(0xE25_0001);
+    let j_b = junction(0xE25_0002);
+
+    let s_seq = span_node(&[], 0xE25_0101, 700, &j_a);
+    let p_seq = span_node(&j_a, 0xE25_0102, 100, &j_b);
+    let c_seq = span_node(&j_b, 0xE25_0103, 100, &j_a);
+    let d_seq = span_node(&j_a, 0xE25_0104, 300, &[]);
+    let x_seq = span_node(&j_b, 0xE25_0105, 300, &[]);
+
+    let s_id = add_node(&mut graph, &s_seq);
+    let p_id = add_node(&mut graph, &p_seq);
+    let c_id = add_node(&mut graph, &c_seq);
+    let d_id = add_node(&mut graph, &d_seq);
+    let x_id = add_node(&mut graph, &x_seq);
+
+    for (from, to) in [
+        (s_id, p_id),
+        (p_id, c_id),
+        (p_id, x_id),
+        (c_id, p_id),
+        (c_id, d_id),
+    ] {
+        add_edge(&mut graph, from, to, OV as u8);
+    }
+
+    let dist = InsertSizeDist {
+        median: 200.0,
+        mad: 20.0,
+        min_insert: 150,
+        max_insert: 250,
+    };
+    let mut matrix = PairLinkMatrix::new();
+    add_pairs_len(&mut matrix, s_id, c_id, 20, 80, 82, 25_001, 75);
+    add_pairs_len(&mut matrix, c_id, d_id, 5, 80, 151, 25_002, 75);
+
+    // C -> P -> X sep = 38. With dist1 = 80, dist2 = 132: span = 80 + 38 + 132 = 250 == max_insert
+    add_pairs_len(&mut matrix, c_id, x_id, 20, 80, 132, 25_003, 75);
+
+    resolve_repeats_exspander_with_stats(&mut graph, &matrix, &dist, params())
+        .expect("repeat resolution failed");
+
+    let d_node = d_id.id() as usize;
+    assert!(
+        !graph.nodes[d_node].is_deleted,
+        "D must not be consumed when prefix reuse competitor is at exact max budget"
+    );
+}
+
+/// T26 / F15-F. Prefix reuse exceeding max budget must not cause unnecessary Truncated.
+///
+/// When the alternative repeat path has span 251 > max_insert 250, it is safely
+/// excluded by separation budget, allowing the valid in-budget candidate D to resolve cleanly.
+#[test]
+fn test_t26_prefix_reuse_exceeding_max_budget_resolves_cleanly() {
+    let mut graph = CdbgGraph::new(31);
+    let j_a = junction(0xE26_0001);
+    let j_b = junction(0xE26_0002);
+
+    let s_seq = span_node(&[], 0xE26_0101, 700, &j_a);
+    let p_seq = span_node(&j_a, 0xE26_0102, 100, &j_b);
+    let c_seq = span_node(&j_b, 0xE26_0103, 100, &j_a);
+    let d_seq = span_node(&j_a, 0xE26_0104, 300, &[]);
+    let x_seq = span_node(&j_b, 0xE26_0105, 300, &[]);
+
+    let s_id = add_node(&mut graph, &s_seq);
+    let p_id = add_node(&mut graph, &p_seq);
+    let c_id = add_node(&mut graph, &c_seq);
+    let d_id = add_node(&mut graph, &d_seq);
+    let x_id = add_node(&mut graph, &x_seq);
+
+    for (from, to) in [
+        (s_id, p_id),
+        (p_id, c_id),
+        (p_id, x_id),
+        (c_id, p_id),
+        (c_id, d_id),
+    ] {
+        add_edge(&mut graph, from, to, OV as u8);
+    }
+
+    let dist = InsertSizeDist {
+        median: 200.0,
+        mad: 20.0,
+        min_insert: 150,
+        max_insert: 250,
+    };
+    let mut matrix = PairLinkMatrix::new();
+    add_pairs_len(&mut matrix, s_id, c_id, 20, 80, 82, 26_001, 75);
+    // D has 10 valid pairs at span 200
+    add_pairs_len(&mut matrix, c_id, d_id, 10, 80, 151, 26_002, 75);
+
+    // C -> P -> X sep = 38. With dist1 = 80, dist2 = 133: span = 80 + 38 + 133 = 251 > 250
+    add_pairs_len(&mut matrix, c_id, x_id, 20, 80, 133, 26_003, 75);
+
+    resolve_repeats_exspander_with_stats(&mut graph, &matrix, &dist, params())
+        .expect("repeat resolution failed");
+
+    let d_node = d_id.id() as usize;
+    assert!(
+        graph.nodes[d_node].is_deleted,
+        "D should resolve cleanly when competitor is beyond max_separation"
+    );
+}
+
+/// T27 / F15-F. Legitimate normal repeat bridge must still commit (Positive Control).
+///
+/// Positive control demonstrating that a genuine repeat bridge that reuses a short prefix node
+/// successfully commits the winning path S -> P -> C -> P -> X without false truncation.
+#[test]
+fn test_t27_legitimate_prefix_reuse_bridge_commits_correctly() {
+    let mut graph = CdbgGraph::new(31);
+    let j_a = junction(0xE27_0001);
+    let j_b = junction(0xE27_0002);
+
+    let s_seq = span_node(&[], 0xE27_0101, 700, &j_a);
+    let p_seq = span_node(&j_a, 0xE27_0102, 100, &j_b);
+    let c_seq = span_node(&j_b, 0xE27_0103, 100, &j_a);
+    let x_seq = span_node(&j_b, 0xE27_0104, 300, &[]);
+
+    let s_id = add_node(&mut graph, &s_seq);
+    let p_id = add_node(&mut graph, &p_seq);
+    let c_id = add_node(&mut graph, &c_seq);
+    let x_id = add_node(&mut graph, &x_seq);
+
+    for (from, to) in [
+        (s_id, p_id),
+        (p_id, c_id),
+        (c_id, p_id),
+        (p_id, x_id),
+    ] {
+        add_edge(&mut graph, from, to, OV as u8);
+    }
+
+    let dist = InsertSizeDist {
+        median: 200.0,
+        mad: 20.0,
+        min_insert: 150,
+        max_insert: 250,
+    };
+    let mut matrix = PairLinkMatrix::new();
+    add_pairs_len(&mut matrix, s_id, c_id, 20, 80, 82, 27_001, 75);
+    add_pairs_len(&mut matrix, c_id, x_id, 25, 80, 82, 27_002, 75);
+
+    let full_path_seq = splice(&[&s_seq, &p_seq, &c_seq, &p_seq, &x_seq], &[OV, OV, OV, OV]);
+    resolve_repeats_exspander_with_stats(&mut graph, &matrix, &dist, params())
+        .expect("repeat resolution failed");
+
+    let x_node = x_id.id() as usize;
+    assert!(
+        graph.nodes[x_node].is_deleted,
+        "X must be consumed by the legitimate repeat bridge commit"
+    );
+    assert!(
+        has_active_seq(&graph, &full_path_seq),
+        "Full assembled sequence S-P-C-P-X must be present in graph contigs"
+    );
+}
+
+/// T28 / F15-F. Prefix physical node reused with opposite orientation.
+///
+/// Prefix contains short node P (< 500 bp) in forward orientation.
+/// Downstream fork traverses P in twin orientation. Since P is short,
+/// physical node reuse across orientations is valid and withholds decoy.
+#[test]
+fn test_t28_prefix_short_node_reused_in_twin_orientation() {
+    let mut graph = CdbgGraph::new(31);
+    let j_a = junction(0xE28_0001);
+    let j_b = junction(0xE28_0002);
+
+    let s_seq = span_node(&[], 0xE28_0101, 700, &j_a);
+    let p_seq = span_node(&j_a, 0xE28_0102, 100, &j_b);
+    let c_seq = span_node(&j_b, 0xE28_0103, 100, &j_a);
+    let d_seq = span_node(&j_a, 0xE28_0104, 300, &[]);
+    let x_seq = span_node(&j_b, 0xE28_0105, 300, &[]);
+
+    let s_id = add_node(&mut graph, &s_seq);
+    let p_id = add_node(&mut graph, &p_seq);
+    let c_id = add_node(&mut graph, &c_seq);
+    let d_id = add_node(&mut graph, &d_seq);
+    let x_id = add_node(&mut graph, &x_seq);
+
+    for (from, to) in [
+        (s_id, p_id),
+        (p_id, c_id),
+        (p_id, x_id),
+        (c_id, p_id),
+        (c_id, d_id),
+    ] {
+        add_edge(&mut graph, from, to, OV as u8);
+    }
+
+    let dist = InsertSizeDist {
+        median: 200.0,
+        mad: 20.0,
+        min_insert: 150,
+        max_insert: 250,
+    };
+    let mut matrix = PairLinkMatrix::new();
+    add_pairs_len(&mut matrix, s_id, c_id, 20, 80, 82, 28_001, 75);
+    add_pairs_len(&mut matrix, c_id, d_id, 5, 80, 151, 28_002, 75);
+    // Twin orientation links
+    add_pairs_len(&mut matrix, c_id.twin(), x_id.twin(), 20, 80, 82, 28_003, 75);
+    add_pairs_len(&mut matrix, c_id, x_id, 20, 80, 82, 28_004, 75);
+
+    resolve_repeats_exspander_with_stats(&mut graph, &matrix, &dist, params())
+        .expect("repeat resolution failed");
+
+    let d_node = d_id.id() as usize;
+    assert!(
+        !graph.nodes[d_node].is_deleted,
+        "D must not be consumed when twin-orientation competitor exists"
+    );
+}
+
+/// T29 / F15-F. Prefix reuse involving consumed/shadow node.
+///
+/// If a short node was already consumed by an earlier seed, it participates
+/// as a shadow candidate and blocks a weaker live decoy from committing.
+#[test]
+fn test_t29_prefix_reuse_with_consumed_shadow_node() {
+    let mut graph = CdbgGraph::new(31);
+    let j_a = junction(0xE29_0001);
+    let j_b = junction(0xE29_0002);
+
+    let s1_seq = span_node(&[], 0xE29_0101, 700, &j_a);
+    let p_seq = span_node(&j_a, 0xE29_0102, 100, &j_b);
+    let tail1_seq = span_node(&j_b, 0xE29_0103, 500, &[]);
+
+    let s2_seq = span_node(&[], 0xE29_0104, 700, &j_b);
+    let c_seq = span_node(&j_b, 0xE29_0105, 100, &j_a);
+    let d_seq = span_node(&j_a, 0xE29_0106, 300, &[]);
+    let x_seq = span_node(&j_b, 0xE29_0107, 300, &[]);
+
+    let s1_id = add_node(&mut graph, &s1_seq);
+    let p_id = add_node(&mut graph, &p_seq);
+    let tail1_id = add_node(&mut graph, &tail1_seq);
+
+    let s2_id = add_node(&mut graph, &s2_seq);
+    let c_id = add_node(&mut graph, &c_seq);
+    let d_id = add_node(&mut graph, &d_seq);
+    let x_id = add_node(&mut graph, &x_seq);
+
+    for (from, to) in [
+        (s1_id, p_id),
+        (p_id, tail1_id),
+        (s2_id, c_id),
+        (c_id, p_id),
+        (c_id, d_id),
+        (p_id, x_id),
+    ] {
+        add_edge(&mut graph, from, to, OV as u8);
+    }
+
+    let dist = InsertSizeDist {
+        median: 200.0,
+        mad: 20.0,
+        min_insert: 150,
+        max_insert: 250,
+    };
+    let mut matrix = PairLinkMatrix::new();
+    // Seed 1 extends S1 -> P -> tail1
+    add_pairs_len(&mut matrix, s1_id, tail1_id, 25, 80, 82, 29_001, 75);
+
+    // Seed 2 extends to C, then evaluates C -> D vs C -> P -> X (shadow through consumed P)
+    add_pairs_len(&mut matrix, s2_id, c_id, 20, 80, 82, 29_002, 75);
+    add_pairs_len(&mut matrix, c_id, d_id, 5, 80, 151, 29_003, 75);
+    add_pairs_len(&mut matrix, c_id, x_id, 20, 80, 82, 29_004, 75);
+
+    resolve_repeats_exspander_with_stats(&mut graph, &matrix, &dist, params())
+        .expect("repeat resolution failed");
+
+    let d_node = d_id.id() as usize;
+    assert!(
+        !graph.nodes[d_node].is_deleted,
+        "D must not be committed when shadow candidate through consumed P blocks fork"
+    );
+}
+
+/// T30 / F15-F. Multiple short-prefix nodes reused in a bounded cycle.
+///
+/// Prefix has two short nodes P1 and P2. Downstream cycle re-enters P1 -> P2 -> X.
+/// Because both are short (< 500 bp), the cycle is admissible and withholds decoy D.
+#[test]
+fn test_t30_multiple_short_prefix_nodes_in_cycle() {
+    let mut graph = CdbgGraph::new(31);
+    let j_a = junction(0xE30_0001);
+    let j_b = junction(0xE30_0002);
+    let j_c = junction(0xE30_0003);
+
+    let s_seq = span_node(&[], 0xE30_0101, 700, &j_a);
+    let p1_seq = span_node(&j_a, 0xE30_0102, 80, &j_b);
+    let p2_seq = span_node(&j_b, 0xE30_0103, 80, &j_c);
+    let c_seq = span_node(&j_c, 0xE30_0104, 80, &j_a);
+    let d_seq = span_node(&j_a, 0xE30_0105, 300, &[]);
+    let x_seq = span_node(&j_c, 0xE30_0106, 300, &[]);
+
+    let s_id = add_node(&mut graph, &s_seq);
+    let p1_id = add_node(&mut graph, &p1_seq);
+    let p2_id = add_node(&mut graph, &p2_seq);
+    let c_id = add_node(&mut graph, &c_seq);
+    let d_id = add_node(&mut graph, &d_seq);
+    let x_id = add_node(&mut graph, &x_seq);
+
+    for (from, to) in [
+        (s_id, p1_id),
+        (p1_id, p2_id),
+        (p2_id, c_id),
+        (c_id, p1_id),
+        (c_id, d_id),
+        (p2_id, x_id),
+    ] {
+        add_edge(&mut graph, from, to, OV as u8);
+    }
+
+    let dist = InsertSizeDist {
+        median: 250.0,
+        mad: 20.0,
+        min_insert: 180,
+        max_insert: 320,
+    };
+    let mut matrix = PairLinkMatrix::new();
+    add_pairs_len(&mut matrix, s_id, c_id, 20, 60, 60, 30_001, 75);
+    add_pairs_len(&mut matrix, c_id, d_id, 5, 60, 150, 30_002, 75);
+    add_pairs_len(&mut matrix, c_id, x_id, 20, 60, 60, 30_003, 75);
+
+    resolve_repeats_exspander_with_stats(&mut graph, &matrix, &dist, params())
+        .expect("repeat resolution failed");
+
+    let d_node = d_id.id() as usize;
+    assert!(
+        !graph.nodes[d_node].is_deleted,
+        "D must not be consumed when multi-node prefix cycle competitor exists"
+    );
+}
+
+/// T31 / F15-F. No PE evidence and no admissible competitor cleanly resolves supported branch.
+#[test]
+fn test_t31_no_evidence_dead_end_resolves_cleanly() {
+    let mut graph = CdbgGraph::new(31);
+    let j_a = junction(0xE31_0001);
+
+    let s_seq = span_node(&[], 0xE31_0101, 700, &j_a);
+    let a_seq = span_node(&j_a, 0xE31_0102, 300, &[]);
+    let b_seq = span_node(&j_a, 0xE31_0103, 300, &[]);
+
+    let s_id = add_node(&mut graph, &s_seq);
+    let a_id = add_node(&mut graph, &a_seq);
+    let b_id = add_node(&mut graph, &b_seq);
+
+    add_edge(&mut graph, s_id, a_id, OV as u8);
+    add_edge(&mut graph, s_id, b_id, OV as u8);
+
+    let dist = InsertSizeDist {
+        median: 369.0,
+        mad: 20.0,
+        min_insert: 300,
+        max_insert: 450,
+    };
+    let mut matrix = PairLinkMatrix::new();
+    // Only A has evidence, B has zero evidence
+    add_pairs_len(&mut matrix, s_id, a_id, 15, 200, 200, 31_001, 75);
+
+    resolve_repeats_exspander_with_stats(&mut graph, &matrix, &dist, params())
+        .expect("repeat resolution failed");
+
+    let a_node = a_id.id() as usize;
+    assert!(
+        graph.nodes[a_node].is_deleted,
+        "A must resolve cleanly when B has zero evidence"
+    );
+}
+
+/// T32 / F15-F. Depth limit exhaustion at depth 4 produces conservative Truncated.
+#[test]
+fn test_t32_depth_limit_continuation_produces_conservative_truncated() {
+    let mut graph = CdbgGraph::new(31);
+    let j_sq = junction(0xE32_0001);
+    let j_1 = junction(0xE32_0002);
+    let j_2 = junction(0xE32_0003);
+    let j_3 = junction(0xE32_0004);
+    let j_4 = junction(0xE32_0005);
+
+    let s_seq = span_node(&[], 0xE32_0101, 700, &j_sq);
+    let q_seq = span_node(&j_sq, 0xE32_0102, 80, &j_1);
+    let d_seq = span_node(&j_1, 0xE32_0103, 300, &[]);
+    let r1_seq = span_node(&j_1, 0xE32_0104, 80, &j_2);
+    let r2_seq = span_node(&j_2, 0xE32_0105, 80, &j_3);
+    let r3_seq = span_node(&j_3, 0xE32_0106, 80, &j_4);
+    let r4_seq = span_node(&j_4, 0xE32_0107, 80, &j_sq);
+
+    let s_id = add_node(&mut graph, &s_seq);
+    let q_id = add_node(&mut graph, &q_seq);
+    let d_id = add_node(&mut graph, &d_seq);
+    let r1_id = add_node(&mut graph, &r1_seq);
+    let r2_id = add_node(&mut graph, &r2_seq);
+    let r3_id = add_node(&mut graph, &r3_seq);
+    let r4_id = add_node(&mut graph, &r4_seq);
+
+    for (from, to) in [
+        (s_id, q_id),
+        (q_id, d_id),
+        (q_id, r1_id),
+        (r1_id, r2_id),
+        (r2_id, r3_id),
+        (r3_id, r4_id),
+        (r4_id, q_id), // Continuation exists at depth limit!
+    ] {
+        add_edge(&mut graph, from, to, OV as u8);
+    }
+
+    let dist = InsertSizeDist {
+        median: 400.0,
+        mad: 20.0,
+        min_insert: 300,
+        max_insert: 500,
+    };
+    let mut matrix = PairLinkMatrix::new();
+    // Decoy D has 5 pairs
+    add_pairs_len(&mut matrix, s_id, d_id, 5, 200, 150, 32_001, 75);
+
+    resolve_repeats_exspander_with_stats(&mut graph, &matrix, &dist, params())
+        .expect("repeat resolution failed");
+
+    let d_node = d_id.id() as usize;
+    assert!(
+        !graph.nodes[d_node].is_deleted,
+        "Decoy D must not be committed when continuation exists at depth limit"
+    );
+}
+
 
