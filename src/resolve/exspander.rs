@@ -259,7 +259,10 @@ fn find_candidate_paths(
                 continue;
             }
         }
-        if u.id() == curr_dir.id() || ext_nodes.contains(&u.id()) {
+        if u.id() == curr_dir.id() {
+            continue;
+        }
+        if u_node.seq_len >= 500 && ext_nodes.contains(&u.id()) {
             continue;
         }
         if u_node.seq_len >= 500 && used_unique.contains(&u.id()) {
@@ -424,7 +427,10 @@ fn pruned_repeat_hides_supported_endpoint(
     ) {
         return false;
     }
-    if next_target.id() == curr_dir.id() || ext_nodes.contains(&next_target.id()) {
+    let next_node = &graph.nodes[next_target.id() as usize];
+    if next_target.id() == curr_dir.id()
+        || (next_node.seq_len >= 500 && ext_nodes.contains(&next_target.id()))
+    {
         return false;
     }
 
@@ -452,10 +458,12 @@ fn pruned_repeat_hides_supported_endpoint(
         if node_ref.is_deleted && !consumed_nodes.contains(&node.id()) {
             continue;
         }
-        if node.id() == curr_dir.id() || ext_nodes.contains(&node.id()) {
+        let node_len = node_ref.seq_len;
+        if node.id() == curr_dir.id()
+            || (node_len >= 500 && ext_nodes.contains(&node.id()))
+        {
             continue;
         }
-        let node_len = node_ref.seq_len;
         node_visited.push(node.id());
 
         if matrix.get_support(curr_dir, node) > 0 {
@@ -490,7 +498,10 @@ fn pruned_repeat_hides_supported_endpoint(
             // repeat may recur: the splicer accepts it, and dropping every
             // later visit hides tandem and alternating-cycle exits.
             if node_visited.contains(&neighbor.id()) {
-                if neighbor.id() == curr_dir.id() || ext_nodes.contains(&neighbor.id()) {
+                let neighbor_node = &graph.nodes[neighbor.id() as usize];
+                if neighbor.id() == curr_dir.id()
+                    || (neighbor_node.seq_len >= 500 && ext_nodes.contains(&neighbor.id()))
+                {
                     continue;
                 }
                 if !admissible_repeat_continuation(
@@ -561,6 +572,9 @@ fn depth_limit_hides_continuation(
         // Mirror dequeue: upstream deletions are not routes. A node spliced by
         // this resolver still is, so an unseen shadow hop keeps the search incomplete.
         let next_node = &graph.nodes[next_target.id() as usize];
+        if next_node.is_circular {
+            continue;
+        }
         if next_node.is_deleted && !consumed_nodes.contains(&next_target.id()) {
             continue;
         }
