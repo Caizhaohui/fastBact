@@ -68,7 +68,7 @@ fn e6_backward_reciprocal_support_must_match_selected_edge() {
         &PairLinkMatrix::new(),
         &InsertSizeDist::default(),
         ExspanderParams::default(),
-    );
+    ).expect("repeat resolution failed");
     assert_eq!(stats.valid_k_minus_1_joins, 0);
     assert!(stats.rejected_invalid_joins > 0);
     assert_eq!(graph.nodes.len(), 2);

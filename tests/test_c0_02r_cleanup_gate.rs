@@ -1,4 +1,4 @@
-use fastbact::graph::cdbg::{CdbgGraph, DirUnitigId, GraphEdge, UnitigNode};
+use fastbact::graph::cdbg::{CdbgGraph, DirUnitigId, GraphEdge, ResolverLifecycleState, UnitigNode};
 use fastbact::resolve::exspander::{
     resolve_repeats_exspander_with_stats, validate_and_splice_path, ExspanderParams, PathStep,
 };
@@ -25,7 +25,17 @@ fn resolve(graph: &mut CdbgGraph, links: &PairLinkMatrix) {
         links,
         &InsertSizeDist::default(),
         ExspanderParams::default(),
-    );
+    )
+    .expect("repeat resolution failed");
+}
+
+/// Topology, sequences, and edges. Repeat resolution also records lifecycle
+/// state, which these gates do not treat as a graph mutation.
+fn topology_snapshot(graph: &CdbgGraph) -> String {
+    format!(
+        "k={}, arena={:?}, nodes={:?}",
+        graph.k, graph.arena, graph.nodes
+    )
 }
 
 #[test]
@@ -34,9 +44,11 @@ fn g5_connected_short_nodes_are_not_isolated_cleanup_artifacts() {
     let a = node(&mut graph, 200);
     let b = node(&mut graph, 300);
     edge(&mut graph, a, b);
-    let before = format!("{graph:?}");
+    assert_eq!(graph.resolver_state(), ResolverLifecycleState::NeverRun);
+    let before = topology_snapshot(&graph);
     resolve(&mut graph, &PairLinkMatrix::new());
-    assert_eq!(format!("{graph:?}"), before);
+    assert_eq!(topology_snapshot(&graph), before);
+    assert_eq!(graph.resolver_state(), ResolverLifecycleState::Completed);
 }
 
 #[test]
@@ -46,13 +58,15 @@ fn g5_incoming_only_short_node_is_connected() {
     let b = node(&mut graph, 200);
     graph.nodes[0].is_circular = true;
     graph.nodes[0].add_edge(false, GraphEdge::new(b, 31, 10));
-    let before = format!("{graph:?}");
+    assert_eq!(graph.resolver_state(), ResolverLifecycleState::NeverRun);
+    let before = topology_snapshot(&graph);
     resolve(&mut graph, &PairLinkMatrix::new());
     assert_eq!(
-        format!("{graph:?}"),
+        topology_snapshot(&graph),
         before,
         "incoming edge from {a:?} must protect short target"
     );
+    assert_eq!(graph.resolver_state(), ResolverLifecycleState::Completed);
 }
 
 #[test]
@@ -62,9 +76,11 @@ fn g1_failed_full_validation_preserves_arena_and_entire_graph() {
     let b = node(&mut graph, 200);
     edge(&mut graph, a, b);
     graph.nodes[1].edges_rev[0].support = 11;
-    let before = format!("{graph:?}");
+    assert_eq!(graph.resolver_state(), ResolverLifecycleState::NeverRun);
+    let before = topology_snapshot(&graph);
     resolve(&mut graph, &PairLinkMatrix::new());
-    assert_eq!(format!("{graph:?}"), before);
+    assert_eq!(topology_snapshot(&graph), before);
+    assert_eq!(graph.resolver_state(), ResolverLifecycleState::Completed);
     assert_eq!(graph.get_unitig_seq(0), vec![b'A'; 700]);
     assert_eq!(graph.get_unitig_seq(1), vec![b'A'; 200]);
 }

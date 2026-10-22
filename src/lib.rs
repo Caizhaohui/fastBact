@@ -8,3 +8,6 @@ pub mod graph;
 pub mod ingest;
 pub mod polish;
 pub mod resolve;
+
+pub use graph::ResolverLifecycleState;
+pub use resolve::ExspanderError;

@@ -113,7 +113,7 @@ fn test_g1_verification_failure_leaves_graph_snapshot_identical() {
             min_support: 5,
             decision_threshold: 2.5,
         },
-    );
+    ).expect("repeat resolution failed");
 
     assert_eq!(stats.valid_k_joins, 0);
     assert_eq!(stats.valid_k_minus_1_joins, 0);
@@ -171,7 +171,7 @@ fn test_g2_path_rejection_does_not_pollute_used_state_for_other_paths() {
             min_support: 5,
             decision_threshold: 2.5,
         },
-    );
+    ).expect("repeat resolution failed");
 
     // First seed u0 failed, but second seed u2 MUST succeed because u1 was not polluted by used_in_path!
     assert_eq!(stats.valid_k_joins, 1, "Seed u2 must legally splice u1");
@@ -223,7 +223,7 @@ fn test_g3_consecutive_candidate_paths_isolated_failure() {
             min_support: 5,
             decision_threshold: 2.5,
         },
-    );
+    ).expect("repeat resolution failed");
 
     assert_eq!(stats.valid_k_joins, 1);
     assert!(stats.rejected_invalid_joins >= 1);
@@ -265,7 +265,7 @@ fn test_g4_short_nodes_in_rejected_paths_preserved_by_cleanup() {
             min_support: 5,
             decision_threshold: 2.5,
         },
-    );
+    ).expect("repeat resolution failed");
 
     assert_eq!(stats.valid_k_joins, 0);
     assert!(stats.rejected_invalid_joins >= 1);
@@ -308,7 +308,7 @@ fn test_g5_unrelated_isolated_short_nodes_deleted_by_policy() {
             min_support: 5,
             decision_threshold: 2.5,
         },
-    );
+    ).expect("repeat resolution failed");
 
     // Contract 2: u1 was part of rejected path -> protected
     assert!(
@@ -360,7 +360,7 @@ fn test_g6_successful_commit_no_abnormal_deletion_or_lost_nodes() {
             min_support: 5,
             decision_threshold: 2.5,
         },
-    );
+    ).expect("repeat resolution failed");
 
     assert_eq!(stats.valid_k_joins, 1);
 

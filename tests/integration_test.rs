@@ -177,7 +177,7 @@ fn test_end_to_end_synthetic_bacterial_assembly() {
     let t3 = Instant::now();
     let (matrix, dist) = map_paired_reads::<u64>(&graph, &bank, 31);
     let params = ExspanderParams::default();
-    resolve_repeats_exspander(&mut graph, &matrix, &dist, params);
+    resolve_repeats_exspander(&mut graph, &matrix, &dist, params).expect("repeat resolution failed");
     simplify_graph(&mut graph);
     let t_exp = t3.elapsed();
     let mut lexp: Vec<_> = graph.nodes.iter().filter(|n| !n.is_deleted).map(|n| n.seq_len).collect();

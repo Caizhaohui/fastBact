@@ -75,7 +75,7 @@ fn active_summary(graph: &CdbgGraph) -> String {
 }
 
 fn resolve(graph: &mut CdbgGraph, matrix: &PairLinkMatrix, dist: &InsertSizeDist) {
-    resolve_repeats_exspander_with_stats(graph, matrix, dist, ExspanderParams::default());
+    resolve_repeats_exspander_with_stats(graph, matrix, dist, ExspanderParams::default()).expect("repeat resolution failed");
 }
 
 fn assert_valid_edge(graph: &CdbgGraph, from: DirUnitigId, to: DirUnitigId, overlap: u8) {
@@ -503,7 +503,7 @@ fn test_case_f_validation_failure_is_atomic_for_external_neighbors() {
             &PairLinkMatrix::new(),
             &InsertSizeDist::default(),
             ExspanderParams::default(),
-        );
+        ).expect("repeat resolution failed");
         assert_eq!(
             stats.valid_k_joins + stats.valid_k_minus_1_joins + stats.valid_other_joins,
             0

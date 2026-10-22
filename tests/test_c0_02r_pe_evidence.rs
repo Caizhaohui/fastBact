@@ -94,7 +94,7 @@ fn repeat_wider_than_insert_size_is_not_resolved_by_pair_links() {
         &matrix,
         &InsertSizeDist::default(),
         ExspanderParams::default(),
-    );
+    ).expect("repeat resolution failed");
     assert_eq!(stats.valid_k_joins + stats.valid_k_minus_1_joins + stats.valid_other_joins, 0);
     assert_eq!(graph.nodes.len(), 5, "no merged node may be created");
     assert!(graph.nodes.iter().all(|n| !n.is_deleted));
@@ -108,7 +108,7 @@ fn repeat_within_insert_size_is_resolved_with_exact_sequence() {
         &matrix,
         &InsertSizeDist::default(),
         ExspanderParams::default(),
-    );
+    ).expect("repeat resolution failed");
     let merged: Vec<_> = graph
         .nodes
         .iter()
@@ -151,7 +151,7 @@ fn test_short_repeat_cycle_terminates_without_looping_f1_p2_003() {
         &matrix,
         &InsertSizeDist::default(),
         ExspanderParams::default(),
-    );
+    ).expect("repeat resolution failed");
 
     // The repeat cycle must terminate deterministically without infinite loop!
     // Path validation may reject splicing or terminate cleanly.
@@ -224,7 +224,7 @@ fn test_case_8_bounded_prefix_frontier_sequence_retained_f3_p1_002() {
         &PairLinkMatrix::new(),
         &InsertSizeDist::default(),
         ExspanderParams::default(),
-    );
+    ).expect("repeat resolution failed");
 
     let tail_retained = graph.nodes.iter().filter(|node| !node.is_deleted).any(|node| {
         let seq = graph.get_unitig_seq(node.id);

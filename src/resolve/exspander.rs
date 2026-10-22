@@ -3,7 +3,7 @@
 //! Traverses across repeats longer than k_max using paired-end read insert size constraints,
 //! connecting unique flanking unitigs across repetitive regions.
 
-use crate::graph::cdbg::{CdbgGraph, DirUnitigId, GraphEdge, UnitigNode};
+use crate::graph::cdbg::{CdbgGraph, DirUnitigId, GraphEdge, ResolverLifecycleState, UnitigNode};
 use crate::resolve::mapper::{InsertSizeDist, PairLinkMatrix};
 use hashbrown::HashSet;
 use smallvec::SmallVec;
@@ -1059,9 +1059,94 @@ pub fn validate_and_splice_path(
     Ok(assembled_seq)
 }
 
+/// Failure of the checked single-use repeat-resolution contract.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ExspanderError {
+    AlreadyResolved,
+    ResolutionInProgress,
+    ResolutionPreviouslyFailed,
+}
+
+impl std::fmt::Display for ExspanderError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::AlreadyResolved => {
+                write!(f, "repeat resolution has already been executed on this graph")
+            }
+            Self::ResolutionInProgress => {
+                write!(f, "repeat resolution is currently in progress on this graph")
+            }
+            Self::ResolutionPreviouslyFailed => {
+                write!(f, "repeat resolution previously failed on this graph")
+            }
+        }
+    }
+}
+
+impl std::error::Error for ExspanderError {}
+
+/// Marks `Failed` when resolution unwinds before a normal completion.
+///
+/// Partial graph edits are left in place. Panic and OOM are not a transaction.
+struct ResolverLifecycleGuard<'a> {
+    graph: &'a mut CdbgGraph,
+    terminal: ResolverLifecycleState,
+}
+
+impl<'a> ResolverLifecycleGuard<'a> {
+    fn enter(graph: &'a mut CdbgGraph) -> Self {
+        graph.set_resolver_state(ResolverLifecycleState::Running);
+        Self {
+            graph,
+            terminal: ResolverLifecycleState::Failed,
+        }
+    }
+
+    fn graph_mut(&mut self) -> &mut CdbgGraph {
+        self.graph
+    }
+
+    fn finish_ok(&mut self) {
+        self.terminal = ResolverLifecycleState::Completed;
+        self.graph
+            .set_resolver_state(ResolverLifecycleState::Completed);
+    }
+}
+
+impl Drop for ResolverLifecycleGuard<'_> {
+    fn drop(&mut self) {
+        if self.graph.resolver_state() == ResolverLifecycleState::Running {
+            self.graph.set_resolver_state(self.terminal);
+        }
+    }
+}
+
 /// Resolves repeats in `graph` using paired-end link constraints from `PairLinkMatrix`,
 /// returning comprehensive junction statistics.
+///
+/// The first call on a [`ResolverLifecycleState::NeverRun`] graph runs Stage 5 and,
+/// on success, records [`ResolverLifecycleState::Completed`]. Any later call returns
+/// [`ExspanderError`] before exploration, mutation, or Stage 5 cleanup.
 pub fn resolve_repeats_exspander_with_stats(
+    graph: &mut CdbgGraph,
+    matrix: &PairLinkMatrix,
+    dist: &InsertSizeDist,
+    params: ExspanderParams,
+) -> Result<JunctionStats, ExspanderError> {
+    match graph.resolver_state() {
+        ResolverLifecycleState::NeverRun => {}
+        ResolverLifecycleState::Completed => return Err(ExspanderError::AlreadyResolved),
+        ResolverLifecycleState::Running => return Err(ExspanderError::ResolutionInProgress),
+        ResolverLifecycleState::Failed => return Err(ExspanderError::ResolutionPreviouslyFailed),
+    }
+
+    let mut guard = ResolverLifecycleGuard::enter(graph);
+    let stats = execute_repeat_resolution(guard.graph_mut(), matrix, dist, params);
+    guard.finish_ok();
+    Ok(stats)
+}
+
+fn execute_repeat_resolution(
     graph: &mut CdbgGraph,
     matrix: &PairLinkMatrix,
     dist: &InsertSizeDist,
@@ -1322,8 +1407,8 @@ pub fn resolve_repeats_exspander(
     matrix: &PairLinkMatrix,
     dist: &InsertSizeDist,
     params: ExspanderParams,
-) {
-    let stats = resolve_repeats_exspander_with_stats(graph, matrix, dist, params);
+) -> Result<(), ExspanderError> {
+    let stats = resolve_repeats_exspander_with_stats(graph, matrix, dist, params)?;
     tracing::info!(
         "[exSPAnder] Junction stats: valid k joins = {}, valid k-1 joins = {}, ambiguous rejected = {}, invalid rejected = {}",
         stats.valid_k_joins,
@@ -1331,6 +1416,7 @@ pub fn resolve_repeats_exspander(
         stats.rejected_ambiguous_joins,
         stats.rejected_invalid_joins
     );
+    Ok(())
 }
 
 #[cfg(test)]
@@ -1411,7 +1497,8 @@ mod tests {
             min_support: 5,
             decision_threshold: 2.5,
         };
-        resolve_repeats_exspander(&mut graph, &matrix, &dist, params);
+        resolve_repeats_exspander(&mut graph, &matrix, &dist, params)
+            .expect("repeat resolution failed");
 
         // Verify: The 30 kb chromosome assembles into a single continuous contig
         let long_contigs: Vec<&UnitigNode> = graph
@@ -1431,5 +1518,38 @@ mod tests {
             "Contig length should be ~30,000 bp, found {}",
             long_contigs[0].seq_len
         );
+        assert_eq!(graph.resolver_state(), ResolverLifecycleState::Completed);
+    }
+
+    #[test]
+    fn non_never_run_states_reject_before_mutation() {
+        let params = ExspanderParams::default();
+        let matrix = PairLinkMatrix::new();
+        let dist = InsertSizeDist::default();
+
+        for (state, expected) in [
+            (
+                ResolverLifecycleState::Running,
+                ExspanderError::ResolutionInProgress,
+            ),
+            (
+                ResolverLifecycleState::Failed,
+                ExspanderError::ResolutionPreviouslyFailed,
+            ),
+            (
+                ResolverLifecycleState::Completed,
+                ExspanderError::AlreadyResolved,
+            ),
+        ] {
+            let mut graph = CdbgGraph::new(31);
+            let seq_id = graph.arena.push_seq(b"ACGTACGTACGT");
+            graph.nodes.push(UnitigNode::new(0, seq_id, 12, 10.0));
+            graph.set_resolver_state(state);
+            let before = format!("{graph:?}");
+            let err = resolve_repeats_exspander_with_stats(&mut graph, &matrix, &dist, params);
+            assert_eq!(err, Err(expected));
+            assert_eq!(graph.resolver_state(), state);
+            assert_eq!(format!("{graph:?}"), before);
+        }
     }
 }

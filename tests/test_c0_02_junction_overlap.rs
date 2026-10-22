@@ -48,7 +48,7 @@ fn run_exspander(graph: &mut CdbgGraph, matrix: &PairLinkMatrix) {
         min_support: 5,
         decision_threshold: 2.5,
     };
-    resolve_repeats_exspander(graph, matrix, &dist, params);
+    resolve_repeats_exspander(graph, matrix, &dist, params).expect("repeat resolution failed");
 }
 
 /// T1: Two unitigs, valid overlap = k - 1 (30 bp)

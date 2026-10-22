@@ -164,7 +164,7 @@ fn test_boundary_sweep_63_64_65_66_short_nodes() {
             &PairLinkMatrix::new(),
             &InsertSizeDist::default(),
             ExspanderParams::default(),
-        );
+        ).expect("repeat resolution failed");
 
         // Level A & B: Graph node survival and cleanup retention
         let active_nodes: Vec<_> = graph.nodes.iter().filter(|n| !n.is_deleted).collect();
@@ -387,7 +387,7 @@ fn test_boundary_sweep_with_terminal_flank_node() {
             &PairLinkMatrix::new(),
             &InsertSizeDist::default(),
             ExspanderParams::default(),
-        );
+        ).expect("repeat resolution failed");
 
         // Curate contigs under standard production settings: min_len = 500
         let contigs = curate_contigs(&graph, 500, 2.0);
@@ -550,7 +550,7 @@ fn test_case_7_depth_truncation_safety_comprehensive_audit() {
             min_support: 5,
             decision_threshold: 2.0,
         };
-        resolve_repeats_exspander_with_stats(&mut graph, &matrix, &dist, params);
+        resolve_repeats_exspander_with_stats(&mut graph, &matrix, &dist, params).expect("repeat resolution failed");
 
         let shortcut_len = a_seq.len() + (r_seq.len() - k) + (b_seq.len() - k);
         let shortcut_committed = graph.nodes.iter().any(|n| !n.is_deleted && n.seq_len == shortcut_len as u32);
@@ -643,7 +643,7 @@ fn test_case_7_depth_truncation_safety_comprehensive_audit() {
             min_support: 5,
             decision_threshold: 2.0,
         };
-        resolve_repeats_exspander_with_stats(&mut graph, &matrix, &dist, params);
+        resolve_repeats_exspander_with_stats(&mut graph, &matrix, &dist, params).expect("repeat resolution failed");
 
         let authentic_assembled = graph
             .nodes

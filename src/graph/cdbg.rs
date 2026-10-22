@@ -122,12 +122,30 @@ impl UnitigNode {
     }
 }
 
+/// Single-use lifecycle of exSPAnder repeat resolution on one `CdbgGraph`.
+///
+/// The first successful run moves `NeverRun` → `Running` → `Completed`.
+/// A failure or unwind moves the graph to `Failed`. Neither `Completed` nor
+/// `Failed` can be restarted, and no public API resets the state to `NeverRun`.
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+pub enum ResolverLifecycleState {
+    /// Repeat resolution has not been started on this graph.
+    NeverRun,
+    /// Repeat resolution is currently executing on this graph.
+    Running,
+    /// Repeat resolution finished successfully and must not run again.
+    Completed,
+    /// Repeat resolution failed or unwound and must not run again.
+    Failed,
+}
+
 /// Full Compacted De Bruijn Graph containing sequence arena and flat node array.
 #[derive(Clone, Debug)]
 pub struct CdbgGraph {
     pub k: usize,
     pub arena: BitSeqArena,
     pub nodes: Vec<UnitigNode>,
+    resolver_state: ResolverLifecycleState,
 }
 
 impl CdbgGraph {
@@ -136,7 +154,18 @@ impl CdbgGraph {
             k,
             arena: BitSeqArena::new(),
             nodes: Vec::new(),
+            resolver_state: ResolverLifecycleState::NeverRun,
         }
+    }
+
+    #[inline(always)]
+    pub fn resolver_state(&self) -> ResolverLifecycleState {
+        self.resolver_state
+    }
+
+    #[inline(always)]
+    pub(crate) fn set_resolver_state(&mut self, state: ResolverLifecycleState) {
+        self.resolver_state = state;
     }
 
     pub fn num_active_nodes(&self) -> usize {
@@ -180,5 +209,19 @@ mod tests {
 
         assert_eq!(u_fwd.twin(), u_rev);
         assert_eq!(u_rev.twin(), u_fwd);
+    }
+
+    #[test]
+    fn new_graph_starts_never_run_and_clone_copies_lifecycle() {
+        let graph = CdbgGraph::new(31);
+        assert_eq!(graph.resolver_state(), ResolverLifecycleState::NeverRun);
+
+        let mut completed = graph.clone();
+        completed.set_resolver_state(ResolverLifecycleState::Completed);
+        assert_eq!(
+            completed.clone().resolver_state(),
+            ResolverLifecycleState::Completed
+        );
+        assert_eq!(graph.resolver_state(), ResolverLifecycleState::NeverRun);
     }
 }

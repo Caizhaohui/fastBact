@@ -19,23 +19,25 @@
 //! `best.total_weight < threshold * shadow.total_weight`. A shadow that merely
 //! continues the chosen route is the same exit and must not block (T4).
 //!
-//! Phase F11 RED gates on the F9 resolver (`32fd7ff`):
-//! - T14 (F10-P1-002): pruning the tandem hop `R → R` still reports a complete
-//!   search, so the weak decoy commits.
-//! - T15 (F10-P0-001): `cleanup_protected_nodes` is call-local. A second
-//!   invocation deletes Case A's preserved side branch.
-//! - T16 (F10-P1-001): `consumed_nodes` is call-local. A second invocation
-//!   forgets the consumed shadow and commits T3's decoy.
+//! Phase F11 checked single-use resolver contract:
+//! - T14 (F10-P1-002): the tandem hop `R → R` stays in the candidate search,
+//!   so the weak decoy must not commit.
+//! - T15 (F10-P0-001): a second call on a `Completed` graph returns
+//!   `AlreadyResolved` before cleanup, so Case A's side branch survives.
+//! - T16 (F10-P1-001): a second call returns `AlreadyResolved` before
+//!   exploration, so the consumed shadow cannot be replaced by T3's decoy.
+//! - T17: cloning a `Completed` graph preserves `Completed` and rejects re-entry.
+//! - T18: freshly constructed graphs start in `NeverRun` and resolve independently.
 
 use std::collections::BTreeSet;
 
 use fastbact::common::bitseq::reverse_complement_ascii;
 use fastbact::common::sketch::splitmix64;
-use fastbact::graph::cdbg::{CdbgGraph, DirUnitigId, GraphEdge, UnitigNode};
+use fastbact::graph::cdbg::{CdbgGraph, DirUnitigId, GraphEdge, ResolverLifecycleState, UnitigNode};
 use fastbact::polish::output::curate_contigs;
 use fastbact::resolve::exspander::{
     resolve_edge_between, resolve_repeats_exspander_with_stats, score_candidate_path,
-    EdgeResolveResult, ExspanderParams,
+    EdgeResolveResult, ExspanderError, ExspanderParams,
 };
 use fastbact::resolve::mapper::{InsertSizeDist, PairLinkMatrix, ReadPairEvidence};
 
@@ -181,7 +183,7 @@ fn params() -> ExspanderParams {
 }
 
 fn resolve(graph: &mut CdbgGraph, matrix: &PairLinkMatrix, dist: &InsertSizeDist) {
-    resolve_repeats_exspander_with_stats(graph, matrix, dist, params());
+    resolve_repeats_exspander_with_stats(graph, matrix, dist, params()).expect("repeat resolution failed");
 }
 
 fn default_dist() -> InsertSizeDist {
@@ -1207,7 +1209,7 @@ fn test_t7_validation_failure_is_atomic() {
         &PairLinkMatrix::new(),
         &InsertSizeDist::default(),
         params(),
-    );
+    ).expect("repeat resolution failed");
     assert_eq!(
         stats.valid_k_joins + stats.valid_k_minus_1_joins + stats.valid_other_joins,
         0
@@ -2029,7 +2031,7 @@ fn test_t14_tandem_repeat_cycle_must_not_allow_decoy() {
     );
 
     let misassembly = splice(&[&s_seq, &q_seq, &d_seq], &[OV, OV]);
-    resolve_repeats_exspander_with_stats(&mut graph, &matrix, &dist, params());
+    resolve_repeats_exspander_with_stats(&mut graph, &matrix, &dist, params()).expect("repeat resolution failed");
 
     let d_node = d_id.id() as usize;
     assert!(
@@ -2045,11 +2047,10 @@ fn test_t14_tandem_repeat_cycle_must_not_allow_decoy() {
 /// T15 / F10-P0-001. Case A's protected side branch must survive a second call.
 ///
 /// S(700) → R(169) and X(100) → R, overlap 31 bp. X carries 69 bp that S and R
-/// do not. The first call commits S→R, deletes S and R, and protects X. The
-/// second call starts with an empty `cleanup_protected_nodes`. X is short, its
-/// only edge targets deleted R, and Stage 5 would prune it as an orphan.
-///
-/// ON UNPATCHED CODE THIS FAILS at the second assertion.
+/// do not. The first call commits S→R, deletes S and R, and protects X.
+/// The graph is then `Completed`. A second call must return `AlreadyResolved`
+/// before exploration or Stage 5 cleanup, so X stays and the fingerprint
+/// does not change.
 #[test]
 fn test_t15_reentry_cleanup_must_not_delete_protected_side_branch() {
     let mut graph = CdbgGraph::new(31);
@@ -2079,7 +2080,9 @@ fn test_t15_reentry_cleanup_must_not_delete_protected_side_branch() {
 
     let matrix = PairLinkMatrix::new();
     let dist = InsertSizeDist::default();
-    resolve_repeats_exspander_with_stats(&mut graph, &matrix, &dist, params());
+    let res1 = resolve_repeats_exspander_with_stats(&mut graph, &matrix, &dist, params());
+    assert!(res1.is_ok(), "pass 1 must succeed");
+    let fp_before = structural_fingerprint(&graph);
 
     assert!(
         has_active_seq(&graph, &spliced)
@@ -2091,29 +2094,38 @@ fn test_t15_reentry_cleanup_must_not_delete_protected_side_branch() {
     assert!(!graph.nodes[x_id as usize].is_deleted);
     assert!(contains(&graph.get_unitig_seq(x_id), &unique));
 
-    resolve_repeats_exspander_with_stats(&mut graph, &matrix, &dist, params());
+    let res2 = resolve_repeats_exspander_with_stats(&mut graph, &matrix, &dist, params());
+    assert_eq!(
+        res2,
+        Err(ExspanderError::AlreadyResolved),
+        "second resolver call must return Err(AlreadyResolved)"
+    );
+    assert_eq!(
+        structural_fingerprint(&graph),
+        fp_before,
+        "graph fingerprint must remain strictly identical after second call"
+    );
     assert!(
         !graph.nodes[x_id as usize].is_deleted,
-        "X must not be deleted by cleanup on second resolver call"
+        "X must not be deleted by cleanup on second call"
     );
 }
 
 /// T16 / F10-P1-001. Consumed-node provenance must survive a second call.
 ///
 /// Recreates T3: S1(900) → R(169) commits on the first call and R's 20 pairs
-/// block S2(700) → Q(100) → D(300) (5 pairs). The same graph and the same
-/// coordinate-valid matrix are resolved again. R is still deleted, but a fresh
-/// `consumed_nodes` set no longer treats it as a shadow, so D becomes the only
-/// scored candidate and the single-candidate rule accepts it.
-///
-/// ON UNPATCHED CODE THIS FAILS at the second-call assertion.
+/// block S2(700) → Q(100) → D(300) (5 pairs). The graph is then `Completed`.
+/// A second call must return `AlreadyResolved` before exploration, so a fresh
+/// `consumed_nodes` set cannot treat R as absent and commit the decoy D.
 #[test]
 fn test_t16_reentry_consumed_must_not_allow_decoy() {
     let mut fx = build_ce3(false);
     assert_eq!(fx.sep, 38);
     let d_id = fx.d_id;
 
-    resolve_repeats_exspander_with_stats(&mut fx.graph, &fx.matrix, &fx.dist, params());
+    let res1 = resolve_repeats_exspander_with_stats(&mut fx.graph, &fx.matrix, &fx.dist, params());
+    assert!(res1.is_ok(), "pass 1 must succeed");
+    let fp_before = structural_fingerprint(&fx.graph);
 
     assert!(
         has_active_seq(&fx.graph, &fx.s1_contig) && !alive(&fx.graph, fx.r_id),
@@ -2132,9 +2144,107 @@ fn test_t16_reentry_consumed_must_not_allow_decoy() {
         "fixture: retained S2→R evidence must still be strong enough to block D"
     );
 
-    resolve_repeats_exspander_with_stats(&mut fx.graph, &fx.matrix, &fx.dist, params());
+    let res2 = resolve_repeats_exspander_with_stats(&mut fx.graph, &fx.matrix, &fx.dist, params());
+    assert_eq!(
+        res2,
+        Err(ExspanderError::AlreadyResolved),
+        "second resolver call must return Err(AlreadyResolved)"
+    );
+    assert_eq!(
+        structural_fingerprint(&fx.graph),
+        fp_before,
+        "graph fingerprint must remain strictly identical after second call"
+    );
     assert!(
         !fx.graph.nodes[d_id as usize].is_deleted,
-        "D must not be committed on second resolver call"
+        "D must not be consumed by decoy commit on second call"
     );
+}
+
+fn resolvable_linear_graph(tag: u64) -> CdbgGraph {
+    let mut graph = CdbgGraph::new(31);
+    let junction = dna(tag, 31);
+    let mut s_seq = dna(tag.wrapping_add(1), 669);
+    s_seq.extend_from_slice(&junction);
+    let mut r_seq = junction.clone();
+    r_seq.extend(dna(tag.wrapping_add(2), 138));
+    assert_eq!((s_seq.len(), r_seq.len()), (700, 169));
+    let s_dir = add_node(&mut graph, &s_seq);
+    let r_dir = add_node(&mut graph, &r_seq);
+    add_edge(&mut graph, s_dir, r_dir, 31);
+    assert_valid_edge(&graph, s_dir, r_dir, 31);
+    assert_eq!(graph.resolver_state(), ResolverLifecycleState::NeverRun);
+    graph
+}
+
+/// T17. Cloning a `Completed` graph keeps `Completed` and rejects re-entry.
+#[test]
+fn test_t17_cloned_graph_preserves_lifecycle_state() {
+    let mut graph = resolvable_linear_graph(0xC17_0001);
+    let matrix = PairLinkMatrix::new();
+    let dist = InsertSizeDist::default();
+
+    let res1 = resolve_repeats_exspander_with_stats(&mut graph, &matrix, &dist, params());
+    assert!(res1.is_ok(), "pass 1 must succeed");
+    assert_eq!(graph.resolver_state(), ResolverLifecycleState::Completed);
+    let original_fp = structural_fingerprint(&graph);
+
+    let mut cloned = graph.clone();
+    assert_eq!(cloned.resolver_state(), ResolverLifecycleState::Completed);
+    let fp_before = structural_fingerprint(&cloned);
+
+    let res2 = resolve_repeats_exspander_with_stats(&mut cloned, &matrix, &dist, params());
+    assert_eq!(
+        res2,
+        Err(ExspanderError::AlreadyResolved),
+        "re-entry on a clone of a Completed graph must return Err(AlreadyResolved)"
+    );
+    assert_eq!(
+        structural_fingerprint(&cloned),
+        fp_before,
+        "clone fingerprint must remain strictly identical after rejected re-entry"
+    );
+    assert_eq!(cloned.resolver_state(), ResolverLifecycleState::Completed);
+    assert_eq!(structural_fingerprint(&graph), original_fp);
+    assert_eq!(graph.resolver_state(), ResolverLifecycleState::Completed);
+}
+
+/// T18. Distinct fresh graphs start in `NeverRun` and resolve independently.
+#[test]
+fn test_t18_independent_graphs_resolve_separately() {
+    let mut graph_a = resolvable_linear_graph(0xC18_0001);
+    let mut graph_b = resolvable_linear_graph(0xC18_1001);
+    assert_eq!(graph_a.resolver_state(), ResolverLifecycleState::NeverRun);
+    assert_eq!(graph_b.resolver_state(), ResolverLifecycleState::NeverRun);
+    let b_before = structural_fingerprint(&graph_b);
+
+    let matrix = PairLinkMatrix::new();
+    let dist = InsertSizeDist::default();
+    let res_a = resolve_repeats_exspander_with_stats(&mut graph_a, &matrix, &dist, params());
+    assert!(res_a.is_ok(), "graph A must resolve from NeverRun");
+    assert_eq!(graph_a.resolver_state(), ResolverLifecycleState::Completed);
+    assert_eq!(
+        graph_b.resolver_state(),
+        ResolverLifecycleState::NeverRun,
+        "resolving graph A must not change graph B"
+    );
+    assert_eq!(structural_fingerprint(&graph_b), b_before);
+
+    let res_b = resolve_repeats_exspander_with_stats(&mut graph_b, &matrix, &dist, params());
+    assert!(res_b.is_ok(), "graph B must resolve independently of graph A");
+    assert_eq!(graph_b.resolver_state(), ResolverLifecycleState::Completed);
+
+    let fp_a = structural_fingerprint(&graph_a);
+    let again_a = resolve_repeats_exspander_with_stats(&mut graph_a, &matrix, &dist, params());
+    assert_eq!(again_a, Err(ExspanderError::AlreadyResolved));
+    assert_eq!(structural_fingerprint(&graph_a), fp_a);
+
+    let mut graph_c = CdbgGraph::new(31);
+    assert_eq!(graph_c.resolver_state(), ResolverLifecycleState::NeverRun);
+    let res_c = resolve_repeats_exspander_with_stats(&mut graph_c, &matrix, &dist, params());
+    assert!(
+        res_c.is_ok(),
+        "a freshly constructed graph must still resolve after other graphs have completed"
+    );
+    assert_eq!(graph_c.resolver_state(), ResolverLifecycleState::Completed);
 }

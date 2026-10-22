@@ -309,7 +309,7 @@ fn test_e6_backward_path_missing_reciprocal_edge_rejected() {
             min_support: 5,
             decision_threshold: 2.5,
         },
-    );
+    ).expect("repeat resolution failed");
 
     // Path must be conservatively rejected due to missing reciprocal edge
     assert_eq!(stats.valid_k_joins, 0);
@@ -363,7 +363,7 @@ fn test_e7_multiple_overlap_candidates_tied_support_ambiguous_rejected() {
             min_support: 5,
             decision_threshold: 2.5,
         },
-    );
+    ).expect("repeat resolution failed");
 
     assert_eq!(stats.valid_k_joins, 0);
     assert_eq!(stats.valid_k_minus_1_joins, 0);
@@ -457,7 +457,7 @@ fn test_e8_valid_mixed_k_and_k_minus_1_path_succeeds() {
             min_support: 5,
             decision_threshold: 2.5,
         },
-    );
+    ).expect("repeat resolution failed");
 
     assert_eq!(stats.valid_k_joins, 1);
     assert_eq!(stats.valid_k_minus_1_joins, 1);

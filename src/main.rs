@@ -432,7 +432,8 @@ fn main() -> Result<()> {
             matrix.links.len()
         );
         let params = ExspanderParams::default();
-        resolve_repeats_exspander(&mut graph, &matrix, &dist, params);
+        resolve_repeats_exspander(&mut graph, &matrix, &dist, params)
+            .expect("repeat resolution failed");
         let sim_stats = fastbact::graph::simplify::simplify_graph_custom(&mut graph, !args.no_tip_clip, !args.no_bubble_pop);
         info!(
             "Graph after exSPAnder: {} active unitigs (elapsed: {:.2?})",

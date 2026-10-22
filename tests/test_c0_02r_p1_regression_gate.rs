@@ -120,7 +120,7 @@ fn test_case_1_shortcut_must_not_be_selected() {
         min_support: 5,
         decision_threshold: 2.0,
     };
-    resolve_repeats_exspander_with_stats(&mut graph, &matrix, &dist, params);
+    resolve_repeats_exspander_with_stats(&mut graph, &matrix, &dist, params).expect("repeat resolution failed");
 
     // REGRESSION GATE ASSERTION:
     // A correct algorithm must NOT select the 391 bp shortcut!
@@ -267,7 +267,7 @@ fn test_case_3_two_copy_repeat_insufficient_support_preserves_branch() {
         min_support: 5,
         decision_threshold: 2.0,
     };
-    let stats = resolve_repeats_exspander_with_stats(&mut graph, &matrix, &InsertSizeDist::default(), params);
+    let stats = resolve_repeats_exspander_with_stats(&mut graph, &matrix, &InsertSizeDist::default(), params).expect("repeat resolution failed");
 
     // Assert that insufficient support prevents resolution: 0 joins, all 5 nodes remain active
     assert_eq!(stats.valid_k_joins + stats.valid_k_minus_1_joins + stats.valid_other_joins, 0);
@@ -427,7 +427,7 @@ fn test_case_6_short_c_shortcut_must_not_be_selected_f1_p1_001() {
         min_support: 5,
         decision_threshold: 2.0,
     };
-    resolve_repeats_exspander_with_stats(&mut graph, &matrix, &dist, params);
+    resolve_repeats_exspander_with_stats(&mut graph, &matrix, &dist, params).expect("repeat resolution failed");
 
     // REGRESSION GATE ASSERTION:
     // 1. Erroneous shortcut A -> R -> B (len 1038 bp) must NOT be committed!
@@ -675,7 +675,7 @@ fn test_case_7_depth_limit_must_not_commit_shortcut_f3_p1_001() {
         min_support: 5,
         decision_threshold: 2.0,
     };
-    resolve_repeats_exspander_with_stats(&mut graph, &matrix, &dist, params);
+    resolve_repeats_exspander_with_stats(&mut graph, &matrix, &dist, params).expect("repeat resolution failed");
 
     let shortcut_committed = graph
         .nodes
