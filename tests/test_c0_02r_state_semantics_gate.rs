@@ -3183,3 +3183,447 @@ fn test_t32_depth_limit_continuation_produces_conservative_truncated() {
 }
 
 
+
+/// T33 (Finding F16-P1-001, CE-3):
+/// Short current-node re-entry (C -> C -> X) must not be silently discarded in candidate search.
+///
+/// Topology:
+/// S(700) -> P(100) -> C(100) -> D(300)
+///           |         |
+///           +-> X(300)| (C -> C self-loop)
+///                     +-> X(300)
+///
+/// Decision 1: S -> P -> C (20 pairs, span 200). Spliced into ext = [P, C], curr_dir = C.
+/// Decision 2: From C:
+/// - C -> D (5 pairs, span 200, weight 5)
+/// - C -> X (direct span 119 out of window [150, 250])
+/// - C -> C -> X (sep 38, span 188, weight ~18.43, 20 pairs)
+///
+/// On baseline, C is skipped at line 262 because u.id() == curr_dir.id(),
+/// dropping C -> C -> X and committing weak decoy D.
+#[test]
+fn test_t33_short_current_node_reentry_must_not_promote_decoy() {
+    let mut graph = CdbgGraph::new(31);
+    let j_a = junction(0xE33_0001);
+    let j_b = junction(0xE33_0002);
+    assert_junctions_distinct(&[j_a.clone(), j_b.clone()]);
+
+    let s_seq = span_node(&[], 0xE33_0101, 700, &j_a);
+    let p_seq = span_node(&j_a, 0xE33_0102, 100, &j_b);
+    let c_seq = span_node(&j_b, 0xE33_0103, 100, &j_b); // Starts B, ends B: self-loop possible!
+    let d_seq = span_node(&j_b, 0xE33_0104, 300, &[]);
+    let x_seq = span_node(&j_b, 0xE33_0105, 300, &[]);
+
+    let s_id = add_node(&mut graph, &s_seq);
+    let p_id = add_node(&mut graph, &p_seq);
+    let c_id = add_node(&mut graph, &c_seq);
+    let d_id = add_node(&mut graph, &d_seq);
+    let x_id = add_node(&mut graph, &x_seq);
+
+    for (from, to) in [
+        (s_id, p_id),
+        (p_id, c_id),
+        (p_id, x_id),
+        (c_id, c_id), // Self-loop
+        (c_id, d_id),
+        (c_id, x_id),
+    ] {
+        add_edge(&mut graph, from, to, OV as u8);
+    }
+
+    const READ: u32 = 75;
+    let dist = InsertSizeDist {
+        median: 200.0,
+        mad: 20.0,
+        min_insert: 150,
+        max_insert: 250,
+    };
+    let mut matrix = PairLinkMatrix::new();
+    // Decision 1: S -> P -> C (sep 38, span = 80 + 38 + 82 = 200, 20 pairs)
+    add_pairs_len(&mut matrix, s_id, c_id, 20, 80, 82, 33_001, READ as u16);
+
+    // Decision 2: C -> D (sep = -31, span = 80 - 31 + 151 = 200, 5 pairs)
+    add_pairs_len(&mut matrix, c_id, d_id, 5, 80, 151, 33_002, READ as u16);
+
+    // Decision 2: C -> C -> X (sep = 38, span = 75 + 38 + 75 = 188, 20 pairs)
+    add_pairs_len(&mut matrix, c_id, x_id, 20, 75, 75, 33_003, READ as u16);
+
+    let misassembly = splice(&[&s_seq, &p_seq, &c_seq, &d_seq], &[OV, OV, OV]);
+    resolve_repeats_exspander_with_stats(&mut graph, &matrix, &dist, params())
+        .expect("repeat resolution failed");
+
+    let d_node = d_id.id() as usize;
+    assert!(
+        !graph.nodes[d_node].is_deleted,
+        "Decoy D must not be consumed by a misassembly commit when C -> C -> X is an authentic competitor"
+    );
+    assert!(
+        !has_active_seq(&graph, &misassembly),
+        "Misassembled contig S-P-C-D must not be created"
+    );
+}
+
+/// T34 (CE-3 Positive Control):
+/// Under the same topology as T33, when unified admissibility and beta bound are active,
+/// C -> C -> X is explored and committed as S-P-C-C-X.
+#[test]
+fn test_t34_short_current_node_reentry_positive_control_commits() {
+    let mut graph = CdbgGraph::new(31);
+    let j_a = junction(0xE34_0001);
+    let j_b = junction(0xE34_0002);
+    assert_junctions_distinct(&[j_a.clone(), j_b.clone()]);
+
+    let s_seq = span_node(&[], 0xE34_0101, 700, &j_a);
+    let p_seq = span_node(&j_a, 0xE34_0102, 100, &j_b);
+    let c_seq = span_node(&j_b, 0xE34_0103, 100, &j_b);
+    let d_seq = span_node(&j_b, 0xE34_0104, 300, &[]);
+    let x_seq = span_node(&j_b, 0xE34_0105, 300, &[]);
+
+    let s_id = add_node(&mut graph, &s_seq);
+    let p_id = add_node(&mut graph, &p_seq);
+    let c_id = add_node(&mut graph, &c_seq);
+    let d_id = add_node(&mut graph, &d_seq);
+    let x_id = add_node(&mut graph, &x_seq);
+
+    for (from, to) in [
+        (s_id, p_id),
+        (p_id, c_id),
+        (p_id, x_id),
+        (c_id, c_id),
+        (c_id, d_id),
+        (c_id, x_id),
+    ] {
+        add_edge(&mut graph, from, to, OV as u8);
+    }
+
+    const READ: u32 = 75;
+    let dist = InsertSizeDist {
+        median: 200.0,
+        mad: 20.0,
+        min_insert: 150,
+        max_insert: 250,
+    };
+    let mut matrix = PairLinkMatrix::new();
+    add_pairs_len(&mut matrix, s_id, c_id, 20, 80, 82, 34_001, READ as u16);
+    add_pairs_len(&mut matrix, c_id, d_id, 5, 80, 151, 34_002, READ as u16);
+    add_pairs_len(&mut matrix, c_id, x_id, 20, 75, 75, 34_003, READ as u16);
+
+    let assembly = splice(&[&s_seq, &p_seq, &c_seq, &c_seq, &x_seq], &[OV, OV, OV, OV]);
+    resolve_repeats_exspander_with_stats(&mut graph, &matrix, &dist, params())
+        .expect("repeat resolution failed");
+
+    assert!(
+        has_active_seq(&graph, &assembly),
+        "Contig S-P-C-C-X must be created when C -> C -> X wins with 3.69x ratio"
+    );
+    let d_node = d_id.id() as usize;
+    assert!(
+        !graph.nodes[d_node].is_deleted,
+        "Decoy D must remain alive (cleanup protected)"
+    );
+}
+
+/// T35 (CE-4): Alternating cycle re-entry C -> A -> C -> X vs weak decoy D.
+/// Current-node re-entry at depth 2 must not be silently discarded by repeat probe.
+#[test]
+fn test_t35_alternating_cycle_reentry_must_withhold_decoy() {
+    let mut graph = CdbgGraph::new(31);
+    let j_a = junction(0xE35_0001);
+    let j_b = junction(0xE35_0002);
+    let j_c = junction(0xE35_0003);
+    assert_junctions_distinct(&[j_a.clone(), j_b.clone(), j_c.clone()]);
+
+    let s_seq = span_node(&[], 0xE35_0101, 700, &j_a);
+    let p_seq = span_node(&j_a, 0xE35_0102, 100, &j_b);
+    let z_seq = span_node(&j_b, 0xE35_0103, 300, &[]);
+    let c_seq = span_node(&j_b, 0xE35_0104, 100, &j_c);
+    let a_seq = span_node(&j_c, 0xE35_0105, 100, &j_b);
+    let d_seq = span_node(&j_c, 0xE35_0106, 300, &[]);
+    let x_seq = span_node(&j_c, 0xE35_0107, 300, &[]);
+
+    let s_id = add_node(&mut graph, &s_seq);
+    let p_id = add_node(&mut graph, &p_seq);
+    let _z_id = add_node(&mut graph, &z_seq);
+    let c_id = add_node(&mut graph, &c_seq);
+    let a_id = add_node(&mut graph, &a_seq);
+    let d_id = add_node(&mut graph, &d_seq);
+    let x_id = add_node(&mut graph, &x_seq);
+
+    for (from, to) in [
+        (s_id, p_id),
+        (p_id, c_id),
+        (p_id, _z_id),
+        (c_id, a_id),
+        (a_id, c_id),
+        (c_id, d_id),
+        (c_id, x_id),
+    ] {
+        add_edge(&mut graph, from, to, OV as u8);
+    }
+
+    const READ: u32 = 75;
+    let dist = InsertSizeDist {
+        median: 260.0,
+        mad: 20.0,
+        min_insert: 210,
+        max_insert: 310,
+    };
+    let mut matrix = PairLinkMatrix::new();
+    // Decision 1: S -> P -> C (sep = 38, span = 140 + 38 + 82 = 260, 20 pairs)
+    add_pairs_len(&mut matrix, s_id, c_id, 20, 140, 82, 35_001, READ as u16);
+
+    // Decision 2: C -> D (sep = -31, span = 80 - 31 + 211 = 260, 5 pairs)
+    add_pairs_len(&mut matrix, c_id, d_id, 5, 80, 211, 35_002, READ as u16);
+
+    // Decision 2: C -> A -> C -> X (sep = -31 + 69 + 69 = 107, span = 75 + 107 + 78 = 260, 20 pairs)
+    add_pairs_len(&mut matrix, c_id, x_id, 20, 75, 78, 35_003, READ as u16);
+
+    resolve_repeats_exspander_with_stats(&mut graph, &matrix, &dist, params())
+        .expect("repeat resolution failed");
+
+    let d_node = d_id.id() as usize;
+    assert!(
+        !graph.nodes[d_node].is_deleted,
+        "Decoy D must not be committed when alternating cycle continuation C -> A -> C -> X is active"
+    );
+}
+
+/// T36 (CE-4b): Opposite-strand short reuse via P.twin().
+#[test]
+fn test_t36_opposite_strand_short_reuse() {
+    let mut graph = CdbgGraph::new(31);
+    let j_a = junction(0xE36_0001);
+    let j_b = junction(0xE36_0002);
+    let j_rc_b = reverse_complement_ascii(&j_b);
+    let j_rc_a = reverse_complement_ascii(&j_a);
+
+    let s_seq = span_node(&[], 0xE36_0101, 700, &j_a);
+    let p_seq = span_node(&j_a, 0xE36_0102, 100, &j_b);
+    // C ends in rc(j_b), so C connects to P.twin()!
+    let c_seq = span_node(&j_b, 0xE36_0103, 100, &j_rc_b);
+    let d_seq = span_node(&j_rc_b, 0xE36_0104, 300, &[]);
+    // Y starts with rc(j_a), matching exit of P.twin()
+    let y_seq = span_node(&j_rc_a, 0xE36_0105, 300, &[]);
+
+    let s_id = add_node(&mut graph, &s_seq);
+    let p_id = add_node(&mut graph, &p_seq);
+    let c_id = add_node(&mut graph, &c_seq);
+    let d_id = add_node(&mut graph, &d_seq);
+    let y_id = add_node(&mut graph, &y_seq);
+
+    // Edges
+    add_edge(&mut graph, s_id, p_id, OV as u8);
+    add_edge(&mut graph, p_id, c_id, OV as u8);
+    add_edge(&mut graph, c_id, d_id, OV as u8);
+    add_edge(&mut graph, c_id, p_id.twin(), OV as u8);
+    add_edge(&mut graph, p_id.twin(), y_id, OV as u8);
+
+    const READ: u32 = 75;
+    let dist = InsertSizeDist {
+        median: 200.0,
+        mad: 20.0,
+        min_insert: 150,
+        max_insert: 250,
+    };
+    let mut matrix = PairLinkMatrix::new();
+    add_pairs_len(&mut matrix, s_id, c_id, 20, 80, 82, 36_001, READ as u16);
+    add_pairs_len(&mut matrix, c_id, d_id, 5, 80, 151, 36_002, READ as u16);
+    add_pairs_len(&mut matrix, c_id, y_id, 20, 75, 75, 36_003, READ as u16);
+
+    resolve_repeats_exspander_with_stats(&mut graph, &matrix, &dist, params())
+        .expect("repeat resolution failed");
+
+    let d_node = d_id.id() as usize;
+    assert!(
+        !graph.nodes[d_node].is_deleted,
+        "Decoy D must be withheld when cross-strand competitor C -> P.twin() -> Y is active"
+    );
+}
+
+/// T37: Beta distance boundary check (sep + beta == max_insert vs max_insert + 1).
+#[test]
+fn test_t37_beta_distance_boundary() {
+    let mut graph = CdbgGraph::new(31);
+    let j_a = junction(0xE37_0001);
+    let j_b = junction(0xE37_0002);
+    let s_seq = span_node(&[], 0xE37_0101, 700, &j_a);
+    let p_seq = span_node(&j_a, 0xE37_0102, 100, &j_b);
+    let d_seq = span_node(&j_b, 0xE37_0103, 300, &[]);
+
+    let s_id = add_node(&mut graph, &s_seq);
+    let p_id = add_node(&mut graph, &p_seq);
+    let d_id = add_node(&mut graph, &d_seq);
+
+    add_edge(&mut graph, s_id, p_id, OV as u8);
+    add_edge(&mut graph, p_id, d_id, OV as u8);
+
+    let dist = InsertSizeDist {
+        median: 200.0,
+        mad: 20.0,
+        min_insert: 100,
+        max_insert: 250,
+    };
+    let mut matrix = PairLinkMatrix::new();
+    // sep = 100 - 31 - 31 = 38. If dist1 = 100, dist2 = 112 => span = 250 (exact boundary)
+    add_pairs_len(&mut matrix, s_id, d_id, 10, 100, 112, 37_001, 75);
+
+    resolve_repeats_exspander_with_stats(&mut graph, &matrix, &dist, params())
+        .expect("repeat resolution failed");
+
+    assert!(
+        graph.nodes[d_id.id() as usize].is_deleted,
+        "Candidate at exact max_insert boundary must be supported and committed"
+    );
+}
+
+/// T38: Self-anchor in-window evidence forces withholding (must not commit as extension endpoint).
+#[test]
+fn test_t38_self_anchor_in_window_evidence_withholds() {
+    let mut graph = CdbgGraph::new(31);
+    let j_a = junction(0xE38_0001);
+    let j_b = junction(0xE38_0002);
+
+    let s_seq = span_node(&[], 0xE38_0101, 700, &j_a);
+    let c_seq = span_node(&j_a, 0xE38_0102, 100, &j_b);
+    let d_seq = span_node(&j_b, 0xE38_0103, 300, &[]);
+
+    let s_id = add_node(&mut graph, &s_seq);
+    let c_id = add_node(&mut graph, &c_seq);
+    let d_id = add_node(&mut graph, &d_seq);
+
+    add_edge(&mut graph, s_id, c_id, OV as u8);
+    add_edge(&mut graph, c_id, d_id, OV as u8);
+
+    let dist = InsertSizeDist {
+        median: 200.0,
+        mad: 20.0,
+        min_insert: 150,
+        max_insert: 250,
+    };
+    let mut matrix = PairLinkMatrix::new();
+    // In-window evidence directly between (S, S)
+    add_pairs_len(&mut matrix, s_id, s_id, 20, 50, 150, 38_001, 75);
+    // Weak decoy to D
+    add_pairs_len(&mut matrix, s_id, d_id, 5, 50, 150, 38_002, 75);
+
+    resolve_repeats_exspander_with_stats(&mut graph, &matrix, &dist, params())
+        .expect("repeat resolution failed");
+
+    // S itself must never be committed as an extension candidate endpoint
+    assert!(
+        !graph.nodes[s_id.id() as usize].is_deleted,
+        "Seed S must never be deleted as a spliced constituent"
+    );
+}
+
+/// T39: Queue capacity limit (Q_MAX = 1024) safely truncates high-fanout graph without panic.
+#[test]
+fn test_t39_queue_capacity_limit_truncates() {
+    let mut graph = CdbgGraph::new(31);
+    let j_a = junction(0xE39_0001);
+    let s_seq = span_node(&[], 0xE39_0101, 700, &j_a);
+    let s_id = add_node(&mut graph, &s_seq);
+
+    // Create high fanout
+    let mut targets = Vec::new();
+    for i in 0..50 {
+        let t_seq = span_node(&j_a, 0xE39_0200 + i as u64, 100, &[]);
+        let t_id = add_node(&mut graph, &t_seq);
+        add_edge(&mut graph, s_id, t_id, OV as u8);
+        targets.push(t_id);
+    }
+
+    let dist = InsertSizeDist {
+        median: 300.0,
+        mad: 50.0,
+        min_insert: 100,
+        max_insert: 500,
+    };
+    let matrix = PairLinkMatrix::new();
+
+    // Resolving should finish safely with Truncated/withheld status, no panic
+    let stats = resolve_repeats_exspander_with_stats(&mut graph, &matrix, &dist, params())
+        .expect("repeat resolution failed");
+    assert_eq!(
+        stats.valid_k_joins + stats.valid_k_minus_1_joins + stats.valid_other_joins,
+        0
+    );
+}
+
+/// T40: Case A long fork self-loop (seq_len >= 500) must be rejected from repeat exploration.
+#[test]
+fn test_t40_case_a_long_fork_self_loop_rejected() {
+    let mut graph = CdbgGraph::new(31);
+    let j_a = junction(0xE40_0001);
+    let j_b = junction(0xE40_0002);
+
+    let s_seq = span_node(&[], 0xE40_0101, 700, &j_a);
+    // Fork F is a long node (600 bp) with self-loop!
+    let f_seq = span_node(&j_a, 0xE40_0102, 600, &j_a);
+    let d_seq = span_node(&j_a, 0xE40_0103, 300, &j_b);
+
+    let s_id = add_node(&mut graph, &s_seq);
+    let f_id = add_node(&mut graph, &f_seq);
+    let d_id = add_node(&mut graph, &d_seq);
+
+    add_edge(&mut graph, s_id, f_id, OV as u8);
+    add_edge(&mut graph, f_id, f_id, OV as u8); // Long self-loop!
+    add_edge(&mut graph, f_id, d_id, OV as u8);
+
+    let dist = InsertSizeDist {
+        median: 400.0,
+        mad: 40.0,
+        min_insert: 200,
+        max_insert: 600,
+    };
+    let mut matrix = PairLinkMatrix::new();
+    add_pairs_len(&mut matrix, s_id, d_id, 10, 50, 100, 40_001, 75);
+
+    let stats = resolve_repeats_exspander_with_stats(&mut graph, &matrix, &dist, params())
+        .expect("repeat resolution failed");
+    assert_eq!(stats.rejected_invalid_joins, 0);
+}
+
+/// T41: Reachable circular node within insert window forces withholding (SearchStatus::Truncated).
+#[test]
+fn test_t41_reachable_circular_node_withholds() {
+    let mut graph = CdbgGraph::new(31);
+    let j_a = junction(0xE41_0001);
+    let j_b = junction(0xE41_0002);
+
+    let s_seq = span_node(&[], 0xE41_0101, 700, &j_a);
+    let p_seq = span_node(&j_a, 0xE41_0102, 100, &j_b);
+    let d_seq = span_node(&j_b, 0xE41_0103, 300, &[]);
+    let circ_seq = span_node(&j_b, 0xE41_0104, 100, &j_b);
+
+    let s_id = add_node(&mut graph, &s_seq);
+    let p_id = add_node(&mut graph, &p_seq);
+    let d_id = add_node(&mut graph, &d_seq);
+    let circ_id = add_node(&mut graph, &circ_seq);
+
+    // Mark circ_id as circular
+    graph.nodes[circ_id.id() as usize].is_circular = true;
+
+    add_edge(&mut graph, s_id, p_id, OV as u8);
+    add_edge(&mut graph, p_id, d_id, OV as u8);
+    add_edge(&mut graph, p_id, circ_id, OV as u8);
+
+    let dist = InsertSizeDist {
+        median: 300.0,
+        mad: 30.0,
+        min_insert: 200,
+        max_insert: 400,
+    };
+    let mut matrix = PairLinkMatrix::new();
+    add_pairs_len(&mut matrix, s_id, d_id, 5, 80, 150, 41_001, 75);
+
+    resolve_repeats_exspander_with_stats(&mut graph, &matrix, &dist, params())
+        .expect("repeat resolution failed");
+
+    // Decoy D must not commit because circular continuation makes search status Truncated
+    let d_node = d_id.id() as usize;
+    assert!(
+        !graph.nodes[d_node].is_deleted,
+        "Decoy D must be withheld when an in-window circular continuation exists"
+    );
+}
