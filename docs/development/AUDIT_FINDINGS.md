@@ -182,3 +182,33 @@ Every cross-model execution MUST record the following fields:
 - **Next Action**:
   - Maintain C0-02R strictly as **NOT ACCEPTED**.
   - Await user review of the forensic report before designing any repeat-family uniqueness filters or polishing boundary safeguards.
+
+---
+
+### [AUDIT-20261023-017] Codex Independent Trace Audit of Repeat-Join Decision Provenance & Mechanism Verification
+
+- **Task ID**: `C0-02R Phase F21-B`
+- **Agent**: Codex CLI (v0.163.0)
+- **Model**: `gpt-6.1-sol`
+- **Reasoning Effort**: `medium` (`-c model_reasoning_effort="medium"`)
+- **Permission Level**: `READ_ONLY` (`-s read-only`)
+- **Target Branch**: `feature/c0-02r-phase-f21b-trace`
+- **Worktree**: `/hpcfs/fhome/caizhh/Desktop/03_Tool_Development/fastBact-phase-f21b-trace-worktree`
+- **Audited Commit Baseline**: `07e0e5fd927cc3c8be96b22927e33b8ae6b9e138` (Phase F21-A forensic HEAD)
+- **Production Tree SHA**: `30967bf4940844aeb6b744732bcad6d2a72daab4` (**0 lines changed in `src/`**)
+- **Output Report Path**: [`docs/development/evidence/C0_02R/phase_f21b/codex_independent_trace_audit.md`](./evidence/C0_02R/phase_f21b/codex_independent_trace_audit.md)
+- **Overall Forensic Verdict**: **FAIL / QUALIFIED FINDINGS** (Strict verification: verified production tree frozen at `30967bf...`, confirmed R1-003 Baseline A relocation, confirmed terminal polishing error concentration; qualified offline decision scores and required formal diagnostic trace instrumentation)
+- **Phase Completion Status**: **`PHASE_F21B_DIAGNOSTIC_EVIDENCE_REQUIRED`**
+- **C0-02R Acceptance**: **Strictly NOT ACCEPTED**
+- **Key Findings & Reconciliations**:
+  1. *Production Code Freeze*: Verified bit-identical production tree `30967bf4940844aeb6b744732bcad6d2a72daab4` with 0 lines changed in `src/`.
+  2. *Chimeric Relocation Verified*: Structural misassembly on `contig_16` (-2,095,535 bp relocation between 3.66 Mb and 1.57 Mb across 7 short nodes) is 100% verified.
+  3. *Cross-Isolate Baseline Pre-existence*: Corroborated that Baseline A in R1-003 already committed the exact same chimeric relocation on `contig_16` (-2,094,638 bp), confirming Candidate B reproduced existing graph behavior while resolving an independent 590 kb misassembly.
+  4. *Terminal Polishing Artifacts*: 84.6% (132/156) of base errors occur in 101–350 bp terminal zone. Net increases from Stage 5 $\to$ 6 are +85 mismatches and +43 indels for B vs +69 mismatches and +18 indels for A.
+  5. *Unique Reference Coverage Loss*: Reconciled component rows in `unique_coverage_loss.tsv` to 25,574 bp unique loss (mapped 32,601 bp - redundant 7,027 bp), accounting for the QUAST reference coverage drop of 25,715 bp (0.554%).
+  6. *Resolver Decision Traversal Qualification*: While the graph topology and 0-spanning-pair reality are confirmed, the exact walker state transitions and decision weights are documented offline interpretations. Dedicated runtime diagnostic tracing instrumentation is required in Phase F22.
+- **Next Action**:
+  - Maintain C0-02R strictly as **NOT ACCEPTED**.
+  - Update Phase F21-B governance records and report to `PHASE_F21B_DIAGNOSTIC_EVIDENCE_REQUIRED`.
+  - Design Phase F22 targeted interventions: flanking unique-anchor requirement for repeat traversals, terminal polishing boundary guard, and runtime diagnostic logging.
+

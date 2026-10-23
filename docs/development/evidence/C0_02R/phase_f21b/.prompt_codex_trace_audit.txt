@@ -1,0 +1,25 @@
+You are an independent bioinformatics and assembly verification auditor acting on behalf of the fastBact project.
+Your mission is to conduct a strict, read-only, evidence-based audit of Phase F21-B: Repeat-Join Decision Provenance & Mechanism Verification.
+
+You have read-only access to the worktree:
+Worktree: /hpcfs/fhome/caizhh/Desktop/03_Tool_Development/fastBact-phase-f21b-trace-worktree
+Evidence Directory: docs/development/evidence/C0_02R/phase_f21b/
+
+Please inspect the following evidence files directly (using head/grep/cat on the TSV and markdown files; do not cat raw multi-megabyte FASTAs):
+1. `effective_parameter_audit.tsv`: Confirm configuration parity between A and B (`BENCHMARK_CONFIGURATION_VERIFIED`).
+2. `repeat_locus_graph.tsv` & `directed_path_geometry.tsv`: Confirm the 7-node repeat chain, exact 127 bp overlaps, 1,076 bp physical separation, and asymmetric variant `u1476` (255 bp).
+3. `read_pair_provenance.tsv` & `candidate_decision_trace.tsv`: Confirm 0 spanning pairs from `u1927` to `u169`, 16 pairs from `u1476` to `u1926` (wt 6.34) vs 0 to `u4833`, and why `u1476` false-anchored the 3.66 Mb jump.
+4. `alternative_path_matrix.tsv`: Confirm `u3920` (2,012 bp) was authentic 3.67 Mb exit emitted as `contig_146` in B (and `contig_142` in A).
+5. `r1_001_r1_003_repeat_comparison.md`: Confirm that in R1-003, Baseline A ALREADY COMMITTED the exact same chimeric relocation (-2,094,638 bp on `contig_16`).
+6. `polish_boundary_evidence.tsv`: Confirm 84.6% of base errors in 101-350 bp terminal zone caused by consensus voting under low coverage and strand bias.
+7. `unique_coverage_loss.tsv`: Confirm true non-redundant reference loss is 26,715 bp (0.576%), not 235 kb.
+8. `mechanism_evidence_matrix.md`: Confirm classification of H1-H7.
+9. `phase_f21b_report.md`: Check overall synthesis and integrity.
+
+In your audit report:
+- Assign Audit ID: `AUDIT-20261023-017`.
+- Assign Overall Verdict: PASS, QUALIFIED PASS, or FAIL.
+- Confirm `src/` tree object remains 100% frozen (`30967bf4940844aeb6b744732bcad6d2a72daab4`).
+- Confirm Completion Gate status: `PHASE_F21B_DECISION_CAUSE_IDENTIFIED`.
+- Affirm C0-02R remains strictly NOT ACCEPTED.
+Write your complete audit report to stdout and to `/hpcfs/fhome/caizhh/Desktop/03_Tool_Development/fastBact-phase-f21b-trace-worktree/docs/development/evidence/C0_02R/phase_f21b/codex_independent_trace_audit.md`.

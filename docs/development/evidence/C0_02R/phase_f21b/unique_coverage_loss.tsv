@@ -1,0 +1,5 @@
+unitig_length_bin	unitig_count	total_raw_length_bp	mapped_reference_span_bp	redundant_with_output_bp	unique_reference_loss_bp	pct_redundant	pct_reference_loss	classification
+<200	1370	185579	0	0	0	UNALIGNED	0.000%	BELOW_QUAST_ALIGNMENT_THRESHOLD
+200-499	191	49383	32601	7027	25574	14.23%	0.551%	PARTIAL_REDUNDANCY_AND_UNIQUE_LOSS
+>=500	167	4573095	4561878	4561878	0	100.00%	0.000%	RETAINED_IN_OUTPUT
+TOTAL_SHORT_FILTERED	1561	234962	32601	7027	25574	2.99%	0.551%	NON_REDUNDANT_LOSS_RECONCILED

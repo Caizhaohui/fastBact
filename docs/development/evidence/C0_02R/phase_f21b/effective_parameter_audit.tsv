@@ -1,0 +1,17 @@
+parameter	baseline_a_setting	candidate_b_setting	reconciliation_status	source_evidence
+cli_arguments	-1 <R1> -2 <R2> -o <OUT> -t 8 --dump-stages <OUT>/stages	-1 <R1> -2 <R2> -o <OUT> -t 8 --dump-stages <OUT>/stages	IDENTICAL	benchmark-results/C0_02R_f20_selective_20261022/logs/commands-3001561.log
+cpu_threads_allocated	8 (Slurm -c 8, cpu-bind=cores)	8 (Slurm -c 8, cpu-bind=cores)	IDENTICAL	logs/allocation.txt & slurm_accounting.tsv
+memory_allocated	12G	12G	IDENTICAL	logs/allocation.txt & slurm_accounting.tsv
+slurm_partition_node	qfree / vnode1	qfree / vnode1	IDENTICAL	logs/allocation.txt
+kmer_schedule_option	auto (CLI default)	auto (CLI default)	IDENTICAL	logs/A-help.txt & logs/B-help.txt
+effective_kmers_executed	[31, 63, 127]	[31, 63, 127]	IDENTICAL	logs/R1-001-A.assembly.combined.txt & logs/R1-001-B.assembly.combined.txt
+subsampling_policy	DISABLED_BY_DEFAULT_SAFE_FALLBACK (factor=1.0000)	DISABLED_BY_DEFAULT_SAFE_FALLBACK (factor=1.0000)	IDENTICAL	logs/R1-001-A.assembly.combined.txt & logs/R1-001-B.assembly.combined.txt
+ingest_read_pairs_retained	2,409,470 / 2,409,728	2,409,470 / 2,409,728	IDENTICAL	logs/R1-001-A.assembly.combined.txt & logs/R1-001-B.assembly.combined.txt
+initial_cdbg_k31_unitigs	84,093	84,093	IDENTICAL	stages/stage_03_k1_bubble_popped.fa (bit-identical)
+intermediate_k63_unitigs	16,064	16,064	IDENTICAL	stages/stage_04_multik_63_simplified.fa (bit-identical)
+intermediate_k127_unitigs	5,597	5,597	IDENTICAL	stages/stage_04_multik_127_simplified.fa (bit-identical)
+assembler_min_contig_len	500 bp (CLI default)	500 bp (CLI default)	IDENTICAL	logs/A-help.txt & logs/B-help.txt
+quast_min_contig_len	200 bp (--min-contig 200)	200 bp (--min-contig 200)	IDENTICAL	benchmark_commands.sh
+quast_evaluator_version	QUAST v5.2.0	QUAST v5.2.0	IDENTICAL	logs/quast-version.txt
+stage5_insert_size_mean	476.0 +/- 54.0 bp (39,100 links)	374.0 +/- 53.0 bp (21,286 links)	ALGORITHMIC_DIFFERENCE_EXPECTED	P2 estimator repair in mapper.rs (commit 480ff5f)
+gate_0_determination	BENCHMARK_CONFIGURATION_VERIFIED	BENCHMARK_CONFIGURATION_VERIFIED	CONFIRMED	Both versions executed with identical CLI invocations, environment, and inputs
