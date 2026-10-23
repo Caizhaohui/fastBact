@@ -1,0 +1,34 @@
+parameter	value	description
+baseline_git_sha	b9727c3ab372f7b995e439d92b72c7a4bfd051cf	C0-02 baseline frozen commit (Baseline A)
+candidate_git_sha	0606be423d187771f5925a83da2cc377c40c2a3d	F19 audited evidence HEAD (Candidate B)
+candidate_code_sha	a9930471a73612159a83694d3d661f060042efc8	F19 code commit
+candidate_tree_sha	30967bf4940844aeb6b744732bcad6d2a72daab4	Production src/ tree SHA-1 (bit-identical to F18 audited tree)
+forensics_base_sha	4b956a46935248779e17b8e3453f4bcb188f8e1f	Phase F20 evidence commit
+forensics_branch	feature/c0-02r-phase-f21-forensics	Dedicated forensics worktree branch
+baseline_binary_sha256	2b184db0f108cb508ca7e591240eddb551bea8ebad90ac5eb8ee360bac78ea38	SHA-256 of Baseline A release binary
+candidate_binary_sha256	4fbafeeeffe94abeef42efaa5710f75dbd0af8b234edd2bffba43cc4f50198f0	SHA-256 of Candidate B release binary
+cargo_lock_sha256	b4f683cbab9eabc7a484ae459641372082b486dccb26b90b14fa840bf4d40295	Cargo.lock SHA-256 (identical across A and B)
+compiler_version	rustc 1.89.0 (29483883e 2025-08-04)	Rust compiler version used for compilation
+quast_version	QUAST v5.2.0	Evaluation tool version
+quast_binary_path	/hpcfs/fhome/caizhh/.local/bin/quast.py	Full path to QUAST runner
+slurm_partition	qfree	Slurm partition
+slurm_node	vnode1	Slurm compute node
+slurm_cpu_alloc	8	Allocated CPUs per task (matches -t 8 exactly)
+slurm_mem_alloc	12G	Allocated memory
+f20_slurm_job_id	3001561	Slurm job ID for Phase F20 benchmark
+f21_slurm_job_id	3007620	Slurm job ID for Phase F21 Stage 5 QUAST evaluation
+assembly_params	assemble <R1> <R2> -o <OUT> --threads 8	Exact command line options passed to fastBact (automatic k-mer schedule [31, 63, 127], default output cutoff >= 500 bp)
+quast_params	-R <REF> <CONTIGS> -o <OUT> --threads 8 --min-contig 200 --silent	Exact command line options passed to quast.py
+slurm_accounting_3007620	slurm_accounting_3007620.tsv	Completed Slurm accounting record for Job 3007620 (COMPLETED, exit 0:0, elapsed 00:00:21)
+r1_001_id	R1-001	Dataset identifier (E. coli K-12 MG1655)
+r1_001_sra_id	SRR28349173	SRA run accession
+r1_001_fastq_r1_sha256	e25760e43d1126b9b56d4ee9de79a42cfd28b1de1dd54224bcc24319bbbe5ebf	SHA-256 of SRR28349173_1.fastq.gz
+r1_001_fastq_r2_sha256	ccf7c2627919cf2df6eb03c06c322d8dea241ad0ce9bdc34e7c6c13f4b983701	SHA-256 of SRR28349173_2.fastq.gz
+r1_001_ref_accession	NC_000913.3	Reference genome accession
+r1_001_ref_sha256	6b195feda4c66140f6762742eb8b30c2652f02b45878b174f5b00ef85ecc95d7	SHA-256 of NC_000913.3.fasta
+r1_003_id	R1-003	Dataset identifier (E. coli BW25113)
+r1_003_sra_id	SRR28349164	SRA run accession
+r1_003_fastq_r1_sha256	dd43192faf592582c30dfcf71938d6450f6525b54ca254276dbd8ea16672011b	SHA-256 of SRR28349164_1.fastq.gz
+r1_003_fastq_r2_sha256	94fd5d094315c46725840a5ce8abbff4fc4842df748930b5b8f4bff9497fc3d1	SHA-256 of SRR28349164_2.fastq.gz
+r1_003_ref_accession	CP009273.1	Reference genome accession
+r1_003_ref_sha256	37eade01311f1f81659fad53bf907a93139075a75d115fd3aec2ef09beac2e90	SHA-256 of CP009273.1.fasta

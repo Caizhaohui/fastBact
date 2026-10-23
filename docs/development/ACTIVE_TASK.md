@@ -1,87 +1,60 @@
-# ACTIVE TASK: fastBact C0-02R Phase F20 (Codex-Led Selective Real-Data A/B Benchmark)
+# ACTIVE TASK: fastBact C0-02R Phase F21-A (Targeted Forensic Investigation of Real-Data Regression)
 
-**Status**: BENCHMARK_REGRESSION_REVIEW_REQUIRED  
-**Overall Acceptance Status**: **NOT ACCEPTED** (C0-02R maintained strictly NOT ACCEPTED; benchmark regression detected on R1-001)  
-**F20 Independent Audit**: **COMPLETED (AUDIT-20261022-015, Verdict: FAIL; 7 PASS, 7 REGRESSION)**  
-**Benchmark Scope**: Selective real-data A/B benchmark (4 cells: R1-001 A, R1-001 B, R1-003 B, R1-003 A)  
-**Slurm Benchmark Job**: `3001561` on `vnode1` (`qfree`, 8 CPUs, 12 GB RAM, runtime `00:13:13`, exit `0:0`)  
+**Status**: PHASE_F21_FORENSIC_COMPLETE_PENDING_DECISION  
+**Overall Acceptance Status**: **NOT ACCEPTED** (C0-02R maintained strictly NOT ACCEPTED pending design decision on chimeric repeat filter)  
+**Independent Forensic Audit**: **COMPLETED (AUDIT-20261023-016, Verdict: AUDITED WITH CORRECTIONS; 100% measurement replication)**  
+**Forensic Mechanism Classifications**:
+- `NEW_JOIN_ERROR_CONFIRMED`: Real chimeric relocation on R1-001 `contig_16` (-2,095,535 bp across 3.66 Mb $\leftrightarrow$ 1.57 Mb).
+- `POLISHING_BOUNDARY_REGRESSION_SUPPORTED`: 84.6% of errors in 101-350 bp terminal zone; Stage 5 pre-polish had fewer errors in B than A.
+- `OUTPUT_FILTER_SEQUENCE_LOSS_SUPPORTED`: 1,561 short unitigs (235 kb) filtered out by 500 bp cutoff; Stage 5 genome fraction higher in B.
 **Production Code Status**: **100% BIT-IDENTICAL & IMMUTABLE** (Tree SHA `30967bf4940844aeb6b744732bcad6d2a72daab4`, 0 lines changed in `src/`)  
-**Baseline Version A**: `b9727c3ab372f7b995e439d92b72c7a4bfd051cf` (Binary SHA-256: `2b184db0f108cb508ca7e591240eddb551bea8ebad90ac5eb8ee360bac78ea38`)  
-**Candidate Version B**: `0606be423d187771f5925a83da2cc377c40c2a3d` (Binary SHA-256: `4fbafeeeffe94abeef42efaa5710f75dbd0af8b234edd2bffba43cc4f50198f0`)  
-**Main Branch**: `fix/c0-02r-final-gate`  
-**Feature Branch**: `feature/c0-02r-phase-f19-codex` (worktree `fastBact-phase-f19-codex-worktree`)  
-**Deliverables Directory**: [`docs/development/evidence/C0_02R/phase_f20/`](./evidence/C0_02R/phase_f20/)  
-- Benchmark Manifest: [`benchmark_manifest.tsv`](./evidence/C0_02R/phase_f20/benchmark_manifest.tsv)  
-- Dataset Checksums: [`dataset_checksums.tsv`](./evidence/C0_02R/phase_f20/dataset_checksums.tsv)  
-- Binary Checksums: [`binary_checksums.tsv`](./evidence/C0_02R/phase_f20/binary_checksums.tsv)  
-- Benchmark Script: [`benchmark_commands.sh`](./evidence/C0_02R/phase_f20/benchmark_commands.sh)  
-- Slurm Ledger: [`slurm_job_ledger.tsv`](./evidence/C0_02R/phase_f20/slurm_job_ledger.tsv)  
-- Slurm Accounting: [`slurm_accounting.tsv`](./evidence/C0_02R/phase_f20/slurm_accounting.tsv)  
-- Assembly Metrics (56 fields): [`assembly_metrics.tsv`](./evidence/C0_02R/phase_f20/assembly_metrics.tsv)  
-- Acceptance Evaluation: [`acceptance.tsv`](./evidence/C0_02R/phase_f20/acceptance.tsv)  
-- Planner Report: [`benchmark_planner_output.md`](./evidence/C0_02R/phase_f20/benchmark_planner_output.md)  
-- Assembly Comparison Report: [`assembly_comparison.md`](./evidence/C0_02R/phase_f20/assembly_comparison.md)  
-- Scientific Interpretation: [`codex_benchmark_analysis.md`](./evidence/C0_02R/phase_f20/codex_benchmark_analysis.md)  
-- Independent Audit Report: [`codex_independent_benchmark_audit.md`](./evidence/C0_02R/phase_f20/codex_independent_benchmark_audit.md) (`AUDIT-20261022-015`)  
+**Slurm Benchmark Jobs**: Job `3001561` (F20 benchmark) & Job `3007620` (F21 Stage 5 QUAST) on `vnode1` (`qfree`)  
+**Active Worktree**: `/hpcfs/fhome/caizhh/Desktop/03_Tool_Development/fastBact-phase-f21-forensics-worktree`  
+**Active Branch**: `feature/c0-02r-phase-f21-forensics`  
+**Base Evidence Commit**: `4b956a46935248779e17b8e3453f4bcb188f8e1f`  
+**Deliverables Directory**: [`docs/development/evidence/C0_02R/phase_f21/`](./evidence/C0_02R/phase_f21/)  
+- Forensic Manifest: [`forensic_manifest.tsv`](./evidence/C0_02R/phase_f21/forensic_manifest.tsv)  
+- Misassembly Event Matrix: [`misassembly_event_matrix.tsv`](./evidence/C0_02R/phase_f21/misassembly_event_matrix.tsv)  
+- Misassembly Locus Analysis: [`misassembly_locus_analysis.md`](./evidence/C0_02R/phase_f21/misassembly_locus_analysis.md)  
+- Stage 5 vs 6 Comparison Table: [`stage5_stage6_comparison.tsv`](./evidence/C0_02R/phase_f21/stage5_stage6_comparison.tsv)  
+- Base Error Loci: [`base_error_loci.tsv`](./evidence/C0_02R/phase_f21/base_error_loci.tsv)  
+- Boundary Distribution: [`boundary_error_distribution.tsv`](./evidence/C0_02R/phase_f21/boundary_error_distribution.tsv)  
+- Unitig Fate Summary: [`unitig_fate_summary.tsv`](./evidence/C0_02R/phase_f21/unitig_fate_summary.tsv)  
+- R1-003 Contrast Analysis: [`r1_003_contrast.md`](./evidence/C0_02R/phase_f21/r1_003_contrast.md)  
+- Causal Hypothesis Matrix: [`causal_hypothesis_matrix.md`](./evidence/C0_02R/phase_f21/causal_hypothesis_matrix.md)  
+- Independent Forensic Audit: [`codex_independent_forensic_audit.md`](./evidence/C0_02R/phase_f21/codex_independent_forensic_audit.md) (`AUDIT-20261023-016`)  
+- Full Forensic Report: [`phase_f21_report.md`](./evidence/C0_02R/phase_f21/phase_f21_report.md)  
 **Coordinator / Orchestrator**: Antigravity CLI  
-**External AI Resource**: Codex CLI (`gpt-6.1-sol`) for planning, data summary, interpretation, and audit  
-**Last Updated**: 2026-10-22  
+**External AI Resource**: Codex CLI (`gpt-6.1-sol`, medium reasoning effort, read-only sandbox)  
+**Last Updated**: 2026-10-23  
 
 ---
 
-## 1. Quantitative Benchmark Results Summary
+## 1. Forensic Investigation Summary
 
-### Baseline A vs Candidate B Comparison Matrix
-
-| Dataset | Metric | Baseline A (`b9727c3`) | Candidate B (`0606be4`) | $\Delta$ (B - A) | Change (%) | Gate Status |
-| :--- | :--- | :---: | :---: | :---: | :---: | :---: |
-| **R1-001** (*E. coli* K-12 MG1655) | N50 (bp) | 58,318 | 57,462 | -856 | -1.47% | **REGRESSION** |
-| | NGA50 (bp) | 58,318 | 57,127 | -1,191 | -2.04% | **REGRESSION** |
-| | Genome Fraction (%) | 98.364 | 98.281 | -0.083 pp | -0.08% | **REGRESSION** |
-| | Misassemblies | 4 | 5 | +1 | +25.0% | **REGRESSION** |
-| | Local Misassemblies | 0 | 0 | 0 | 0.0% | **PASS** |
-| | Mismatches/100kbp | 2.14 | 2.38 | +0.24 | +11.2% | **REGRESSION** |
-| | Indels/100kbp | 0.48 | 1.03 | +0.55 | +114.6% | **REGRESSION** |
-| | Valid k / k-1 Joins | 987 / 18 | 947 / 10 | -40 / -8 | - | - |
-| | Active Unitigs Residual | 315 | 1,728 | +1,413 | 5.49× | - |
-| **R1-003** (*E. coli* BW25113) | N50 (bp) | 67,452 | 70,868 | +3,416 | +5.06% | **PASS** |
-| | NGA50 (bp) | 63,648 | 70,010 | +6,362 | +10.00% | **PASS** |
-| | Genome Fraction (%) | 98.330 | 98.233 | -0.097 pp | -0.10% | **REGRESSION** |
-| | Misassemblies | 2 | 1 | -1 | -50.0% | **PASS (IMPROVED)** |
-| | Local Misassemblies | 1 | 1 | 0 | 0.0% | **PASS** |
-| | Mismatches/100kbp | 1.51 | 1.08 | -0.43 | -28.5% | **PASS (IMPROVED)** |
-| | Indels/100kbp | 0.04 | 0.00 | -0.04 | -100.0% | **PASS (IMPROVED)** |
-| | Valid k / k-1 Joins | 564 / 7 | 497 / 2 | -67 / -5 | - | - |
-| | Active Unitigs Residual | 300 | 704 | +404 | 2.35× | - |
+### 1.1 Core Findings
+1. **R1-001 Extensive Misassembly ($4 \to 5$)**:
+   - Confirmed as an authentic chimeric relocation on `contig_16` (71,975 bp).
+   - Joins reference 3,666,175 bp to 1,570,641 bp (-2,095,535 bp inconsistency).
+   - Bridges 7 short intermediate nodes (`u1926`, `u3275`, `u1475`, `u1476`, `u4349`, `u4465`, `u3919`, total 2,092 bp).
+   - Exists bit-identically in Stage 5 `unitig_1631` (pre-polishing).
+2. **Base-Level Mismatch and Indel Elevation**:
+   - In Stage 5 (pre-polishing), Candidate B had **fewer mismatches (24 vs 29)** and **identical indels (4 vs 4)** compared to Baseline A.
+   - **84.6% of errors (132/156)** are concentrated in the 101–350 bp terminal boundary zone.
+   - In deep internal sequence ($> 350\text{ bp}$), Candidate B has fewer errors than Baseline A (20 vs 22).
+3. **Genome Fraction Drop**:
+   - 1,561 short unitigs (totalling 235 kb) in Candidate B fell below the 500 bp default contig output cutoff.
+   - At Stage 5 (where all contigs are evaluated), Candidate B had higher genome fraction (+0.38 pp on R1-001, +0.41 pp on R1-003).
+4. **R1-003 vs R1-001 Divergence**:
+   - Both isolates share the 1.56 Mb $\leftrightarrow$ 3.66 Mb repeat family.
+   - R1-003 improved because Candidate B eliminated a second false join (+590 kb relocation on `contig_4`), while R1-001 regressed because Baseline A had avoided the 2.1 Mb repeat whereas Candidate B bridged it.
 
 ---
 
-## 2. Key Scientific Findings & Interpretation
-
-1. **R1-003 Marked Improvement**:
-   - Extensive misassemblies cut in half (2 $\to$ 1, -50%).
-   - Mismatch rate decreased by 28.5% (1.51 $\to$ 1.08 per 100 kbp).
-   - Indel rate dropped to 0.00 per 100 kbp (100% elimination).
-   - Contiguity significantly improved: N50 +5.06%, NGA50 +10.00%.
-   - Confirms that the unified search admissibility contract ($\beta(\text{curr})$ lower bound and Complete/Truncated semantics) suppresses false-positive chimeric repeat bridging on this genome.
-2. **R1-001 Quality Regression**:
-   - One extra extensive misassembly introduced (4 $\to$ 5, +25%).
-   - Indels increased from 0.48 to 1.03 per 100 kbp (+114.6%).
-   - Mismatches rose slightly from 2.14 to 2.38 per 100 kbp (+11.2%).
-   - Active unitigs retained post-exspander increased 5.49× (315 $\to$ 1,728).
-   - Hypothesis: Conservative withholding on ambiguous repeat structures prevented false joins, leaving fragmented unitigs that fell below the 500 bp output cutoff. The shift in contig terminal boundaries altered read recruitment during consensus polishing, shifting base-level calls against the reference genome.
-3. **Independent Audit Verdict (`AUDIT-20261022-015`)**:
-   - Verdict: **FAIL (REGRESSION DETECTED)**.
-   - Status: `BENCHMARK_REGRESSION_REVIEW_REQUIRED`.
-   - C0-02R strictly maintained **NOT ACCEPTED**.
-   - Prohibits expanding to the 18-dataset suite until the extra misassembly on R1-001 is forensically characterized.
-
----
-
-## 3. Prior Phase Milestone Registry
+## 2. Prior Phase Milestone Registry
 
 | Phase | Scope | Baseline / Target | Status | Key Milestone / Commit |
 | :--- | :--- | :--- | :---: | :--- |
-| **Phase F18** | Independent Codex Audit of F17-I Unified Search Admissibility | `c37ef6e` | **CONDITIONAL PASS** | Audit `AUDIT-20261022-013`: 0 P0, 0 P1, 5 P2 test findings. Commit `39f11ca`. |
-| **Phase F19** | Codex-Led P2 Verification Repair | `39f11ca` | **AUDITED (4/5 CLOSED, 1 P2 OPEN)** | Repaired oracle and sensitivity tests (`a993047`). Audit `AUDIT-20261022-014`. Commit `0606be4`. 183 tests pass on `vnode1`. |
+| **Phase F19** | Codex-Led P2 Verification Repair | `39f11ca` | **AUDITED (4/5 CLOSED, 1 P2 OPEN)** | Repaired oracle and sensitivity tests. Audit `AUDIT-20261022-014`. Commit `0606be4`. 183 tests pass on `vnode1`. |
 | **Phase F20** | Codex-Led Selective Real-Data A/B Benchmark (R1-001, R1-003) | `0606be4` vs `b9727c3` | **COMPLETED (REGRESSION DETECTED)** | Slurm job `3001561` on `vnode1`. R1-003 improved; R1-001 regressed (+1 misassembly, indels 0.48 $\to$ 1.03). Audit `AUDIT-20261022-015`. C0-02R NOT ACCEPTED. |
+| **Phase F21-A** | Targeted Forensic Investigation of Real-Data Regression | `4b956a4` | **FORENSIC COMPLETED** | Proved R1-001 extra misassembly is real chimeric join (`contig_16`). Proved base errors are 84.6% boundary polishing artifacts. Audit `AUDIT-20261023-016`. C0-02R NOT ACCEPTED. |

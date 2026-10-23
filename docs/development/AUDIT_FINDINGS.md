@@ -155,3 +155,30 @@ Every cross-model execution MUST record the following fields:
   - Stop automated benchmark expansion. Do not expand to full 18 datasets.
   - Maintain C0-02R strictly as **NOT ACCEPTED**.
   - Conduct focused forensic investigation into R1-001's additional misassembly breakpoint and indel loci before modifying any code.
+
+---
+
+### [AUDIT-20261023-016] Codex Independent Forensic Audit of Real-Data Regression
+
+- **Task ID**: `C0-02R Phase F21-A`
+- **Agent**: Codex CLI (v0.163.0)
+- **Model**: `gpt-6.1-sol`
+- **Reasoning Effort**: `medium` (`-c model_reasoning_effort="medium"`)
+- **Permission Level**: `READ_ONLY` (`-s read-only`)
+- **Target Branch**: `feature/c0-02r-phase-f21-forensics`
+- **Worktree**: `/hpcfs/fhome/caizhh/Desktop/03_Tool_Development/fastBact-phase-f21-forensics-worktree`
+- **Audited Commit Baseline**: `4b956a46935248779e17b8e3453f4bcb188f8e1f` (Phase F20 evidence HEAD)
+- **Production Tree SHA**: `30967bf4940844aeb6b744732bcad6d2a72daab4` (**0 lines changed in `src/`**)
+- **Output Report Path**: [`docs/development/evidence/C0_02R/phase_f21/codex_independent_forensic_audit.md`](./evidence/C0_02R/phase_f21/codex_independent_forensic_audit.md)
+- **Overall Forensic Verdict**: **QUALIFIED PASS / AUDITED WITH CORRECTIONS** (All factual, structural, and numerical measurements verified; locus-specific decision-level causal attributions qualified as supported hypotheses)
+- **C0-02R Acceptance**: **Strictly NOT ACCEPTED**
+- **Key Forensic Findings Independently Replicated**:
+  1. *Structural Misassembly Ground Truth*: Candidate B's additional extensive misassembly on R1-001 (`contig_16`, length 71,975 bp, relocation of -2,095,535 bp between 3.66 Mb and 1.57 Mb) is an **authentic chimeric join** formed during Stage 5 (`unitig_1631` bit-identical to `contig_16`). It connects `unitig_1927` to `unitig_169` through 7 short intermediate nodes (`u1926`, `u3275`, `u1475`, `u1476`, `u4349`, `u4465`, `u3919`, total 2,092 bp). Tag: `NEW_JOIN_ERROR_CONFIRMED`.
+  2. *Base Error Pre/Post-Polish Attribution*: At Stage 5 (pre-polishing), Candidate B has **fewer mismatches (24 vs 29)** and **identical indels (4 vs 4, len 176 bp)** compared to Baseline A. The entire excess of mismatches and indels emerged during the Stage 5 to Stage 6 transition.
+  3. *Boundary Concentration*: **84.6% of Candidate B's errors (132/156)** are located in the $101–350\text{ bp}$ terminal boundary zone. Deep inside contigs ($> 350\text{ bp}$), Candidate B has fewer errors than Baseline A (20 vs 22). Tag: `POLISHING_BOUNDARY_REGRESSION_SUPPORTED`.
+  4. *Unitig Fate & Genome Fraction*: 1,561 short unitigs (totalling 235 kb, 90.3% of all unitigs in the graph) fell below the 500 bp contig output cutoff. At Stage 5, Candidate B's genome fraction was actually higher (+0.38 pp on R1-001, +0.41 pp on R1-003). Tag: `OUTPUT_FILTER_SEQUENCE_LOSS_SUPPORTED`.
+  5. *R1-003 vs R1-001 Divergence*: Both isolates share the 1.56 Mb $\leftrightarrow$ 3.66 Mb repeat family. R1-003 improved because Candidate B eliminated a second false join (+590 kb relocation on `contig_4`), while R1-001 regressed because Baseline A had avoided the 2.1 Mb repeat whereas Candidate B bridged it.
+- **Production Code Status**: **100% BIT-IDENTICAL & IMMUTABLE** (0 lines changed in `src/`).
+- **Next Action**:
+  - Maintain C0-02R strictly as **NOT ACCEPTED**.
+  - Await user review of the forensic report before designing any repeat-family uniqueness filters or polishing boundary safeguards.

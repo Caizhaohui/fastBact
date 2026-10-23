@@ -1,0 +1,13 @@
+Dataset	AssemblyVersion	DistanceBin	RawMismatches	RawIndels	TotalErrorsInBin	BinPercentageOfTotal	PreExistingErrors	PolishIntroducedErrors
+R1-001	A	0-100	10	1	11	9.17%	4	7
+R1-001	A	101-350	70	17	87	72.50%	5	82
+R1-001	A	>350	18	4	22	18.33%	14	8
+R1-001	B	0-100	3	1	4	2.56%	3	1
+R1-001	B	101-350	88	44	132	84.62%	2	130
+R1-001	B	>350	18	2	20	12.82%	14	6
+R1-003	A	0-100	1	0	1	1.41%	0	1
+R1-003	A	101-350	16	0	16	22.54%	9	7
+R1-003	A	>350	52	2	54	76.06%	22	32
+R1-003	B	0-100	0	0	0	0.00%	0	0
+R1-003	B	101-350	24	0	24	48.98%	7	17
+R1-003	B	>350	25	0	25	51.02%	12	13

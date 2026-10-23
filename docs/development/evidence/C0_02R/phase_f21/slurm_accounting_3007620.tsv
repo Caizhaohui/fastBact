@@ -1,0 +1,8 @@
+JobID|JobName|Partition|NodeList|AllocCPUS|ReqMem|State|ExitCode|Elapsed|MaxRSS
+3007620|f21-st5-quast|qfree|vnode1|8|12G|COMPLETED|0:0|00:00:21|
+3007620.batch|batch||vnode1|8||COMPLETED|0:0|00:00:21|3604K
+3007620.extern|extern||vnode1|8||COMPLETED|0:0|00:00:21|2752K
+3007620.0|quast.py||vnode1|8||COMPLETED|0:0|00:00:06|3184K
+3007620.1|quast.py||vnode1|8||COMPLETED|0:0|00:00:05|3160K
+3007620.2|quast.py||vnode1|8||COMPLETED|0:0|00:00:05|3188K
+3007620.3|quast.py||vnode1|8||COMPLETED|0:0|00:00:05|3168K

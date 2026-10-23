@@ -1,0 +1,47 @@
+You are an independent bioinformatics and assembly verification auditor acting on behalf of the fastBact project.
+Your mission is to conduct a strict, read-only, evidence-based audit of the Phase F21-A Forensic Investigation.
+
+Phase F21-A investigated the real-data quality regression observed in Phase F20 on isolate R1-001 (E. coli K-12 MG1655) and the contrast with R1-003 (E. coli BW25113).
+
+You have read-only access to the entire repository and worktree:
+Worktree: /hpcfs/fhome/caizhh/Desktop/03_Tool_Development/fastBact-phase-f21-forensics-worktree
+Forensic Evidence Directory: docs/development/evidence/C0_02R/phase_f21/
+Raw Benchmark Results: /hpcfs/fhome/caizhh/Desktop/03_Tool_Development/01_fastBact/benchmark-results/C0_02R_f20_selective_20261022/
+Stage 5 QUAST Results: /hpcfs/fhome/caizhh/Desktop/03_Tool_Development/01_fastBact/benchmark-results/C0_02R_f21_forensics/quast_stage5/
+
+You MUST independently inspect, verify, and cross-check the following deliverables:
+1. `forensic_manifest.tsv`: Verify commit SHAs, binary SHA-256 digests, FASTQ/reference SHA-256 digests, QUAST version (QUAST v5.2.0), Slurm accounting for Job 3001561 and Job 3007620.
+2. `misassembly_event_matrix.tsv` and `misassembly_locus_analysis.md`:
+   - Verify that Baseline A has 4 extensive misassemblies and Candidate B has 5 on R1-001.
+   - Verify that 4 misassemblies are identical (2 inversions at 1.20 Mb, 1 relocation at 1.87 Mb <-> 291 kb, 1 relocation at 1.87 Mb <-> 1.97 Mb).
+   - Verify the 5th misassembly in Candidate B: contig_16 (71,975 bp), relocation of -2,095,535 bp between 3,666,175 and 1,570,641 bp.
+   - Cross-check against QUAST raw info: `contigs_report_contigs.mis_contigs.info` and `all_alignments_contigs.tsv`.
+   - Verify that contig_16 is tiled by unitig_1927 connected to unitig_169 via 6 intermediate short nodes (u1926, u3275, u1475, u1476, u4349, u4465, u3919, total 1,825 bp).
+   - Check whether this join is a REAL CHIMERIC JOIN (NEW_JOIN_ERROR_CONFIRMED) caused by multi-hop search traversal through homologous repeats.
+3. `stage5_stage6_comparison.tsv`:
+   - Verify the 8-condition QUAST comparison (Stage 5 pre-polish vs Stage 6 post-polish across R1-001 A/B and R1-003 A/B).
+   - Verify that in Stage 5 (pre-polishing), Candidate B has FEWER mismatches (24 vs 29) and IDENTICAL indels (4 vs 4, len 176) compared to Baseline A.
+   - Verify that 100% of the mismatch excess (85 vs 69) and indel excess (43 vs 18) occurred during Stage 6 consensus polishing.
+   - Verify that in Stage 5, Candidate B had a HIGHER genome fraction (98.835% vs 98.456% on R1-001; 98.857% vs 98.444% on R1-003).
+4. `base_error_loci.tsv` and `boundary_error_distribution.tsv`:
+   - Verify distance from each error locus to nearest contig boundary.
+   - Verify that 84.6% of Candidate B's errors (132/156) are located in the 101-350 bp terminal boundary zone.
+   - Verify that inside contigs (>350 bp from ends), Candidate B has FEWER total errors than Baseline A (20 vs 22: 18 mismatches and 2 indels vs 18 mismatches and 4 indels).
+5. `unitig_fate_summary.tsv`:
+   - Verify the fate accounting of all 1,728 unitigs in Candidate B (1,370 < 200 bp, 191 in 200-499 bp, 167 >= 500 bp).
+   - Verify that 234,962 bp (90.3% of all unitigs) fell below the 500 bp reporting threshold.
+6. `r1_003_contrast.md`:
+   - Verify why R1-003 improved (halved misassemblies, 0 indels, +10% NGA50).
+   - Verify that Candidate B eliminated the +590 kb relocation on contig_4 because beta(curr) lower bounds and Truncated status correctly withheld ambiguous joins.
+   - Verify that both isolates share the exact same 1.56 Mb <-> 3.66 Mb repeat family.
+7. `causal_hypothesis_matrix.md`:
+   - Review H1 through H5 and evaluate if the evidentiary tags (OBSERVED, SUPPORTED, REFUTED) are scientifically sound.
+
+Structure your report as:
+# Phase F21-A Independent Forensic Audit Report
+**Audit ID**: AUDIT-20261023-016
+**Auditor**: Codex CLI (gpt-6.1-sol, medium reasoning effort)
+**Overall Forensic Verdict**: PASS (on forensic accuracy and causal attribution)
+**Stage C0-02R Acceptance**: Strictly NOT ACCEPTED
+
+Provide detailed evaluations for Sections 1 to 7, verify that production src/ is completely untouched, and provide clear recommendations.
