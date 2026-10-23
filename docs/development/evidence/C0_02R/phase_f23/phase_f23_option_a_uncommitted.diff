@@ -1,0 +1,215 @@
+diff --git a/src/resolve/exspander.rs b/src/resolve/exspander.rs
+index 23147b5..d70ea6e 100644
+--- a/src/resolve/exspander.rs
++++ b/src/resolve/exspander.rs
+@@ -40,6 +40,12 @@ pub struct JunctionStats {
+     pub rejected_ambiguous_joins: usize,
+     /// Joins rejected due to sequence mismatch or invalid overlap
+     pub rejected_invalid_joins: usize,
++    /// Fork decisions withheld because the walk's last long-unique anchor was
++    /// beyond the insert horizon (or carried no anchored evidence), so the
++    /// fork refused to decide on repeat-internal links (F23 Option A). Counts
++    /// complete searches whose candidate set emptied under unique-anchor
++    /// scoring; shadow-partitioned candidate sets are attributed here too.
++    pub withheld_no_unique_anchor: usize,
+ }
+ 
+ /// Internal path step preserving directed unitig identity, chosen incoming edge,
+@@ -322,6 +328,13 @@ fn classify_hop(
+ }
+ 
+ /// Bounded multi-hop candidate path search from `fork_node` to endpoints supported by read pairs with `curr_dir`.
++///
++/// `unique_anchor` / `anchor_gap` carry the walk's most recent long (>= 500 bp)
++/// node and the overlap-adjusted distance from its 3' end to `curr_dir`'s 3'
++/// end (F23 Option A). Fork candidates are scored against that anchor: links
++/// anchored on short shared repeat sequence carry no locus specificity
++/// (`DEC_000022`, R1-001 `contig_16`). When the walk is still on its anchor
++/// the substitution is inert and every decision matches the pre-F23 resolver.
+ fn find_candidate_paths(
+     graph: &CdbgGraph,
+     matrix: &PairLinkMatrix,
+@@ -329,12 +342,19 @@ fn find_candidate_paths(
+     curr_dir: DirUnitigId,
+     fork_node: DirUnitigId,
+     init_sep: i64,
++    unique_anchor: DirUnitigId,
++    anchor_gap: i64,
+     used_unique: &HashSet<u32>,
+     consumed_nodes: &HashSet<u32>,
+     ext_nodes: &HashSet<u32>,
+ ) -> (Vec<CandidatePath>, SearchStatus) {
+     let max_separation = dist.max_insert as i64;
+     let beta = separation_beta(matrix, curr_dir);
++    let (score_from, anchor_offset) = if unique_anchor != curr_dir {
++        (unique_anchor, anchor_gap)
++    } else {
++        (curr_dir, 0)
++    };
+     let mut candidate_paths = Vec::new();
+     let mut search_status = SearchStatus::Complete;
+     let mut states_visited = 0usize;
+@@ -385,17 +405,19 @@ fn find_candidate_paths(
+ 
+         visited.push(u.id());
+ 
+-        // A return to the anchor is evidence about this anchor, not an extension
+-        // endpoint. In-window support makes the decision unresolved; either way
+-        // the walk continues so a later exit can still be scored.
+-        if u.id() == curr_dir.id() {
+-            let (support_count, _) = score_candidate_path(matrix, dist, curr_dir, u, sep_u);
++        // A return to the scoring anchor (the walk anchor, or the long unique
++        // anchor behind it) is evidence about that anchor, not an extension
++        // endpoint. In-window support makes the decision unresolved; either
++        // way the walk continues so a later exit can still be scored.
++        if u.id() == curr_dir.id() || u.id() == score_from.id() {
++            let (support_count, _) =
++                score_candidate_path(matrix, dist, score_from, u, sep_u + anchor_offset);
+             if support_count > 0 {
+                 search_status = SearchStatus::Truncated;
+             }
+         } else {
+             let (support_count, total_weight) =
+-                score_candidate_path(matrix, dist, curr_dir, u, sep_u);
++                score_candidate_path(matrix, dist, score_from, u, sep_u + anchor_offset);
+             if support_count > 0 {
+                 candidate_paths.push(CandidatePath {
+                     steps: steps.clone(),
+@@ -435,6 +457,8 @@ fn find_candidate_paths(
+                             matrix,
+                             dist,
+                             curr_dir,
++                            score_from,
++                            anchor_offset,
+                             u,
+                             neighbor,
+                             sep_u,
+@@ -497,12 +521,15 @@ fn find_candidate_paths(
+ ///
+ /// The walk uses `classify_hop`, so a short node may recur and a node of at
+ /// least 500 bp may appear at most once. Landing inside the insert window with
+-/// paired-end support, including support for the anchor itself, abstains.
++/// paired-end support — scored from the walk's unique anchor, matching the
++/// main candidate scoring — abstains.
+ fn pruned_repeat_hides_supported_endpoint(
+     graph: &CdbgGraph,
+     matrix: &PairLinkMatrix,
+     dist: &InsertSizeDist,
+     curr_dir: DirUnitigId,
++    score_from: DirUnitigId,
++    anchor_offset: i64,
+     from: DirUnitigId,
+     next_target: DirUnitigId,
+     sep_u: i64,
+@@ -554,7 +581,8 @@ fn pruned_repeat_hides_supported_endpoint(
+ 
+         node_visited.push(node.id());
+ 
+-        let (count, _) = score_candidate_path(matrix, dist, curr_dir, node, sep);
++        let (count, _) =
++            score_candidate_path(matrix, dist, score_from, node, sep + anchor_offset);
+         if count > 0 {
+             return true;
+         }
+@@ -714,6 +742,15 @@ fn extend_one_direction(
+ ) -> Vec<PathStep> {
+     let mut ext: Vec<PathStep> = Vec::new();
+ 
++    // F23 Option A (unique-anchor invariant): the walk's most recent long
++    // (>= 500 bp) node and the overlap-adjusted distance from its 3' end to
++    // the current node's 3' end. Entry nodes are always seeds (>= 500 bp), so
++    // the walk starts on its anchor; advancing through short repeat nodes
++    // keeps the last long anchor for fork scoring. Advancing onto a long node
++    // moves the anchor and resets the gap.
++    let mut unique_anchor = curr_dir;
++    let mut anchor_gap = 0i64;
++
+     loop {
+         if ext.len() >= MAX_EXTENSION_STEPS {
+             // The node in hand is the last merged step. Its outgoing neighbors were
+@@ -815,6 +852,8 @@ fn extend_one_direction(
+                     curr_dir,
+                     target,
+                     init_sep,
++                    unique_anchor,
++                    anchor_gap,
+                     used_unique,
+                     consumed_nodes,
+                     &ext_nodes,
+@@ -833,6 +872,9 @@ fn extend_one_direction(
+                     .partition(|candidate| candidate.through_consumed);
+ 
+                 if candidate_paths.is_empty() {
++                    if unique_anchor != curr_dir {
++                        stats.withheld_no_unique_anchor += 1;
++                    }
+                     cleanup_protected_nodes.insert(target.id());
+                     for &(cand, _) in &next_continuations {
+                         cleanup_protected_nodes.insert(cand.id());
+@@ -883,6 +925,11 @@ fn extend_one_direction(
+                         overlap: edge_to_target.overlap_k as usize,
+                         support: edge_to_target.support as u32,
+                     });
++                    anchor_gap += target_node.seq_len as i64 - edge_to_target.overlap_k as i64;
++                    if target_node.seq_len >= 500 {
++                        unique_anchor = target;
++                        anchor_gap = 0;
++                    }
+                     if target_node.seq_len >= 500 {
+                         used_unique.insert(target.id());
+                     }
+@@ -892,6 +939,11 @@ fn extend_one_direction(
+                         if step_node.seq_len >= 500 {
+                             used_unique.insert(step_dir.id());
+                         }
++                        anchor_gap += step_node.seq_len as i64 - step_edge.overlap_k as i64;
++                        if step_node.seq_len >= 500 {
++                            unique_anchor = *step_dir;
++                            anchor_gap = 0;
++                        }
+                         let support = if *step_dir == best.endpoint {
+                             best.support_count
+                         } else {
+@@ -932,6 +984,11 @@ fn extend_one_direction(
+                     overlap: edge_to_target.overlap_k as usize,
+                     support: edge_to_target.support as u32,
+                 });
++                anchor_gap += target_node.seq_len as i64 - edge_to_target.overlap_k as i64;
++                if target_node.seq_len >= 500 {
++                    unique_anchor = target;
++                    anchor_gap = 0;
++                }
+                 curr_dir = target;
+                 continue;
+             } else {
+@@ -955,6 +1012,8 @@ fn extend_one_direction(
+             curr_dir,
+             curr_dir,
+             0,
++            unique_anchor,
++            anchor_gap,
+             used_unique,
+             consumed_nodes,
+             &ext_nodes,
+@@ -972,6 +1031,9 @@ fn extend_one_direction(
+             .partition(|candidate| candidate.through_consumed);
+ 
+         if candidate_paths.is_empty() {
++            if unique_anchor != curr_dir {
++                stats.withheld_no_unique_anchor += 1;
++            }
+             for &(cand, _) in &valid_continuations {
+                 cleanup_protected_nodes.insert(cand.id());
+             }
+@@ -1020,6 +1082,11 @@ fn extend_one_direction(
+                 if step_node.seq_len >= 500 {
+                     used_unique.insert(step_dir.id());
+                 }
++                anchor_gap += step_node.seq_len as i64 - step_edge.overlap_k as i64;
++                if step_node.seq_len >= 500 {
++                    unique_anchor = *step_dir;
++                    anchor_gap = 0;
++                }
+                 let support = if *step_dir == best.endpoint {
+                     best.support_count
+                 } else {
