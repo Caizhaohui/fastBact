@@ -40,6 +40,11 @@ pub struct JunctionStats {
     pub rejected_ambiguous_joins: usize,
     /// Joins rejected due to sequence mismatch or invalid overlap
     pub rejected_invalid_joins: usize,
+    /// Fork decisions withheld by the F23 horizon guard: the walk's last
+    /// long-unique anchor was beyond the insert horizon at a branching repeat,
+    /// so the fork refused to decide on repeat-internal (locus-ambiguous)
+    /// links. Counts horizon rejections only.
+    pub withheld_no_unique_anchor: usize,
 }
 
 /// Internal path step preserving directed unitig identity, chosen incoming edge,
@@ -714,6 +719,18 @@ fn extend_one_direction(
 ) -> Vec<PathStep> {
     let mut ext: Vec<PathStep> = Vec::new();
 
+    // F23 horizon guard (narrowed Option A): track the walk's most recent long
+    // (>= 500 bp) node and the overlap-adjusted distance from its 3' end. When
+    // the walk stands beyond that anchor's insert horizon at a branching
+    // repeat, anchored evidence is arithmetically impossible and the only
+    // remaining links are repeat-internal ones with no locus specificity
+    // (runtime decision DEC_000022, R1-001 contig_16 chimeric join): the fork
+    // is withheld instead of decided. Within the horizon, forks keep the
+    // pre-F23 curr_dir-anchored semantics unchanged (accepted T26/T27/T30/T34
+    // contracts). Entry nodes are always seeds (>= 500 bp).
+    let mut unique_anchor = curr_dir;
+    let mut anchor_gap = 0i64;
+
     loop {
         if ext.len() >= MAX_EXTENSION_STEPS {
             // The node in hand is the last merged step. Its outgoing neighbors were
@@ -805,7 +822,21 @@ fn extend_one_direction(
             }
 
             if next_continuations.len() > 1 {
-                // Target is a branching repeat node! Evaluate complete candidate paths exiting the repeat
+                // Target is a branching repeat node! Evaluate complete candidate paths exiting the repeat.
+                // F23 horizon guard: a fork beyond the last unique anchor's insert
+                // horizon cannot be decided by locus-specific evidence — withhold
+                // (overlap-adjusted anchor-to-fork distance, Codex-reviewed formulas).
+                let fork_dist = anchor_gap
+                    + target_node.seq_len as i64
+                    - edge_to_target.overlap_k as i64;
+                if unique_anchor != curr_dir && fork_dist > dist.max_insert as i64 {
+                    stats.withheld_no_unique_anchor += 1;
+                    cleanup_protected_nodes.insert(target.id());
+                    for &(cand, _) in &next_continuations {
+                        cleanup_protected_nodes.insert(cand.id());
+                    }
+                    break;
+                }
                 let ext_nodes: HashSet<u32> = ext.iter().map(|s: &PathStep| s.dir.id()).collect();
                 let init_sep = target_node.seq_len as i64 - edge_to_target.overlap_k as i64;
                 let (candidate_paths, search_status) = find_candidate_paths(
@@ -883,6 +914,11 @@ fn extend_one_direction(
                         overlap: edge_to_target.overlap_k as usize,
                         support: edge_to_target.support as u32,
                     });
+                    anchor_gap += target_node.seq_len as i64 - edge_to_target.overlap_k as i64;
+                    if target_node.seq_len >= 500 {
+                        unique_anchor = target;
+                        anchor_gap = 0;
+                    }
                     if target_node.seq_len >= 500 {
                         used_unique.insert(target.id());
                     }
@@ -891,6 +927,11 @@ fn extend_one_direction(
                         let step_node = &graph.nodes[step_dir.id() as usize];
                         if step_node.seq_len >= 500 {
                             used_unique.insert(step_dir.id());
+                        }
+                        anchor_gap += step_node.seq_len as i64 - step_edge.overlap_k as i64;
+                        if step_node.seq_len >= 500 {
+                            unique_anchor = *step_dir;
+                            anchor_gap = 0;
                         }
                         let support = if *step_dir == best.endpoint {
                             best.support_count
@@ -932,6 +973,11 @@ fn extend_one_direction(
                     overlap: edge_to_target.overlap_k as usize,
                     support: edge_to_target.support as u32,
                 });
+                anchor_gap += target_node.seq_len as i64 - edge_to_target.overlap_k as i64;
+                if target_node.seq_len >= 500 {
+                    unique_anchor = target;
+                    anchor_gap = 0;
+                }
                 curr_dir = target;
                 continue;
             } else {
@@ -946,7 +992,15 @@ fn extend_one_direction(
             }
         }
 
-        // Case B: multiple outgoing edges directly from curr_dir
+        // Case B: multiple outgoing edges directly from curr_dir.
+        // F23 horizon guard (Case B formula: the walk stands on the fork).
+        if unique_anchor != curr_dir && anchor_gap > dist.max_insert as i64 {
+            stats.withheld_no_unique_anchor += 1;
+            for &(cand, _) in &valid_continuations {
+                cleanup_protected_nodes.insert(cand.id());
+            }
+            break;
+        }
         let ext_nodes: HashSet<u32> = ext.iter().map(|s: &PathStep| s.dir.id()).collect();
         let (candidate_paths, search_status) = find_candidate_paths(
             graph,
@@ -1019,6 +1073,11 @@ fn extend_one_direction(
                 let step_node = &graph.nodes[step_dir.id() as usize];
                 if step_node.seq_len >= 500 {
                     used_unique.insert(step_dir.id());
+                }
+                anchor_gap += step_node.seq_len as i64 - step_edge.overlap_k as i64;
+                if step_node.seq_len >= 500 {
+                    unique_anchor = *step_dir;
+                    anchor_gap = 0;
                 }
                 let support = if *step_dir == best.endpoint {
                     best.support_count
