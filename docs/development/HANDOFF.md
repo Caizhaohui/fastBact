@@ -1,36 +1,40 @@
 # fastBact Development Handoff
 
-**Project**: `fastBact`  
-**Current Active Branch**: `fix/c0-02r-final-gate`  
-**Base Commit**: `b9727c3ab372f7b995e439d92b72c7a4bfd051cf` (C0-02 baseline)  
-**Main/Upstream**: `dac6a57` (`origin/main`, `origin/master`)  
-**Primary Coordinator & Implementer**: Antigravity CLI  
-**Active Task Board**: [`ACTIVE_TASK.md`](./ACTIVE_TASK.md) (mirrored at [`repo root`](../../ACTIVE_TASK.md))  
-**Specific Phase Ledger**: [`C0_02R_HANDOFF.md`](./C0_02R_HANDOFF.md)  
-**Audit Findings Registry**: [`AUDIT_FINDINGS.md`](./AUDIT_FINDINGS.md)  
+**Project**: `fastBact`
+**Main Worktree Branch**: `fix/c0-02r-final-gate`
+**F23 Audit Worktree**: `/hpcfs/fhome/caizhh/Desktop/03_Tool_Development/fastBact-phase-f23-unique-anchor-worktree`, branch `feature/c0-02r-phase-f23-unique-anchor`, source code baseline `7bdc6f962f93d54cda192d47fb410e046fd5a627`.
+**Base Commit**: `b9727c3ab372f7b995e439d92b72c7a4bfd051cf` (C0-02 baseline)
+**Main/Upstream**: `dac6a57` (`origin/main`, `origin/master`)
+**Primary Controller**: Codex GPT-6 Luna Low. Antigravity Gemini 3.8 Flash takes over controller duties only when Codex quota is exhausted. If both are unavailable, save HANDOFF and pause; Cursor remains a worker.
+**Formal GLM Route**: OpenCode CLI through the existing Zhipu AI Coding Plan only. Routine work uses `zhipuai-coding-plan/glm-5.3-flash`; complex diagnosis and independent review use `zhipuai-coding-plan/glm-5.3`. The installed model list confirms these IDs. Reasoning variants, including `#max`, are unverified and must not be claimed. Do not fall back to another provider without authorization.
+**Development Workers**: Antigravity Gemini 3.8 Flash for tests, Slurm, benchmark, bioinformatics, and auxiliary development; Cursor Pro Auto/Grok for suitable work when GLM/Gemini is limited or unsuitable. Cursor never controls or preempts a running task. Claude Sonnet/Opus and Codex GPT-6.1 Sol keep their authorized specialist roles. DeepSeek API requires explicit authorization.
+**Active Task Board**: [`ACTIVE_TASK.md`](./ACTIVE_TASK.md) (mirrored at [`repo root`](../../ACTIVE_TASK.md))
+**Specific Phase Ledger**: [`C0_02R_HANDOFF.md`](./C0_02R_HANDOFF.md)
+**Audit Findings Registry**: [`AUDIT_FINDINGS.md`](./AUDIT_FINDINGS.md)
 
 ---
 
 ## 1. Operating Rules & Engineering Principles
 
-1. **Self-Contained Primary Development**:
-   - Everyday code implementation, bug fixing, test development, benchmark runs, documentation, and maintenance are handled directly by Antigravity CLI to conserve external quota.
-   - External CLI dispatch is never invoked for ceremonial multi-agent interaction.
-2. **Strict External CLI Dispatch & Escalation**:
-   - **Codex CLI (`~/.local/bin/codex`)**: Reserved for complex Rust language correctness and memory/graph mutation invariant audits.
-   - **Claude Code (`~/.local/share/omniakey/bin/claude`)**: Reserved for bioinformatics algorithms and biological/scientific correctness reviews.
-   - **Cursor Agent (`~/.local/bin/agent`)**: Optional engineering assistance (available economic models only).
-   - **Escalation Path**:
-     $$\text{Antigravity Implementation} \longrightarrow \text{Codex Medium Review} \longrightarrow \text{Antigravity Fix} \longrightarrow \text{Claude Sonnet High Review (if needed)} \longrightarrow \text{Claude Opus High (critical unresolved disputes only)}$$
+1. **Controller and Worker Assignment**:
+   - Codex GPT-6 Luna Low is the default controller. Antigravity Gemini 3.8 Flash takes over controller duties when Codex quota is exhausted. If both are unavailable, preserve HANDOFF and pause; Cursor is never controller.
+   - OpenCode with the existing Zhipu AI Coding Plan is the sole formal GLM route. Use `zhipuai-coding-plan/glm-5.3-flash` for routine development and `zhipuai-coding-plan/glm-5.3` for complex diagnosis and independent review. The installed model list confirms these IDs. Reasoning variants, including `#max`, are unverified; do not claim Max or silently select another provider.
+   - Antigravity Gemini 3.8 Flash handles tests, Slurm, benchmarks, bioinformatics, and auxiliary development.
+   - Cursor Pro Auto/Grok handles suitable development work when GLM/Gemini is limited or unsuitable. Preserve an active task and worktree; never preempt a running Cursor worker or assign two writers to one worktree.
+   - Claude Sonnet 5.5 High handles key algorithm design and independent review. Claude Opus 5.5 High is reserved for major architecture and difficult correctness disputes. Third-party paid calls require explicit authorization.
+   - Codex GPT-6.1 Sol Medium handles key Rust algorithms and high-risk defects. High requires explicit authorization.
+   - DeepSeek API requires explicit user authorization and is never automatic fallback.
+2. **Shared Correctness and Safety Constraints**:
+   - All agents follow deterministic correctness, evidence, permissions, and artifact-preservation rules.
+   - Write tasks use an isolated Git worktree with one writer. Do not infer merge or cherry-pick between independent worktrees.
+   - Before any external CLI call, verify the actual model ID, provider, auth route, permission mode, and invocation behavior. Do not silently switch to a paid provider or an unverified model variant.
+   - Preserve task, Git, and test state when changing workers. If Codex and Antigravity are both unavailable, write HANDOFF and pause controller work.
 3. **Slurm Compute Exclusivity**:
-   - All Rust compilation (`cargo build`, `cargo test`, `cargo check`), assembly pipelines, and QUAST evaluations MUST run on Slurm compute nodes (`qfree` partition, typically `vnode1`).
-   - Login nodes must never execute compilation or assembly workloads.
+   - All Rust compilation/tests, assembly pipelines, and QUAST evaluations run on Slurm compute nodes in the `qfree` partition.
 4. **Git Protection & Historical Data Integrity**:
-   - Never auto-merge `main` or force-push (`git push --force`).
-   - Never execute destructive operations: `git reset --hard`, `git clean -fd`, `rm -rf`.
-   - Never overwrite or delete historical benchmark results or frozen baseline artifacts.
+   - Never force-push or automatically merge. Never run destructive reset/clean commands. Preserve untracked files and historical benchmark/evidence artifacts.
 5. **Deterministic Verification**:
-   - All core correctness issues and bug fixes must have deterministic counter-examples proving red before green, followed by regression testing.
+   - Core correctness changes require deterministic counterexamples and evidence before acceptance.
 
 ---
 
@@ -40,49 +44,41 @@
 
 | Permission Level | Description | Execution Constraints |
 | :--- | :--- | :--- |
-| **`READ_ONLY`** (Default) | Code analysis, algorithm inspection, and existing result review | Shares project source view. No workspace modifications permitted. |
-| **`WORKSPACE_WRITE`** | Concrete authorized code edits | Allowed **only** inside an isolated Git worktree. Requires explicit user approval. Never modify active working branch. |
-| **`HUMAN_APPROVAL`** | High-risk, destructive, or high-cost actions | Requires explicit user sign-off before invocation. |
+| **`READ_ONLY`** | Code and evidence inspection | No workspace modifications |
+| **`WORKSPACE_WRITE`** | Authorized code edits | Isolated worktree; one writer |
+| **`HUMAN_APPROVAL`** | High-cost or sensitive action | Explicit user authorization before invocation |
 
-### Mandatory Approval Triggers
-The following require explicit user authorization before execution:
-- Every invocation of **Claude Opus**.
-- **First-time invocation** of any external CLI tool.
-- Any transition of an external CLI to **`WORKSPACE_WRITE`**.
-- Any authentication mode that could incur additional API charges (e.g., fallback to pay-per-token API keys).
-- Submitting large-scale or high-duration Slurm tasks.
-- Installing external dependencies over the network or broadening filesystem access.
+### Approval and Permission Rules
+- Third-party paid Claude calls require explicit user authorization; Opus requires explicit authorization.
+- Do not use `--auto`, `--yolo`, `--force`, or dangerous permission bypass flags for review.
+- An OpenCode F23 review must use a verified read-only agent/profile. That execution profile is not yet confirmed; keep the audit prepared but do not start it.
+- Never inspect or print authentication material. Do not invoke an unapproved provider or fallback.
 
-### Strictly Prohibited Flags
-- `codex --dangerously-bypass-approvals-and-sandbox` / `--yolo`
-- `claude --dangerously-skip-permissions` / `--allow-dangerously-skip-permissions`
-- `agent --force` / `--yolo`
-- `agy --dangerously-skip-permissions`
+### Current Model Routing
 
-### CLI Capability, Verified Model & Flag Routing Matrix
+| Tool | Provider / Auth | Task | Model ID | Reasoning | Permission / Invocation |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| **OpenCode** | Existing Zhipu AI Coding Plan | Routine implementation, tests, scripts | `zhipuai-coding-plan/glm-5.3-flash` | CLI default; variant unverified | Explicit model and provider; no automatic provider fallback |
+| **OpenCode** | Existing Zhipu AI Coding Plan | Complex diagnosis and F23 independent review | `zhipuai-coding-plan/glm-5.3` | `EFFORT_UNVERIFIED`; `#max` unverified | F23 review requires verified read-only agent/profile |
+| **Antigravity** | Existing Gemini subscription | Tests, Slurm, benchmarks, bioinformatics; fallback controller | Gemini 3.8 Flash | Use an installed selectable effort and record it | Preserve normal permission prompts; no bypass |
+| **Cursor Pro** | Subscription | Suitable development worker | Auto / Grok 4.7 High or XHigh, if available | Actual mode must be checked | Manual handoff until execution entry is verified; never controller |
+| **Claude Sonnet** | Authorized third-party/local session | Key algorithm design and independent review | Sonnet 5.5 | High | Explicit authorization for paid calls |
+| **Claude Opus** | Authorized third-party/local session | Major architecture/correctness disputes | Opus 5.5 | High | Explicit authorization |
+| **Codex** | ChatGPT OAuth | High-risk Rust algorithms and defects | GPT-6.1 Sol | Medium; High by authorization | Read-only for review; use isolated worktree for writes |
 
-| Tool | Verified Binary Path | Current Auth Mode | Task Type | Verified Model ID | Reasoning Effort | Default Permissions / CLI Invocation Pattern |
-| :--- | :--- | :--- | :--- | :--- | :--- | :--- |
-| **Codex** | `~/.local/bin/codex` | ChatGPT OAuth Tokens (`~/.codex/auth.json`) | Standard Rust Review | `gpt-6.1-sol` | Medium | `codex exec -s read-only -m gpt-6.1-sol -c model_reasoning_effort="medium" -o <out>` |
-| **Codex** | `~/.local/bin/codex` | ChatGPT OAuth Tokens | Complex P0 Correctness | `gpt-6.1-sol` | High | `codex exec -s read-only -m gpt-6.1-sol -c model_reasoning_effort="high" -o <out>` |
-| **Claude** | `~/.local/share/omniakey/bin/claude` | OmniaKey / Local Session | Standard Algorithm Review | `sonnet` | Medium | `claude -p --permission-mode plan --model sonnet "<prompt>"` |
-| **Claude** | `~/.local/share/omniakey/bin/claude` | OmniaKey / Local Session | Complex Algorithm Review | `sonnet` | High | `claude -p --permission-mode plan --model sonnet "<prompt>"` (with high-effort prompt) |
-| **Claude** | `~/.local/share/omniakey/bin/claude` | OmniaKey / Local Session | Critical Graph Disputes | `opus` | High | *Requires explicit user approval*. `claude -p --permission-mode plan --model opus "<prompt>"` |
-| **Cursor** | `~/.local/bin/agent` | Local Cursor Agent CLI | Optional Engineering | `composer-2.5` / `cursor-grok-4.5-low` | Default | `agent -p --mode=ask --model composer-2.5 "<prompt>"` (*Note: `-p` is NOT read-only; `--mode=ask` enforces read-only*) |
+OpenCode 2.1.4 currently lists `zhipuai-coding-plan/glm-5.3`, `glm-5.3-flash`, and `glm-5.3-highspeed`. The CLI accepts `provider/model#variant` syntax, but no GLM reasoning variant has been verified. Do not claim GLM-5.3 Max. ZCode use in older logs is historical and is not a current execution route.
+
+### Simplified Quota State
+- Before selecting a GLM/Gemini worker, read `python3 ~/.local/share/ai-routing/quota_manager.py status`; use its `route <task_type>` output as a recommendation. Do not read the manager source/tests at every session start.
+- Shared state: `~/.local/state/ai-routing/quota-state.json`. GLM and Gemini pools are independent. `UNKNOWN` means availability is unconfirmed.
+- Record only an explicit limit with `record-limit <pool_id> --observed-at <ISO-8601-UTC>`. Add `--retry-after <ISO-8601-UTC>` only if the provider supplied a trustworthy recovery time. Otherwise the first retry is eligible about five hours after the first limit; a further explicit limit schedules another retry about 45 minutes later. Expiry does not automatically restore availability.
+- Record a successful normal task with `record-success <pool_id> --observed-at <ISO-8601-UTC> --identity-verified --pool-confirmed` only when provider, model, pool, and execution success are confirmed. Network, auth, permission, and model errors do not clear a limit.
+- This is a local state recorder, not a real CLI output parser or monitor. Stage 3A adapter envelopes are simulation-only. Do not infer limits from arbitrary text or run automatic probes.
 
 ### Execution Safety & Subprocess Rules
-- When calling external CLIs via Python, always use argument arrays (`argv: list[str]`) with `shell=False`.
-- Never perform unvetted string concatenation into shell commands.
-- External model reviews are informational evidence; they do not automatically constitute verification PASS.
-- Every invocation must be logged to [`AUDIT_FINDINGS.md`](./AUDIT_FINDINGS.md) with Task ID, Agent, Model, Effort, Permissions, Git SHA, sanitized CLI command, exit code, output path, findings, and next actions.
-
-### Quota & Rate Limit Handling
-- If Codex or Claude returns quota exceeded or rate limit:
-  1. Immediately stop invocations of that CLI.
-  2. Do not loop or retry infinitely.
-  3. Do not switch automatically to pay-as-you-go API keys.
-  4. Do not auto-upgrade to higher tier models.
-  5. Record quota block in this document and continue unblocked Antigravity tasks.
+- Python subprocesses use argument arrays and `shell=False`; never build unvetted shell strings.
+- External reviews are informational and do not automatically establish verification PASS.
+- Log authorized external review invocations in `AUDIT_FINDINGS.md` with task ID, actual model/effort, permissions, source SHA, sanitized command, exit code, output location, findings, and next actions.
 
 ---
 

@@ -1,9 +1,15 @@
-# ACTIVE TASK: fastBact C0-02R Phase F21-B (Repeat-Join Decision Provenance & Mechanism Verification)
+# ACTIVE TASK: fastBact C0-02R Phase F23 (Unique-Anchor Horizon Guard) — PENDING INDEPENDENT AUDIT
 
-**Status**: `PHASE_F21B_DIAGNOSTIC_EVIDENCE_REQUIRED`  
-**Overall Acceptance Status**: **Strictly NOT ACCEPTED** (C0-02R maintained strictly NOT ACCEPTED)  
-**Independent Audit**: **COMPLETED (`AUDIT-20261023-017`, Verdict: FAIL / QUALIFIED FINDINGS)**  
-**Auditor**: Codex CLI (`gpt-6.1-sol`, medium reasoning, read-only)  
+> **Current F23 worktree status:** F23 Unique-Anchor Horizon Guard is implemented at source HEAD `7bdc6f962f93d54cda192d47fb410e046fd5a627` and awaits an independent algorithm audit. C0-02R remains **NOT ACCEPTED**. The historical F21-B investigation below is retained for context; it is not the active phase. Prepare the independent review in a fresh OpenCode session with `zhipuai-coding-plan/glm-5.3`, read-only permissions, and `EFFORT_UNVERIFIED` until a reasoning variant is verified. Do not start the review as part of this governance synchronization.
+
+**Current Controller / GLM Route**: Codex GPT-6 Luna Low is controller; OpenCode with `zhipuai-coding-plan` is the sole formal GLM route. See the root [`AGENTS.md`](../../AGENTS.md) and [`HANDOFF.md`](HANDOFF.md). Antigravity takes controller duties only if Codex quota is exhausted; Cursor is never controller.
+
+### Historical F21-B Audit Record (retained)
+
+**Historical Status**: `PHASE_F21B_DIAGNOSTIC_EVIDENCE_REQUIRED`
+**Overall Acceptance Status**: **Strictly NOT ACCEPTED** (C0-02R maintained strictly NOT ACCEPTED)
+**Independent Audit**: **COMPLETED (`AUDIT-20261023-017`, Verdict: FAIL / QUALIFIED FINDINGS)**
+**Auditor**: Codex CLI (`gpt-6.1-sol`, medium reasoning, read-only)
 **Key Diagnostic Conclusions**:
 - `NEW_JOIN_ERROR_CONFIRMED`: Real chimeric relocation on R1-001 `contig_16` (-2,095,535 bp across 3.66 Mb $\leftrightarrow$ 1.57 Mb).
 - `REPEAT_CHAIN_VERIFIED`: 7-node repeat chain (`u1926` to `u3919`), net physical span 1,076 bp; 0 spanning physical fragments between flanks `u1927` and `u169`.
@@ -11,31 +17,33 @@
 - `POLISHING_BOUNDARY_REGRESSION_CONFIRMED`: 84.6% of base errors (132/156) occur in 101–350 bp terminal boundary zone; pre-polish Stage 5 Candidate B had fewer errors than Baseline A (24 vs 29). Net Stage 5 $\to$ 6 increases: +85 mismatches and +43 indels for B vs +69 mismatches and +18 indels for A.
 - `OUTPUT_FILTER_SEQUENCE_LOSS_RECONCILED`: 1,561 short unitigs < 500 bp; 200–499 bp unitigs contribute 25,574 bp unique reference loss, accounting for the QUAST reference coverage drop of 25,715 bp (0.554%).
 - `DECISION_TRACE_QUALIFIED`: Structural geometry and 0-spanning pairs confirmed; offline decision-trace models require dedicated runtime diagnostic tracing instrumentation for full active-walker state verification.
-**Production Code Status**: **100% BIT-IDENTICAL & IMMUTABLE** (Tree SHA `30967bf4940844aeb6b744732bcad6d2a72daab4`, 0 lines changed in `src/`)  
-**Slurm Benchmark Jobs**: Job `3001561` (F20 benchmark) & Job `3007620` (F21 Stage 5 QUAST) on `vnode1` (`qfree`)  
-**Active Worktree**: `/hpcfs/fhome/caizhh/Desktop/03_Tool_Development/fastBact-phase-f21b-trace-worktree`  
-**Active Branch**: `feature/c0-02r-phase-f21b-trace`  
-**Base Evidence Commit**: `07e0e5fd927cc3c8be96b22927e33b8ae6b9e138` (Phase F21-A forensic HEAD)  
-**Deliverables Directory**: [`docs/development/evidence/C0_02R/phase_f21b/`](./evidence/C0_02R/phase_f21b/)  
-- Effective Parameter Audit: [`effective_parameter_audit.tsv`](./evidence/C0_02R/phase_f21b/effective_parameter_audit.tsv)  
-- Repeat Locus Graph: [`repeat_locus_graph.tsv`](./evidence/C0_02R/phase_f21b/repeat_locus_graph.tsv)  
-- Directed Path Geometry: [`directed_path_geometry.tsv`](./evidence/C0_02R/phase_f21b/directed_path_geometry.tsv)  
-- Read-Pair Provenance: [`read_pair_provenance.tsv`](./evidence/C0_02R/phase_f21b/read_pair_provenance.tsv)  
-- Candidate Decision Trace: [`candidate_decision_trace.tsv`](./evidence/C0_02R/phase_f21b/candidate_decision_trace.tsv)  
-- Alternative Path Matrix: [`alternative_path_matrix.tsv`](./evidence/C0_02R/phase_f21b/alternative_path_matrix.tsv)  
-- R1-001 vs R1-003 Repeat Comparison: [`r1_001_r1_003_repeat_comparison.md`](./evidence/C0_02R/phase_f21b/r1_001_r1_003_repeat_comparison.md)  
-- Polish Boundary Evidence: [`polish_boundary_evidence.tsv`](./evidence/C0_02R/phase_f21b/polish_boundary_evidence.tsv)  
-- Unique Coverage Loss: [`unique_coverage_loss.tsv`](./evidence/C0_02R/phase_f21b/unique_coverage_loss.tsv)  
-- Mechanism Evidence Matrix: [`mechanism_evidence_matrix.md`](./evidence/C0_02R/phase_f21b/mechanism_evidence_matrix.md)  
-- Independent Trace Audit: [`codex_independent_trace_audit.md`](./evidence/C0_02R/phase_f21b/codex_independent_trace_audit.md) (`AUDIT-20261023-017`)  
-- Full Synthesis Report: [`phase_f21b_report.md`](./evidence/C0_02R/phase_f21b/phase_f21b_report.md)  
-**Coordinator / Orchestrator**: Antigravity CLI  
-**External AI Resource**: Codex CLI (`gpt-6.1-sol`, medium reasoning effort, read-only sandbox)  
-**Last Updated**: 2026-10-23  
+**Production Code Status**: **100% BIT-IDENTICAL & IMMUTABLE** (Tree SHA `30967bf4940844aeb6b744732bcad6d2a72daab4`, 0 lines changed in `src/`)
+**Slurm Benchmark Jobs**: Job `3001561` (F20 benchmark) & Job `3007620` (F21 Stage 5 QUAST) on `vnode1` (`qfree`)
+**Active Worktree**: `/hpcfs/fhome/caizhh/Desktop/03_Tool_Development/fastBact-phase-f21b-trace-worktree`
+**Historical Active Branch at F21-B**: `feature/c0-02r-phase-f21b-trace`
+**Base Evidence Commit**: `07e0e5fd927cc3c8be96b22927e33b8ae6b9e138` (Phase F21-A forensic HEAD)
+**Deliverables Directory**: [`docs/development/evidence/C0_02R/phase_f21b/`](./evidence/C0_02R/phase_f21b/)
+- Effective Parameter Audit: [`effective_parameter_audit.tsv`](./evidence/C0_02R/phase_f21b/effective_parameter_audit.tsv)
+- Repeat Locus Graph: [`repeat_locus_graph.tsv`](./evidence/C0_02R/phase_f21b/repeat_locus_graph.tsv)
+- Directed Path Geometry: [`directed_path_geometry.tsv`](./evidence/C0_02R/phase_f21b/directed_path_geometry.tsv)
+- Read-Pair Provenance: [`read_pair_provenance.tsv`](./evidence/C0_02R/phase_f21b/read_pair_provenance.tsv)
+- Candidate Decision Trace: [`candidate_decision_trace.tsv`](./evidence/C0_02R/phase_f21b/candidate_decision_trace.tsv)
+- Alternative Path Matrix: [`alternative_path_matrix.tsv`](./evidence/C0_02R/phase_f21b/alternative_path_matrix.tsv)
+- R1-001 vs R1-003 Repeat Comparison: [`r1_001_r1_003_repeat_comparison.md`](./evidence/C0_02R/phase_f21b/r1_001_r1_003_repeat_comparison.md)
+- Polish Boundary Evidence: [`polish_boundary_evidence.tsv`](./evidence/C0_02R/phase_f21b/polish_boundary_evidence.tsv)
+- Unique Coverage Loss: [`unique_coverage_loss.tsv`](./evidence/C0_02R/phase_f21b/unique_coverage_loss.tsv)
+- Mechanism Evidence Matrix: [`mechanism_evidence_matrix.md`](./evidence/C0_02R/phase_f21b/mechanism_evidence_matrix.md)
+- Independent Trace Audit: [`codex_independent_trace_audit.md`](./evidence/C0_02R/phase_f21b/codex_independent_trace_audit.md) (`AUDIT-20261023-017`)
+- Full Synthesis Report: [`phase_f21b_report.md`](./evidence/C0_02R/phase_f21b/phase_f21b_report.md)
+**Coordinator / Orchestrator**: Antigravity CLI
+**External AI Resource**: Codex CLI (`gpt-6.1-sol`, medium reasoning effort, read-only sandbox)
+**Last Updated**: 2026-10-23
 
 ---
 
-## 1. Forensic & Mechanism Investigation Summary
+## Historical F21-B Investigation (retained)
+
+### 1. Forensic & Mechanism Investigation Summary
 
 ### 1.1 Core Findings
 1. **R1-001 Extensive Misassembly ($4 \to 5$)**:
