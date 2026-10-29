@@ -364,6 +364,26 @@ impl ProvenanceTable {
             scc_nodes[scc[v] as usize].push(v as u32);
         }
 
+        // Invariant F24-I08 & Audit Verification:
+        // Condensation graph is a DAG where directed edges between distinct SCCs (u -> v)
+        // must satisfy scc[u] > scc[v], guaranteeing that descending SCC iteration
+        // (scc_count - 1 down to 0) strictly visits predecessors before successors.
+        #[cfg(debug_assertions)]
+        for from in 0..nv {
+            let su = scc[from] as usize;
+            for ei in out_off[from]..out_off[from + 1] {
+                let (to, _) = out_adj[ei as usize];
+                let sv = scc[to as usize] as usize;
+                if su != sv {
+                    debug_assert!(
+                        su > sv,
+                        "Condensation DAG topological ordering invariant violated: edge {} -> {} with scc {} -> {}",
+                        from, to, su, sv
+                    );
+                }
+            }
+        }
+
         // Astra DCC (§1 Precise distinction rule & §2 Shared-context trigger, Sol Round 8):
         // Single-pass topological origin propagation in strictly O(V + E) time.
         // Replaces quadratic predecessor search: an unbranched predecessor chain
@@ -715,7 +735,7 @@ impl ProvenanceTable {
         let m = self.meta(d.id());
         m.external_context_count(d.is_rc()) == 1
             && !m.bci(d.is_rc())
-            && !m.bci_downstream(d.is_rc())
+            && (!m.bci_downstream(d.is_rc()) || m.exit_isolated(d.is_rc()))
     }
 
     /// Appends metadata for a newly pushed composite unitig, keeping the
