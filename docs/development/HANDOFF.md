@@ -14,29 +14,27 @@ If a fastBact constraint is stricter than the general policy, keep the stricter 
 
 **Recorded relationship (2026-10-28):** Opus architecture calls that meet the standing authorization in the general policy do not need a new per-call user prompt. Other Claude calls, budget breaches, and unverifiable balances still follow the Claude budget section below. This does not authorize scientific-contract changes, merge, push, or release.
 
-**F23 decision and development status (2026-10-28; authoritative over older status text):**
-Status progresses to: **`F23_READY_FOR_USER_ACCEPTANCE`** (C0-02R strictly remains **NOT ACCEPTED** awaiting user final authorization as `FINAL_AUTHORIZATION_AUTHORITY`).
+**F23 final acceptance and completion status (2026-10-29; authoritative over older status text):**
+Status: **`F23_COMPLETED`** and **`C0-02R_ACCEPTED`** (Formally authorized by user on 2026-10-29 under `USER_FINAL_MERGE_AUTHORIZATION_GRANTED`).
 
-1. **Acceptance Evidence Closure Delivered**:
-   - Primary closure artifact: [`FASTBACT_F23_ACCEPTANCE_EVIDENCE_CLOSURE.md`](file:///hpcfs/fhome/caizhh/.gemini/antigravity-cli/brain/7e7479aa-7a0c-4a62-84bd-459360983831/FASTBACT_F23_ACCEPTANCE_EVIDENCE_CLOSURE.md).
-   - Scientific audit artifact: [`FASTBACT_F23_FINAL_SCIENTIFIC_ACCEPTANCE_AUDIT.md`](file:///hpcfs/fhome/caizhh/.gemini/antigravity-cli/brain/7e7479aa-7a0c-4a62-84bd-459360983831/FASTBACT_F23_FINAL_SCIENTIFIC_ACCEPTANCE_AUDIT.md).
-2. **Forensic Attribution of R1-001 `contig_48` (QUAST 5th Misassembly)**:
-   - Evaluated under QUAST defaults (`--min-contig 200`, `--min-alignment 65`, `--ambiguity-score 0.99`).
-   - In Baseline A, `contig_64` (25,707 bp) had primary alignment coverage $25,585 / 25,707 = 99.52\% \ge 99.0\%$, triggering `One align captures most of this contig` and discarding the secondary 122 bp alignment as an insignificant tail.
-   - In Candidate F23, `contig_48` (26,211 bp) had primary coverage $25,585 / 26,211 = 97.61\% < 99.0\%$, so QUAST evaluated both alignments and reported a relocation misassembly.
-   - Bit-for-bit check confirms the first 25,707 bp of Candidate `unitig_2104` are identical to Baseline `unitig_253`. The junction is a shared pre-existing precursor from Stage 4; F23's +504 bp extension revealed it under QUAST's threshold without creating a new chimeric junction.
-3. **Independent Sol Review R6 (Verdict: PASS)**:
-   - Codex GPT-6.1 Sol Medium completed read-only review of `exspander.rs` (SHA-256 `fd59e8bdc231dbb83468c711f3d87834c51638d75941f587eb0aa1c89298790c`).
-   - Verbatim verdict: **`PASS for the specified topology and shared-PE attribution question.`**
-   - Verified that ARG refuses to advance the anchor into repeat $X$, and PAG restricts scoring strictly to $A$-keyed evidence. Evidence from $B$ or $X$ has zero deciding weight for $A$'s walk.
-4. **Qualified Assembly Limits & Contiguity Loss**:
-   - Unproven claims of universal $P(\text{error}) \ge 50\%$ or "global information-theoretic optimum" removed.
-   - Assembly limits qualified under physical non-spanning conditions ($L_{repeat} > I_{max}$). NGA50 reduction (53.6% on R1-001; 72.5% on R1-003) fully attributed to SI-2 seed withholding.
-5. **Complete Source & Binary SHA-256 Hash Reconciliation**:
-   - Full ledger documented from unpatched HEAD (`d6c459e59...`), through Sol reviews R1–R5, telemetry addition (`fd59e8bdc...`), release binary (`2f1b6229c...`, Slurm Job `3052676`), deterministic gates (`3052557`, 118/118 PASS), and real-data A/B benchmark (`3052717`).
-6. **Acceptance Disposition**:
-   - Zero modifications to `main` branch. No merge, push, or release performed.
-   - C0-02R strictly remains **NOT ACCEPTED** awaiting user directive.
+1. **User Authorization & Formal Scientific Acceptance**:
+   - On 2026-10-29, the user as `FINAL_AUTHORIZATION_AUTHORITY` formally granted final merge and acceptance authorization (`USER_FINAL_MERGE_AUTHORIZATION_GRANTED`).
+   - Scientific contract `C0-02R` formally transitions to **`ACCEPTED`**.
+   - Phase F23 formally transitions to **`F23_COMPLETED`**.
+   - Integrated into `main` via integration branch `integration/f23-final-acceptance`.
+2. **Definitive Provenance & Evidence Matrix**:
+   - Candidate Final Source: `src/resolve/exspander.rs` SHA-256 `fd59e8bdc231dbb83468c711f3d87834c51638d75941f587eb0aa1c89298790c`.
+   - Candidate Release Binary: `target/release/fastBact` SHA-256 `2f1b6229c241479e9e3480adc6d60ab009d96f7ca8f7ff78307412a74b1c9a11` (Slurm Job `3052676`).
+   - Deterministic Gate Suite: 118/118 PASS, Exit `0:0`, `ALL_GATES_PASSED` (Slurm Job `3052557` on `vnode1`).
+   - Full Workspace Release Tests: 194/194 PASS, Exit `0:0` (Slurm Job `3049336` on `vnode1`).
+   - Real-Data A/B Benchmark (QUAST v5.2.0, Slurm Job `3052717` on `vnode1`):
+     - R1-003 (*E. coli* BW25113): extensive misassemblies reduced from 2 to 0; indels reduced from 0.04 to 0.00/100kb; mismatches reduced by 61%.
+     - R1-001 (*E. coli* K-12 MG1655): historical AUD-01 2.1 Mb `contig_16` chimera completely eliminated. The 5th misassembly (`contig_48`) confirmed as a QUAST ambiguity filter threshold artifact over a pre-existing baseline precursor.
+3. **Independent Review Closure (Codex GPT-6.1 Sol Medium)**:
+   - Sol R6 targeted review issued an explicit **`PASS`** on Anchor Absorption safety under ARG/PAG, confirming that evidence stored under $B$ or $X$ has zero deciding weight for walks originating from $A$.
+4. **Execution Safety**:
+   - Integrated locally into `main`.
+   - Zero remote push, zero GitHub release, zero git tags. All execution strictly within local repository boundaries.
 
 **Opus technical ruling (2026-10-27): `APPROVE_WITH_CONDITIONS`.** Selected design direction: track attributable/shared context from graph topology; do not reset the anchor inside shared context; exclude evidence keyed at shared-context nodes; withhold when no attributable in-horizon support exists; keep node length only as a secondary condition. Before production implementation, statically verify where fork evidence is keyed and whether unchanged T26/T27/T30/T34 contracts conflict. Then implement and independently review F1–F9, including shared-long intermediate/seed, short-predecessor bypass, adversarial weights, legal continuity, distance boundaries, reverse traversal, merge remap and re-entry; require F1–F4 to fail on current source. This is conditional design approval only: no code changed, no tests were run, and release/C0-02R acceptance remains blocked. Full ruling: /hpcfs/fhome/caizhh/.local/state/fastbact-f23-post-audit-tests/validation/F23_OPUS_FINAL_TECHNICAL_DECISION.md (SHA-256 `37255753b3a15112fc3c322a78c6ee256a9c62438bd0ccc6d36b5b6aa0985f13`). CLI reports `claude-opus-5-5` and estimates USD 0.36093875; upstream identity, effort, actual relay deduction and current balance remain unverified.
 
