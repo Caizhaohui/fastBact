@@ -4,7 +4,7 @@
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=8
-#SBATCH --mem=14G
+#SBATCH --mem=12G
 #SBATCH --time=02:30:00
 #SBATCH --output=/hpcfs/fhome/caizhh/Desktop/03_Tool_Development/fastBact-phase-f24-contiguity-worktree/benchmark-results/f24_repaired_20261029/logs/slurm-%j.out
 #SBATCH --error=/hpcfs/fhome/caizhh/Desktop/03_Tool_Development/fastBact-phase-f24-contiguity-worktree/benchmark-results/f24_repaired_20261029/logs/slurm-%j.err
