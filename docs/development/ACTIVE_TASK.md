@@ -1,16 +1,23 @@
-# ACTIVE TASK: fastBact F24 — Ready for Final Acceptance
+# ACTIVE TASK: fastBact F24 — Evidence Closure (Blocked with Specific Evidence)
 
-**F24 status (2026-10-29):** Phase F24 Provenance-Safe Contiguity Recovery has completed sequential implementation across all 12 architectural invariants (F24-I01 through F24-I12), independent review with explicit `ACCEPT` by Codex GPT-6.1 Sol Medium (Round 11, task-4105), 100% deterministic verification across all 8 frozen test suites (Slurm Job `3065181`, 106/106 passed, 0 failures), and real-data A/B QUAST benchmark on R1-001 and R1-003 vs frozen baseline F23 (Slurm Job `3065210`). Contiguity recovered significantly (+78.0% NGA50 on R1-001, +164.1% NGA50 on R1-003) with zero new misassemblies and zero new local misassemblies. Status is **`F24_READY_FOR_FINAL_ACCEPTANCE`**. Local merge into `main`, remote push, and tag creation remain pending user authorization as `FINAL_AUTHORIZATION_AUTHORITY`. Full documentation: [`F24_FINAL_TECHNICAL_ACCEPTANCE_REPORT.md`](./F24_FINAL_TECHNICAL_ACCEPTANCE_REPORT.md).
+**F24 status (2026-10-29):** Phase F24 Provenance-Safe Contiguity Recovery has completed sequential implementation across all 12 architectural invariants (F24-I01 through F24-I12), 100% deterministic verification across all frozen test suites (Slurm Job `3065181`, 106/106 passed; Slurm Job `3065341`, 212/212 full workspace release tests passed with CLI smoke test OK), and real-data A/B QUAST benchmark on R1-001 and R1-003 vs frozen baseline F23 (Slurm Job `3065210`). Contiguity recovered significantly (+78.0% NGA50 on R1-001, +164.1% NGA50 on R1-003) with zero new extensive misassemblies and historical AUD-01 chimera absent. However, an independent acceptance review conducted by Codex GPT-6.1 Sol Medium returned **`REJECT / FINDINGS`** citing base-error safety gate increases, attribution lattice default states, interval filter predicate discrepancies, and an absolute NGA50 shortfall of 564 bp on R1-003. Per Multi-AI Collaboration V3.2, status is transitioned to **`BLOCKED_WITH_SPECIFIC_EVIDENCE`**. Local merge into `main`, remote push, and release tag creation remain strictly prohibited. Full documentation: [`F24_FINAL_ACCEPTANCE_EVIDENCE_CLOSURE.md`](./F24_FINAL_ACCEPTANCE_EVIDENCE_CLOSURE.md).
 
 ## Phase F24 Acceptance Record
 
-- **Overall Status**: **`F24_READY_FOR_FINAL_ACCEPTANCE`**
+- **Overall Status**: **`BLOCKED_WITH_SPECIFIC_EVIDENCE`**
 - **Active Worktree**: `/hpcfs/fhome/caizhh/Desktop/03_Tool_Development/fastBact-phase-f24-contiguity-worktree`
 - **Active Branch**: `feature/f24-provenance-safe-contiguity`
+- **Candidate Commit**: `3d44889218de85f7674fe73609db283047762fc3`
 - **Candidate Release Binary**: `target/release/fastBact` SHA-256 `8348395b9de19f7a3d21bf1179737d3b10427ee782c6fa6461f9c0b3608f1820` (Job `3065182`)
 - **Baseline Release Binary**: `01_fastBact/target/release/fastBact` SHA-256 `97adb3c2ae386d453ba3f50fa61920836fd6c37d83924c0e0bc04d6763caaeb7` (Commit `68b19f06d22537cf199e8fe124ea6b62bb0bb50a`)
-- **Deterministic Verification**: 106/106 tests passed (Job `3065181`, exit 0, 1.76s on `vnode1`)
-- **Independent Review**: Codex GPT-6.1 Sol Medium Round 11: **`ACCEPT`**
+- **Deterministic Verification**: 106/106 tests passed (Job `3065181`), 212/212 release tests passed (Job `3065341`)
+- **Independent Acceptance Review**: Codex GPT-6.1 Sol Medium: **`REJECT / FINDINGS`**
+- **Blockers Identified**:
+  1. Base-error rate increase relative to F23 under contract §8.3 (R1-001 mismatches 2.24 $\to$ 2.54; R1-003 mismatches 0.59 $\to$ 0.68).
+  2. Attribution lattice context defaults to Single without propagating inherited Shared state (`exspander.rs:407`).
+  3. Evidence filtering predicate checks $p > b$ instead of $p > b + H$ (`exspander.rs:865`).
+  4. R1-003 NGA50 (46,236 bp) misses static absolute floor (46,800 bp) by 564 bp.
+  5. `Vec::contains` origin check yields worst-case $\Theta(d^2)$ complexity.
 - **Real-Data A/B Benchmark (QUAST v5.2.0, Job `3065210` on `vnode1`)**:
   - `R1-001` (*E. coli* K-12): N50 28.1 kb $\to$ **48.6 kb** (+72.8%), NGA50 27.0 kb $\to$ **48.1 kb** (+78.0%), Misassemblies: strictly **5** (zero new misassemblies, AUD-01 chimera remains eliminated), Local misassemblies: strictly **0**, Valid joins: 544 $\to$ **840** (+296 joins).
   - `R1-003` (*E. coli* BW25113): N50 17.9 kb $\to$ **46.2 kb** (+158.0%), NGA50 17.5 kb $\to$ **46.2 kb** (+164.1%), Misassemblies: strictly **0**, Local misassemblies: strictly **1**, Valid joins: 63 $\to$ **347** (+450% joins).
