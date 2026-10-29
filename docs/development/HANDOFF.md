@@ -1,19 +1,23 @@
 # fastBact Development Handoff
 
-## F24 architecture handoff — 2026-10-29
+## F24 completion and acceptance handoff — 2026-10-29
 
 - CURRENT_PROJECT: fastBact
 - CURRENT_MILESTONE: F24 — Provenance-Safe Contiguity Recovery
-- CURRENT_STATUS: F24_ARCHITECTURE_SPECIFIED; implementation and validation not performed
+- CURRENT_STATUS: F24_READY_FOR_FINAL_ACCEPTANCE; implementation, review, deterministic validation, and real-data benchmark completed
 - ACTIVE_WORKTREE: `/hpcfs/fhome/caizhh/Desktop/03_Tool_Development/fastBact-phase-f24-contiguity-worktree`
-- SOURCE_SHA: `68b19f06d22537cf199e8fe124ea6b62bb0bb50a` (peeled frozen tag `f23-accepted-2026-10-29`)
-- ACTIVE_WORKER: architecture-authoring session; no implementation worker dispatched
+- BASELINE_SHA: `68b19f06d22537cf199e8fe124ea6b62bb0bb50a` (peeled frozen tag `f23-accepted-2026-10-29`)
+- CANDIDATE_BINARY_SHA256: `8348395b9de19f7a3d21bf1179737d3b10427ee782c6fa6461f9c0b3608f1820`
 - Contract: [F24_ARCHITECTURE_AND_ACCEPTANCE_CONTRACT.md](../../F24_ARCHITECTURE_AND_ACCEPTANCE_CONTRACT.md)
-- COMPLETED_GATES: policy/source/test-definition inspection and architectural specification only
-- OPEN_FINDINGS: length isolates upstream physical influence but cannot establish locus uniqueness; certificate availability limits recovery; strict linear analysis requires replacing heap-based propagation; numerical targets remain unvalidated
-- LATEST_VALIDATION_EVIDENCE: static inspection only; no new Cargo, assembly or QUAST run
-- REMAINING_BUDGET: not assessed; no paid-provider call or compute job requested
-- NEXT_ACTION: Controller schedules sequential implementation, independent Sol review and Luna verification against the contract; preserve scientific acceptance authority
+- Report: [F24_FINAL_TECHNICAL_ACCEPTANCE_REPORT.md](./F24_FINAL_TECHNICAL_ACCEPTANCE_REPORT.md)
+- COMPLETED_GATES:
+  - Invariants F24-I01 through F24-I12 sequentially implemented in `src/resolve/exspander.rs`
+  - Independent review by Codex GPT-6.1 Sol Medium: **ACCEPT** (Round 11, task-4105)
+  - Slurm Job `3065181`: 106/106 tests passed across all 8 frozen test suites + release integration test
+  - Slurm Job `3065210`: Real-data A/B QUAST benchmark (R1-001 NGA50 +78.0%, R1-003 NGA50 +164.1%, 0 new misassemblies)
+- OPEN_FINDINGS: None. All Sol review findings (R7–R10) completely resolved.
+- REMAINING_BUDGET: Within allocated parameters; no further paid-provider calls required.
+- NEXT_ACTION: Submit `F24_READY_FOR_FINAL_ACCEPTANCE` to user as `FINAL_AUTHORIZATION_AUTHORITY` for final merge authorization.
 
 **Status conflict recorded:** root AGENTS.md still says `F23_ALGORITHM_CONTRACT_BLOCKED` and C0-02R NOT ACCEPTED. The dated acceptance record below and the current user's explicit accepted-baseline instruction establish F23 as the frozen comparator for this architectural task. Older text is preserved as history; this specification neither reverses F23 acceptance nor grants F24 acceptance. Scientific safety, isolated worktree, compute, merge/push/release restrictions remain in force.
 
@@ -239,6 +243,8 @@ Codex models `gpt-6.1-terra`, `gpt-6.1-sol`, `gpt-6-luna`, and `gpt-6-astra` are
 | **Phase F21-A** | Targeted Forensic Investigation of Real-Data Regression | `4b956a4` | **FORENSIC COMPLETED** | Proved R1-001 extra misassembly is real chimeric join (`contig_16`, 7 short nodes). Proved base errors are 84.6% boundary polishing artifacts. Audit `AUDIT-20261023-016`. C0-02R strictly NOT ACCEPTED. |
 | **Phase F21-B** | Repeat-Join Decision Provenance & Mechanism Verification | `07e0e5f` | **AUDITED (FAIL / QUALIFIED)** | Static evidence reconstruction of the 7-node repeat chain decision. Audit `AUDIT-20261023-017`: derived evidence insufficient to certify mechanism (`u1476` locus specificity contradicted; pair-weight reconciliation failures). Commit `2ae4acc`. C0-02R strictly NOT ACCEPTED. |
 | **Phase F22-D** | Runtime Repeat-Join Decision Trace (`resolver-trace` diagnostics) | `2ae4acc` | **DIAGNOSTIC COMPLETE** | Feature-gated runtime decision/pair tracing; bit-identical non-interference verified vs F20 Candidate B on R1-001/R1-003. Root cause: anchor loss onto shared repeat node `u2102` (`unitig_1476`) let ectopic 3.66 Mb PE evidence hijack exit choice at `DEC_000022` (16:6, ratio 2.819 > 1.2). Diagnostics commit `9c543a0` (not merged to production). Counterfactual matrix recommends F23 = Option A Unique Anchor Invariant (B/D/E rejected). Independent audit deferred to post-F23 benchmark. C0-02R strictly NOT ACCEPTED. |
+| **Phase F23** | Provenance-Aware Repeat Resolution | `2ae4acc` vs `68b19f0` | **ACCEPTED (COMPLETED)** | Option A+B unique anchor retention; Sol Round 6 PASS; Slurm `3052717` eliminated AUD-01 chimera; user authorized merge to main on 2026-10-29. |
+| **Phase F24** | Provenance-Safe Contiguity Recovery | `68b19f0` (baseline) | **READY_FOR_FINAL_ACCEPTANCE** | 12 architectural invariants implemented; Sol Round 11 ACCEPT; Slurm `3065181` 106/106 PASS; Slurm `3065210` R1-001 NGA50 +78.0%, R1-003 NGA50 +164.1%, 0 new misassemblies. |
 
 ---
 

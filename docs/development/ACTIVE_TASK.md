@@ -1,6 +1,20 @@
-# ACTIVE TASK: fastBact F24 — Architecture Specified
+# ACTIVE TASK: fastBact F24 — Ready for Final Acceptance
 
-**F24 status (2026-10-29):** The user requested the Principal Architect specification for Provenance-Safe Contiguity Recovery. [F24_ARCHITECTURE_AND_ACCEPTANCE_CONTRACT.md](../../F24_ARCHITECTURE_AND_ACCEPTANCE_CONTRACT.md) defines the implementation invariants and acceptance gates against frozen F23 commit `68b19f06d22537cf199e8fe124ea6b62bb0bb50a`, in branch `feature/f24-provenance-safe-contiguity` and its designated isolated worktree. No F24 implementation, Cargo validation or benchmark has been performed. Next: sequential implementation, independent Sol review and Luna verification. The contract explicitly separates physical isolation from locus attribution; missing attribution cannot be replaced by node length. F24 scientific acceptance remains ungranted.
+**F24 status (2026-10-29):** Phase F24 Provenance-Safe Contiguity Recovery has completed sequential implementation across all 12 architectural invariants (F24-I01 through F24-I12), independent review with explicit `ACCEPT` by Codex GPT-6.1 Sol Medium (Round 11, task-4105), 100% deterministic verification across all 8 frozen test suites (Slurm Job `3065181`, 106/106 passed, 0 failures), and real-data A/B QUAST benchmark on R1-001 and R1-003 vs frozen baseline F23 (Slurm Job `3065210`). Contiguity recovered significantly (+78.0% NGA50 on R1-001, +164.1% NGA50 on R1-003) with zero new misassemblies and zero new local misassemblies. Status is **`F24_READY_FOR_FINAL_ACCEPTANCE`**. Local merge into `main`, remote push, and tag creation remain pending user authorization as `FINAL_AUTHORIZATION_AUTHORITY`. Full documentation: [`F24_FINAL_TECHNICAL_ACCEPTANCE_REPORT.md`](./F24_FINAL_TECHNICAL_ACCEPTANCE_REPORT.md).
+
+## Phase F24 Acceptance Record
+
+- **Overall Status**: **`F24_READY_FOR_FINAL_ACCEPTANCE`**
+- **Active Worktree**: `/hpcfs/fhome/caizhh/Desktop/03_Tool_Development/fastBact-phase-f24-contiguity-worktree`
+- **Active Branch**: `feature/f24-provenance-safe-contiguity`
+- **Candidate Release Binary**: `target/release/fastBact` SHA-256 `8348395b9de19f7a3d21bf1179737d3b10427ee782c6fa6461f9c0b3608f1820` (Job `3065182`)
+- **Baseline Release Binary**: `01_fastBact/target/release/fastBact` SHA-256 `97adb3c2ae386d453ba3f50fa61920836fd6c37d83924c0e0bc04d6763caaeb7` (Commit `68b19f06d22537cf199e8fe124ea6b62bb0bb50a`)
+- **Deterministic Verification**: 106/106 tests passed (Job `3065181`, exit 0, 1.76s on `vnode1`)
+- **Independent Review**: Codex GPT-6.1 Sol Medium Round 11: **`ACCEPT`**
+- **Real-Data A/B Benchmark (QUAST v5.2.0, Job `3065210` on `vnode1`)**:
+  - `R1-001` (*E. coli* K-12): N50 28.1 kb $\to$ **48.6 kb** (+72.8%), NGA50 27.0 kb $\to$ **48.1 kb** (+78.0%), Misassemblies: strictly **5** (zero new misassemblies, AUD-01 chimera remains eliminated), Local misassemblies: strictly **0**, Valid joins: 544 $\to$ **840** (+296 joins).
+  - `R1-003` (*E. coli* BW25113): N50 17.9 kb $\to$ **46.2 kb** (+158.0%), NGA50 17.5 kb $\to$ **46.2 kb** (+164.1%), Misassemblies: strictly **0**, Local misassemblies: strictly **1**, Valid joins: 63 $\to$ **347** (+450% joins).
+- **Execution Safety**: Contained strictly in feature worktree. Zero merge to main, zero remote push, zero git tags.
 
 ## Frozen F23 acceptance record
 
@@ -64,3 +78,5 @@
 | **Phase F21-A** | Targeted Forensic Investigation of Real-Data Regression | `4b956a4` | **FORENSIC COMPLETED** | Proved R1-001 extra misassembly is real chimeric join (`contig_16`). Proved base errors are 84.6% boundary polishing artifacts. Audit `AUDIT-20261023-016`. C0-02R NOT ACCEPTED. |
 | **Phase F21-B** | Repeat-Join Decision Provenance & Mechanism Verification | `07e0e5f` | **AUDITED (FAIL / QUALIFIED)** | Reconstructed static decision evidence across 7-node repeat chain. Audit `AUDIT-20261023-017`: mechanism plausible but derived evidence not certifiable. Commit `2ae4acc`. C0-02R NOT ACCEPTED. |
 | **Phase F22-D** | Runtime Repeat-Join Decision Trace (resolver-trace diagnostics) | `2ae4acc` | **DIAGNOSTIC COMPLETE (non-interference verified)** | Runtime decision `DEC_000022` recovered; anchor-loss + ectopic-evidence hijack root cause established. Diagnostics commit `9c543a0` on `feature/c0-02r-phase-f22-diagnostics` (feature-gated, not merged to production). Independent audit pending (scheduled post-F23 benchmark). C0-02R NOT ACCEPTED. |
+| **Phase F23** | Provenance-Aware Repeat Resolution | `2ae4acc` vs `68b19f0` | **ACCEPTED (COMPLETED)** | Option A+B unique anchor retention; Sol Round 6 PASS; Job `3052717` eliminated AUD-01 chimera; user authorized merge to main on 2026-10-29. |
+| **Phase F24** | Provenance-Safe Contiguity Recovery | `68b19f0` (baseline) | **READY_FOR_FINAL_ACCEPTANCE** | 12 architectural invariants implemented; Sol Round 11 ACCEPT; Slurm `3065181` 106/106 PASS; Slurm `3065210` R1-001 NGA50 +78.0%, R1-003 NGA50 +164.1%, 0 new misassemblies. |
