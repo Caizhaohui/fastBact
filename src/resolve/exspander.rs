@@ -404,32 +404,94 @@ impl ProvenanceTable {
             }
         }
 
-        let mut scc_ctx = vec![1u8; scc_count as usize];
-        for s in 0..scc_count {
+        // Provenance Attribution Lattice (Astra §3.1 & Ruling):
+        // 0 = Unknown (Empty/ungrounded)
+        // 1 = Single(lineage_id)
+        // 2 = Shared (Many / absorbing)
+        // Evaluated across condensation DAG in topological order (0..scc_count).rev().
+        // For an in-degree d junction, processing takes O(d) time with O(1) state per edge.
+        #[derive(Clone, Copy, PartialEq, Eq)]
+        enum LineageAcc {
+            Empty,
+            One(u32),
+            Many,
+        }
+
+        let mut scc_ctx = vec![0u8; scc_count as usize];
+        let mut scc_lineage = vec![u32::MAX; scc_count as usize];
+
+        for s in (0..scc_count).rev() {
             let su = s as usize;
-            let mut distinct_origins: SmallVec<[u32; 4]> = SmallVec::new();
+            let mut acc = LineageAcc::Empty;
+            let mut has_external_in = false;
 
             for &v in &scc_nodes[su] {
-                for ei in in_off[v as usize]..in_off[v as usize + 1] {
+                let vu = v as usize;
+                for ei in in_off[vu]..in_off[vu + 1] {
                     let (p, _) = in_adj[ei as usize];
                     let sp = scc[p as usize] as usize;
                     if sp != su {
-                        let orig = origin[p as usize];
-                        if !distinct_origins.contains(&orig) {
-                            distinct_origins.push(orig);
+                        has_external_in = true;
+                        let p_ctx = scc_ctx[sp];
+                        if p_ctx >= 2 {
+                            acc = LineageAcc::Many;
+                            break;
+                        } else if p_ctx == 1 {
+                            let orig = origin[p as usize];
+                            match acc {
+                                LineageAcc::Empty => acc = LineageAcc::One(orig),
+                                LineageAcc::One(prev) => {
+                                    if prev != orig {
+                                        acc = LineageAcc::Many;
+                                        break;
+                                    }
+                                }
+                                LineageAcc::Many => break,
+                            }
+                        } else {
+                            // Predecessor is Unknown (0). Unknown cannot certify Single.
+                            acc = LineageAcc::Many;
+                            break;
                         }
                     }
                 }
+                if acc == LineageAcc::Many {
+                    break;
+                }
             }
 
-            if distinct_origins.len() >= 2 {
-                scc_ctx[su] = 2;
-            } else {
-                scc_ctx[su] = 1;
+            if !has_external_in {
+                // Root component: if any node in SCC has length >= 500 bp, it defines its own unique Single lineage.
+                // If all nodes are short without external entry, it has no witness -> Unknown (0).
+                let long_node = scc_nodes[su].iter().find(|&&v| graph.nodes[(v as usize) >> 1].seq_len >= 500);
+                if let Some(&root_v) = long_node {
+                    acc = LineageAcc::One(root_v);
+                } else {
+                    acc = LineageAcc::Empty;
+                }
+            }
+
+            match acc {
+                LineageAcc::Empty => {
+                    scc_ctx[su] = 0;
+                    scc_lineage[su] = u32::MAX - 1;
+                }
+                LineageAcc::One(orig) => {
+                    scc_ctx[su] = 1;
+                    scc_lineage[su] = orig;
+                }
+                LineageAcc::Many => {
+                    scc_ctx[su] = 2;
+                    scc_lineage[su] = u32::MAX;
+                }
+            }
+
+            for &v in &scc_nodes[su] {
+                origin[v as usize] = scc_lineage[su];
             }
         }
 
-        let mut ctx_count = vec![1u8; nv];
+        let mut ctx_count = vec![0u8; nv];
         for v in 0..nv {
             ctx_count[v] = scc_ctx[scc[v] as usize];
         }
@@ -495,7 +557,8 @@ impl ProvenanceTable {
                         // Anchor absorption (Q8): a long single-context
                         // predecessor is a valid unique anchor; the pooled zone
                         // ahead of it does not flag it or anything behind it.
-                        if ctx_count[pu] <= 1 && graph.nodes[pu >> 1].seq_len >= 500 {
+                        // Unknown (0) does NOT absorb; only Single (1) absorbs.
+                        if ctx_count[pu] == 1 && graph.nodes[pu >> 1].seq_len >= 500 {
                             continue;
                         }
                         if nd < best[pu] {
@@ -860,9 +923,10 @@ fn score_evidence_rows(
         }
         if entry_shadow_reach > 0 {
             // Coordinate-faithful start p = u1_len - dist_u1_exit (Sol R2-F1).
-            // A read starting in [0, reach] is in the entry shadow and is inadmissible.
+            // Under Contract §3.2 & Astra ruling: p must strictly satisfy p > b + H,
+            // where b = entry_shadow_reach and H = dist.max_insert.
             let p = u1_len.saturating_sub(ev.dist_u1_exit);
-            if p <= entry_shadow_reach {
+            if (p as u64) <= (entry_shadow_reach as u64 + dist.max_insert as u64) {
                 continue;
             }
         }
@@ -896,7 +960,9 @@ pub fn score_candidate_path_prov(
     path_separation: i64,
 ) -> (u32, f64) {
     let m = prov.meta(u1.id());
-    if m.is_multi_context(u1.is_rc()) {
+    // Astra Ruling: Reject Unknown (0) and Shared (>=2) in deciding-source paths.
+    // Only Single (1) may decide forks.
+    if m.external_context_count(u1.is_rc()) != 1 {
         return (0, 0.0);
     }
     let u1_len = graph.nodes[u1.id() as usize].seq_len;
@@ -1503,8 +1569,10 @@ fn in_window_pair_weights(
         }
         if entry_shadow_reach > 0 {
             // Coordinate-faithful start p = anchor_len - dist_u1_exit (Sol R2-F1).
+            // Under Contract §3.2 & Astra ruling: p must strictly satisfy p > b + H,
+            // where b = entry_shadow_reach and H = dist.max_insert.
             let p = anchor_len.saturating_sub(ev.dist_u1_exit);
-            if p <= entry_shadow_reach {
+            if (p as u64) <= (entry_shadow_reach as u64 + dist.max_insert as u64) {
                 continue;
             }
         }
@@ -1546,7 +1614,9 @@ fn candidate_pair_weights(
     candidate: &CandidatePath,
 ) -> SmallVec<[(u32, f64); 8]> {
     let m = prov.meta(evidence_anchor.id());
-    if m.is_multi_context(evidence_anchor.is_rc()) {
+    // Astra Ruling: Reject Unknown (0) and Shared (>=2) in deciding-source paths.
+    // Only Single (1) may decide forks.
+    if m.external_context_count(evidence_anchor.is_rc()) != 1 {
         return SmallVec::new();
     }
     let anc_len = graph.nodes[evidence_anchor.id() as usize].seq_len;
@@ -3200,9 +3270,15 @@ mod tests {
         let mut prov = ProvenanceTable::default();
         prov.push_composite(NodeProvenanceMeta {
             provenance_boundary: Some(300),
+            external_context_count_fwd: 1,
+            external_context_count_rev: 1,
             ..NodeProvenanceMeta::default()
         });
-        prov.push_composite(NodeProvenanceMeta::default());
+        prov.push_composite(NodeProvenanceMeta {
+            external_context_count_fwd: 1,
+            external_context_count_rev: 1,
+            ..NodeProvenanceMeta::default()
+        });
 
         let mut matrix = PairLinkMatrix::new();
         // Both spans (620 and 320) are inside the default [250, 700] window,
@@ -3245,8 +3321,16 @@ mod tests {
 
         // Without a boundary both rows are admissible (control orientation).
         let mut unbounded = ProvenanceTable::default();
-        unbounded.push_composite(NodeProvenanceMeta::default());
-        unbounded.push_composite(NodeProvenanceMeta::default());
+        unbounded.push_composite(NodeProvenanceMeta {
+            external_context_count_fwd: 1,
+            external_context_count_rev: 1,
+            ..NodeProvenanceMeta::default()
+        });
+        unbounded.push_composite(NodeProvenanceMeta {
+            external_context_count_fwd: 1,
+            external_context_count_rev: 1,
+            ..NodeProvenanceMeta::default()
+        });
         let (count, weight) =
             score_candidate_path_prov(&matrix, &graph, &unbounded, &dist, u1, u2, 100);
         assert_eq!(count, 2);

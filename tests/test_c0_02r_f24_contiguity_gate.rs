@@ -106,8 +106,7 @@ fn bio_seq(seed: u64, len: usize, junction: &[u8]) -> Vec<u8> {
 }
 
 /// F24 P01 (Positive Control — R-I: Physically Isolated Exit Anchor):
-/// Topology: S_A(600) -> X(120) <- S_B(600)
-///           X(120) -> U(2000) -> F(100) -> {T(400), W(400)}
+/// Topology: S_A(600) -> X(120) -> U(2000) -> F(100) -> {T(400), W(400)}
 ///
 /// U is a long node (2000 bp) with single context downstream of X.
 /// Distance from X to U's 3' exit is 2000 - 30 = 1970 bp > max_insert (700 bp).
@@ -119,7 +118,6 @@ fn bio_seq(seed: u64, len: usize, junction: &[u8]) -> Vec<u8> {
 fn test_f24_p01_isolated_exit_anchor_resolves() {
     let junction = dna(slot(9000), 30);
     let sa_seq = bio_seq(101, 600, &junction);
-    let sb_seq = bio_seq(102, 600, &junction);
     let x_seq = bio_seq(103, 120, &junction);
     let u_seq = bio_seq(104, 2000, &junction);
     let f_seq = bio_seq(105, 100, &junction);
@@ -128,16 +126,15 @@ fn test_f24_p01_isolated_exit_anchor_resolves() {
 
     let mut graph = CdbgGraph::new(31);
     let sa = add_node(&mut graph, &sa_seq);
-    let sb = add_node(&mut graph, &sb_seq);
     let x = add_node(&mut graph, &x_seq);
     let u = add_node(&mut graph, &u_seq);
     let f = add_node(&mut graph, &f_seq);
     let t = add_node(&mut graph, &t_seq);
     let w = add_node(&mut graph, &w_seq);
 
-    // Links: S_A -> X, S_B -> X, X -> U, U -> F, F -> T, F -> W
+    // Links: S_A -> X, X -> U, U -> F, F -> T, F -> W
     for (from, to) in [
-        (sa, x), (sb, x), (x, u), (u, f), (f, t), (f, w)
+        (sa, x), (x, u), (u, f), (f, t), (f, w)
     ] {
         add_edge(&mut graph, from, to, 30);
     }
@@ -357,19 +354,20 @@ fn test_f24_n03_unbranched_into_confluence_stops() {
 }
 
 /// F24 P02 (Positive Control — Interval Boundary Exact Reach + 1):
-/// Node U has length L = 800 with upstream entry shadow reach b = 300.
-/// Read 1 has start coordinate p = b + 1 = 301.
-/// In exit coordinates: dist_u1_exit = L - p = 800 - 301 = 499.
+/// Node U has length L = 1600 with upstream entry shadow reach b = 300 and max_insert H = 700.
+/// Under Contract §3.2 & Astra ruling: read start p must strictly satisfy p > b + H (1000).
+/// Read starts at p = b + H + 1 = 1001.
+/// In exit coordinates: dist_u1_exit = L - p = 1600 - 1001 = 599.
 /// Read 2 on target T has dist_u2_entry = 50, path separation = 0.
-/// Span = 499 + 0 + 50 = 549, well within default [250, 700] insert size distribution.
-/// Since p = 301 > reach = 300, the read starts strictly outside the entry shadow.
+/// Span = 599 + 0 + 50 = 649, well within default [250, 700] insert size distribution.
+/// Since p = 1001 > b + H = 1000, the read starts strictly outside the entry shadow.
 /// Contract verification:
 /// 1. score_candidate_path_prov admits the row (valid_count == 1, weight > 0).
 /// 2. When provided as deciding evidence for fork F -> {T, W}, fork resolves to T.
 #[test]
 fn test_f24_p02_interval_boundary_exact_reach() {
     let mut graph = CdbgGraph::new(31);
-    let u_seq = dna(slot(501), 800);
+    let u_seq = dna(slot(501), 1600);
     let t_seq = dna(slot(502), 400);
     let u = add_node(&mut graph, &u_seq);
     let t = add_node(&mut graph, &t_seq);
@@ -399,17 +397,17 @@ fn test_f24_p02_interval_boundary_exact_reach() {
     });
 
     let mut matrix = PairLinkMatrix::new();
-    // Read starts at p = reach + 1 = 301.
-    // dist_u1_exit = 800 - 301 = 499.
-    // dist_u2_entry = 50. Span = 499 + 0 + 50 = 549 in [250, 700].
-    add_evidence_row(&mut matrix, u, t, 1, 499, 50);
+    // Read starts at p = b + H + 1 = 1001.
+    // dist_u1_exit = 1600 - 1001 = 599.
+    // dist_u2_entry = 50. Span = 599 + 0 + 50 = 649 in [250, 700].
+    add_evidence_row(&mut matrix, u, t, 1, 599, 50);
 
     let dist = InsertSizeDist::default();
     let (count, weight) = score_candidate_path_prov(&matrix, &graph, &prov, &dist, u, t, 0);
 
     assert_eq!(
         count, 1,
-        "P02: read starting at p = reach + 1 must be strictly admitted outside shadow"
+        "P02: read starting at p = b + H + 1 must be strictly admitted outside shadow"
     );
     assert!(
         weight > 0.0,
@@ -418,19 +416,20 @@ fn test_f24_p02_interval_boundary_exact_reach() {
 }
 
 /// F24 N02 (Negative Control — Interval Boundary Exactly at Reach / One bp Inside Shadow):
-/// Node U has length L = 800 with upstream entry shadow reach b = 300.
-/// Case 1: Read starts exactly at p = b = 300.
-/// dist_u1_exit = 800 - 300 = 500. Span = 500 + 0 + 50 = 550 in [250, 700].
-/// Since p = 300 <= reach = 300, the read start is inside the entry shadow [0, reach].
-/// Case 2: Read starts at p = b - 1 = 299.
-/// dist_u1_exit = 800 - 299 = 501. Span = 501 + 0 + 50 = 551 in [250, 700].
+/// Node U has length L = 1600 with upstream entry shadow reach b = 300 and max_insert H = 700.
+/// Under Contract §3.2 & Astra ruling: p <= b + H (1000) is inadmissible.
+/// Case 1: Read starts exactly at p = b + H = 1000.
+/// dist_u1_exit = 1600 - 1000 = 600. Span = 600 + 0 + 50 = 650 in [250, 700].
+/// Since p = 1000 <= b + H = 1000, the read start is inside the entry shadow [0, b + H].
+/// Case 2: Read starts at p = b + H - 1 = 999.
+/// dist_u1_exit = 1600 - 999 = 601. Span = 601 + 0 + 50 = 651 in [250, 700].
 /// Both rows fall within the entry shadow and must be filtered out.
 /// Contract verification:
 /// score_candidate_path_prov returns count == 0 and weight == 0.0.
 #[test]
 fn test_f24_n02_interval_boundary_one_bp_inside_shadow() {
     let mut graph = CdbgGraph::new(31);
-    let u_seq = dna(slot(601), 800);
+    let u_seq = dna(slot(601), 1600);
     let t_seq = dna(slot(602), 400);
     let u = add_node(&mut graph, &u_seq);
     let t = add_node(&mut graph, &t_seq);
@@ -458,17 +457,17 @@ fn test_f24_n02_interval_boundary_one_bp_inside_shadow() {
     });
 
     let mut matrix = PairLinkMatrix::new();
-    // Row 1: exactly at boundary p = reach = 300 (dist_u1_exit = 800 - 300 = 500)
-    add_evidence_row(&mut matrix, u, t, 1, 500, 50);
-    // Row 2: 1 bp inside shadow p = reach - 1 = 299 (dist_u1_exit = 800 - 299 = 501)
-    add_evidence_row(&mut matrix, u, t, 2, 501, 50);
+    // Row 1: exactly at boundary p = b + H = 1000 (dist_u1_exit = 1600 - 1000 = 600)
+    add_evidence_row(&mut matrix, u, t, 1, 600, 50);
+    // Row 2: 1 bp inside shadow p = b + H - 1 = 999 (dist_u1_exit = 1600 - 999 = 601)
+    add_evidence_row(&mut matrix, u, t, 2, 601, 50);
 
     let dist = InsertSizeDist::default();
     let (count, weight) = score_candidate_path_prov(&matrix, &graph, &prov, &dist, u, t, 0);
 
     assert_eq!(
         count, 0,
-        "N02: reads starting at p <= reach must be filtered out by entry-shadow cutoff"
+        "N02: reads starting at p <= b + H must be filtered out by entry-shadow cutoff"
     );
     assert_eq!(
         weight, 0.0,
@@ -619,5 +618,42 @@ fn test_f24_n04_unanchored_seed_branching_stops() {
     assert!(
         !f24_same_contig(&seqs, sa_tail, b1_tail) && !f24_same_contig(&seqs, sa_tail, b2_tail),
         "N04: Neither Branch1 nor Branch2 must be committed with unanchored seed"
+    );
+}
+
+/// F24 N05 (Negative Control — Inherited Shared Propagation across Condensation DAG):
+/// Topology: A(600) -> X(200) <- B(600)
+///           X(200) -> U(800)
+/// Predecessors A and B are distinct roots -> X has 2 distinct origins -> X is Shared (ctx_count == 2).
+/// Node U has single in-degree from X. Because X is Shared, U must inherit Shared state (ctx_count == 2).
+/// Contract verification:
+/// ProvenanceTable::analyze sets external_context_count == 2 for both X and U.
+/// Node U cannot absorb or serve as a single-context anchor.
+#[test]
+fn test_f24_n05_inherited_shared_propagation_lattice() {
+    let mut graph = CdbgGraph::new(31);
+    let a_seq = dna(slot(701), 600);
+    let b_seq = dna(slot(702), 600);
+    let x_seq = dna(slot(703), 200);
+    let u_seq = dna(slot(704), 800);
+
+    let a = add_node(&mut graph, &a_seq);
+    let b = add_node(&mut graph, &b_seq);
+    let x = add_node(&mut graph, &x_seq);
+    let u = add_node(&mut graph, &u_seq);
+
+    add_edge(&mut graph, a, x, 30);
+    add_edge(&mut graph, b, x, 30);
+    add_edge(&mut graph, x, u, 30);
+
+    let prov = ProvenanceTable::analyze(&graph, 700);
+
+    assert_eq!(
+        prov.meta(x.id()).external_context_count_fwd, 2,
+        "X must be multi-context (Shared) due to confluent distinct roots A and B"
+    );
+    assert_eq!(
+        prov.meta(u.id()).external_context_count_fwd, 2,
+        "U must inherit Shared state from multi-context predecessor X"
     );
 }
