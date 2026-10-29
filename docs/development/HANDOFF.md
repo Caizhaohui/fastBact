@@ -1,84 +1,207 @@
 # fastBact Development Handoff
 
+## General policy
+
+Normative cross-project collaboration rules are Multi-AI Collaboration V3.2:
+
+`~/.config/ai-collaboration/POLICY.md`
+
+That file is the only general policy. This handoff does not restate it. Antigravity, Codex, OpenCode, and Cursor do not auto-load that path. The mandatory load instruction is in the repository [`AGENTS.md`](../../AGENTS.md). Read the policy before acting. If it cannot be read, stop and report `POLICY_UNREADABLE`.
+
+On 2026-10-28 the embedded V3.1 role policy in this file was superseded. Project evidence, phase history, the verified CLI matrix, and the fastBact safety constraints below are retained. They are not a second collaboration policy.
+
+If a fastBact constraint is stricter than the general policy, keep the stricter safety or correctness requirement and record the conflict in this file.
+
+**Recorded relationship (2026-10-28):** Opus architecture calls that meet the standing authorization in the general policy do not need a new per-call user prompt. Other Claude calls, budget breaches, and unverifiable balances still follow the Claude budget section below. This does not authorize scientific-contract changes, merge, push, or release.
+
+**F23 decision and development status (2026-10-28; authoritative over older status text):**
+Status progresses to: **`F23_READY_FOR_USER_ACCEPTANCE`** (C0-02R strictly remains **NOT ACCEPTED** awaiting user final authorization as `FINAL_AUTHORIZATION_AUTHORITY`).
+
+1. **Acceptance Evidence Closure Delivered**:
+   - Primary closure artifact: [`FASTBACT_F23_ACCEPTANCE_EVIDENCE_CLOSURE.md`](file:///hpcfs/fhome/caizhh/.gemini/antigravity-cli/brain/7e7479aa-7a0c-4a62-84bd-459360983831/FASTBACT_F23_ACCEPTANCE_EVIDENCE_CLOSURE.md).
+   - Scientific audit artifact: [`FASTBACT_F23_FINAL_SCIENTIFIC_ACCEPTANCE_AUDIT.md`](file:///hpcfs/fhome/caizhh/.gemini/antigravity-cli/brain/7e7479aa-7a0c-4a62-84bd-459360983831/FASTBACT_F23_FINAL_SCIENTIFIC_ACCEPTANCE_AUDIT.md).
+2. **Forensic Attribution of R1-001 `contig_48` (QUAST 5th Misassembly)**:
+   - Evaluated under QUAST defaults (`--min-contig 200`, `--min-alignment 65`, `--ambiguity-score 0.99`).
+   - In Baseline A, `contig_64` (25,707 bp) had primary alignment coverage $25,585 / 25,707 = 99.52\% \ge 99.0\%$, triggering `One align captures most of this contig` and discarding the secondary 122 bp alignment as an insignificant tail.
+   - In Candidate F23, `contig_48` (26,211 bp) had primary coverage $25,585 / 26,211 = 97.61\% < 99.0\%$, so QUAST evaluated both alignments and reported a relocation misassembly.
+   - Bit-for-bit check confirms the first 25,707 bp of Candidate `unitig_2104` are identical to Baseline `unitig_253`. The junction is a shared pre-existing precursor from Stage 4; F23's +504 bp extension revealed it under QUAST's threshold without creating a new chimeric junction.
+3. **Independent Sol Review R6 (Verdict: PASS)**:
+   - Codex GPT-6.1 Sol Medium completed read-only review of `exspander.rs` (SHA-256 `fd59e8bdc231dbb83468c711f3d87834c51638d75941f587eb0aa1c89298790c`).
+   - Verbatim verdict: **`PASS for the specified topology and shared-PE attribution question.`**
+   - Verified that ARG refuses to advance the anchor into repeat $X$, and PAG restricts scoring strictly to $A$-keyed evidence. Evidence from $B$ or $X$ has zero deciding weight for $A$'s walk.
+4. **Qualified Assembly Limits & Contiguity Loss**:
+   - Unproven claims of universal $P(\text{error}) \ge 50\%$ or "global information-theoretic optimum" removed.
+   - Assembly limits qualified under physical non-spanning conditions ($L_{repeat} > I_{max}$). NGA50 reduction (53.6% on R1-001; 72.5% on R1-003) fully attributed to SI-2 seed withholding.
+5. **Complete Source & Binary SHA-256 Hash Reconciliation**:
+   - Full ledger documented from unpatched HEAD (`d6c459e59...`), through Sol reviews R1–R5, telemetry addition (`fd59e8bdc...`), release binary (`2f1b6229c...`, Slurm Job `3052676`), deterministic gates (`3052557`, 118/118 PASS), and real-data A/B benchmark (`3052717`).
+6. **Acceptance Disposition**:
+   - Zero modifications to `main` branch. No merge, push, or release performed.
+   - C0-02R strictly remains **NOT ACCEPTED** awaiting user directive.
+
+**Opus technical ruling (2026-10-27): `APPROVE_WITH_CONDITIONS`.** Selected design direction: track attributable/shared context from graph topology; do not reset the anchor inside shared context; exclude evidence keyed at shared-context nodes; withhold when no attributable in-horizon support exists; keep node length only as a secondary condition. Before production implementation, statically verify where fork evidence is keyed and whether unchanged T26/T27/T30/T34 contracts conflict. Then implement and independently review F1–F9, including shared-long intermediate/seed, short-predecessor bypass, adversarial weights, legal continuity, distance boundaries, reverse traversal, merge remap and re-entry; require F1–F4 to fail on current source. This is conditional design approval only: no code changed, no tests were run, and release/C0-02R acceptance remains blocked. Full ruling: /hpcfs/fhome/caizhh/.local/state/fastbact-f23-post-audit-tests/validation/F23_OPUS_FINAL_TECHNICAL_DECISION.md (SHA-256 `37255753b3a15112fc3c322a78c6ee256a9c62438bd0ccc6d36b5b6aa0985f13`). CLI reports `claude-opus-5-5` and estimates USD 0.36093875; upstream identity, effort, actual relay deduction and current balance remain unverified.
+
+**Capability evidence (2026-10-27):** Codex local model cache lists Luna,
+Terra and Sol; actual account availability may change. OpenCode lists both GLM
+IDs and GLM-5.3 previously completed independent review with effort unverified.
+Cursor CLI lists High Fast, XHigh Fast and Auto; Auto was used on F23 tests.
+`agy models` lists `gemini-3.8-flash-low`, `-medium`, and `-high`. Medium
+interactive sandbox displayed the requested Gemini and answered one no-tool
+request; Low previously ran `pwd` after one-time approval. Neither proves
+backend model/pool identity or headless Slurm capability. Headless command
+permission was denied; do not bypass permissions or enable broad allow rules.
+Claude Code 2.1.216 routes ordinary tasks through the OmniaKey launcher and
+`api.omniakey.com`; `claude auth status` bypasses that launcher and reports
+raw first-party status, so it does not establish whether relay tasks work. On
+2026-10-27, no-tool requests succeeded through the launcher with explicit
+`claude-haiku-5-5`, `claude-sonnet-5-5`, and `claude-opus-5-5`; CLI
+`modelUsage` keys matched those requests. This is relay-reported identity, not
+independent proof of the upstream backend. Sonnet and Haiku also completed
+read-only temporary-file checks; Haiku stream output recorded a `Read` tool
+call. Shell, editing, subagents, and write-worker permissions remain unverified.
+Future paid tasks require task-specific authorization; verify actual provider,
+model and effort and use least-privilege tools. Do not assume CLI cost estimates
+match relay billing.
+
+### Claude Code OmniaKey soft budget
+
+The user reports USD 50 recharged to the OmniaKey relay. The shared local
+reminder is `~/.local/state/ai-routing/claude-budget.json`. Its reported
+recharge is not a verified remaining balance: until a relay statement is
+recorded, `last_verified_balance_usd` and reliable cumulative spend are null.
+Use relay deductions as authoritative; CLI `total_cost_usd` is an estimate.
+This file is a manual reminder, not a billing limit, monitor or hard block.
+
+- Before each Claude task, check the latest recorded balance and the current
+  task's budget authorization. Unknown balance must be reported as unknown;
+  do not claim the budget is sufficient. Paid Claude calls still need task authorization, except an Opus architecture call that already satisfies the standing authorization in `~/.config/ai-collaboration/POLICY.md`.
+- After a task, update reliable cumulative spend and balance only from relay
+  billing or another reliable source. Record the source and timestamp. Keep
+  estimated CLI costs separate from verified deductions.
+- Retain a suggested USD 10 reserve. Below USD 20, prefer GLM, Gemini, Cursor
+  or Codex subscriptions. Below USD 10, request renewed explicit budget
+  authorization for a Claude call. Below USD 5, stop routine Claude work
+  unless the user explicitly approves it.
+- Sonnet 5.5 is the main Claude expert for key algorithm design and independent
+  review. Opus 5.5 handles major disputes and high-risk correctness under
+  the standing authorization in the general policy. Sonnet and Haiku still
+  require separate task authorization. Use Haiku 5.5 only for a proven speed or cost
+  advantage. Routine development and tests prefer subscription resources.
+- Do not recharge automatically, switch to another metered provider, or call
+  Claude merely to spend the balance. The soft reminder does not enforce
+  charges at the relay.
+
+**F23 current evidence:** independent OpenCode audit `CONDITIONAL_PASS`; new
+targeted tests, full Release suite, and R1-001/R1-003 A/B have not run.
+C0-02R remains **NOT ACCEPTED**. A static prediction is not a test result.
+
+
 **Project**: `fastBact`
-**Main Worktree Branch**: `fix/c0-02r-final-gate`
-**F23 Audit Worktree**: `/hpcfs/fhome/caizhh/Desktop/03_Tool_Development/fastBact-phase-f23-unique-anchor-worktree`, branch `feature/c0-02r-phase-f23-unique-anchor`, source code baseline `7bdc6f962f93d54cda192d47fb410e046fd5a627`.
+**Primary Worktree Branch**: `fix/c0-02r-final-gate`
 **Base Commit**: `b9727c3ab372f7b995e439d92b72c7a4bfd051cf` (C0-02 baseline)
 **Main/Upstream**: `dac6a57` (`origin/main`, `origin/master`)
-**Primary Controller**: Codex GPT-6 Luna Low. Antigravity Gemini 3.8 Flash takes over controller duties only when Codex quota is exhausted. If both are unavailable, save HANDOFF and pause; Cursor remains a worker.
-**Formal GLM Route**: OpenCode CLI through the existing Zhipu AI Coding Plan only. Routine work uses `zhipuai-coding-plan/glm-5.3-flash`; complex diagnosis and independent review use `zhipuai-coding-plan/glm-5.3`. The installed model list confirms these IDs. Reasoning variants, including `#max`, are unverified and must not be claimed. Do not fall back to another provider without authorization.
-**Development Workers**: Antigravity Gemini 3.8 Flash for tests, Slurm, benchmark, bioinformatics, and auxiliary development; Cursor Pro Auto/Grok for suitable work when GLM/Gemini is limited or unsuitable. Cursor never controls or preempts a running task. Claude Sonnet/Opus and Codex GPT-6.1 Sol keep their authorized specialist roles. DeepSeek API requires explicit authorization.
+**Default Controller**: Antigravity CLI (Gemini 3.8 Flash, Medium Reasoning, Default Speed, Auth: Google AI Pro). Sole default execution controller.
+**Development and Review Resources**: Role duties and provider order are defined only in `~/.config/ai-collaboration/POLICY.md`. Local verified IDs are in the CLI matrix below.
+**Model Routing**: The general routing policy is `~/.config/ai-collaboration/POLICY.md`. This handoff records the fastBact binding, verified CLI matrix, and project status. Root [`AGENTS.md`](../../AGENTS.md) is the project entry and carries the mandatory load instruction. No separate `MODEL_ROUTING.md` exists.
 **Active Task Board**: [`ACTIVE_TASK.md`](./ACTIVE_TASK.md) (mirrored at [`repo root`](../../ACTIVE_TASK.md))
 **Specific Phase Ledger**: [`C0_02R_HANDOFF.md`](./C0_02R_HANDOFF.md)
 **Audit Findings Registry**: [`AUDIT_FINDINGS.md`](./AUDIT_FINDINGS.md)
+
+### Current F23 Handoff
+
+- **Status**: independent F23 audit `CONDITIONAL_PASS`; new targeted tests and further acceptance gates remain pending. C0-02R remains **NOT ACCEPTED**.
+- **F23 worktree**: `/hpcfs/fhome/caizhh/Desktop/03_Tool_Development/fastBact-phase-f23-unique-anchor-worktree`, branch `feature/c0-02r-phase-f23-unique-anchor`, HEAD `7bdc6f962f93d54cda192d47fb410e046fd5a627`. The main worktree remains separate at `fix/c0-02r-final-gate`; do not infer merge or cherry-pick.
+- **Implementation**: Horizon guard commit `08efc6b1aae6c7499bd79618e12f1269f556962a`; F23 evidence/diagnosis commit `7bdc6f962f93d54cda192d47fb410e046fd5a627`.
+- **Regression history**: Job `3010914` reported 38/42 with T26, T27, T30, and T34 failing. Job `3011496` later reported 42/42 but remains **TESTED_SNAPSHOT_UNVERIFIED** because it recorded no source SHA.
+- **Current-HEAD verification**: Job `3020949` ran on `vnode1` against full SHA `7bdc6f962f93d54cda192d47fb410e046fd5a627` (tree `33f8a148c94cd73b6cfbe15b4de6bf2628f88d4f`). Commands: `cargo test --release --test test_c0_02r_state_semantics_gate` (42 passed, 0 failed, 0 ignored; exit 0) and `cargo test --release --test test_c0_02r_unique_anchor_gate` (2 passed, 0 failed, 0 ignored; exit 0). Slurm exit `0:0`. Unpiped log: `/hpcfs/fhome/caizhh/.local/state/codex-with-chatgpt/f23-verify-7bdc6f962f93d54cda192d47fb410e046fd5a627-3020949.log`; SHA-256 `2c4f7ea7145be3d8f0f4842d79251f13be43779a2f028359be8edb71615a770c`.
+- **Test infrastructure**: Jobs `3010866` and `3010889` are Slurm `COMPLETED` with exit 0 despite inner integration-test failures. Their scripts pipe Cargo output through `tail`/`grep` without `pipefail`, so pipeline exit status can mask test failure. Job `3020949` is the current-HEAD targeted verification and records Cargo and Slurm exit statuses without output pipelines.
+- **Independent-review routing**: Prepare F23 review through OpenCode with explicit model `zhipuai-coding-plan/glm-5.3` in a fresh read-only session. The installed OpenCode model directory confirms this model ID. Reasoning variants, including `#max`, remain unverified; record effort as `EFFORT_UNVERIFIED`. Do not treat prior ZCode configuration or simulated adapter output as current CLI evidence. Do not start the review until the read-only execution profile is confirmed.
+- **Next gate**: targeted test execution, independent evidence review, then Release and selective A/B only if their gates pass. Existing baseline tests are green; new targeted tests remain unrun and C0-02R acceptance remains pending.
 
 ---
 
 ## 1. Operating Rules & Engineering Principles
 
-1. **Controller and Worker Assignment**:
-   - Codex GPT-6 Luna Low is the default controller. Antigravity Gemini 3.8 Flash takes over controller duties when Codex quota is exhausted. If both are unavailable, preserve HANDOFF and pause; Cursor is never controller.
-   - OpenCode with the existing Zhipu AI Coding Plan is the sole formal GLM route. Use `zhipuai-coding-plan/glm-5.3-flash` for routine development and `zhipuai-coding-plan/glm-5.3` for complex diagnosis and independent review. The installed model list confirms these IDs. Reasoning variants, including `#max`, are unverified; do not claim Max or silently select another provider.
-   - Antigravity Gemini 3.8 Flash handles tests, Slurm, benchmarks, bioinformatics, and auxiliary development.
-   - Cursor Pro Auto/Grok handles suitable development work when GLM/Gemini is limited or unsuitable. Preserve an active task and worktree; never preempt a running Cursor worker or assign two writers to one worktree.
-   - Claude Sonnet 5.5 High handles key algorithm design and independent review. Claude Opus 5.5 High is reserved for major architecture and difficult correctness disputes. Third-party paid calls require explicit authorization.
-   - Codex GPT-6.1 Sol Medium handles key Rust algorithms and high-risk defects. High requires explicit authorization.
-   - DeepSeek API requires explicit user authorization and is never automatic fallback.
+1. **Roles and autonomous execution**:
+   - Defined only by `~/.config/ai-collaboration/POLICY.md` (Multi-AI Collaboration V3.2).
+   - This file does not assign a second controller or developer priority.
+   - **DeepSeek API**: explicit user authorization is required; never use it as an automatic fallback. This project constraint is additional to the general provider list.
 2. **Shared Correctness and Safety Constraints**:
-   - All agents follow deterministic correctness, evidence, permissions, and artifact-preservation rules.
-   - Write tasks use an isolated Git worktree with one writer. Do not infer merge or cherry-pick between independent worktrees.
-   - Before any external CLI call, verify the actual model ID, provider, auth route, permission mode, and invocation behavior. Do not silently switch to a paid provider or an unverified model variant.
-   - Preserve task, Git, and test state when changing workers. If Codex and Antigravity are both unavailable, write HANDOFF and pause controller work.
+   - All agents follow the same deterministic correctness, evidence, permissions, and artifact-preservation rules in this handoff.
+   - Write tasks require an isolated Git worktree. Assign one writer per worktree at a time; other agents sharing it remain read-only unless explicitly assigned as its sole writer.
+   - Before an external CLI call, verify its actual parameters, model ID, authentication mode, and non-interactive behavior. Record the actual model and effort used. Never silently switch to a paid API or a higher-cost model.
+   - If Antigravity Controller is unavailable, preserve HANDOFF and pause automatic controller work without changing default controller identity.
 3. **Slurm Compute Exclusivity**:
-   - All Rust compilation/tests, assembly pipelines, and QUAST evaluations run on Slurm compute nodes in the `qfree` partition.
+   - All Rust compilation (`cargo build`, `cargo test`, `cargo check`), assembly pipelines, and QUAST evaluations MUST run on Slurm compute nodes (`qfree` partition, typically `vnode1`).
+   - Login nodes must never execute compilation or assembly workloads.
 4. **Git Protection & Historical Data Integrity**:
-   - Never force-push or automatically merge. Never run destructive reset/clean commands. Preserve untracked files and historical benchmark/evidence artifacts.
+   - Never auto-merge `main` or force-push (`git push --force`).
+   - Never execute destructive operations: `git reset --hard`, `git clean -fd`, `rm -rf`.
+   - Never overwrite or delete historical benchmark results or frozen baseline artifacts.
 5. **Deterministic Verification**:
-   - Core correctness changes require deterministic counterexamples and evidence before acceptance.
+   - All core correctness issues and bug fixes must have deterministic counter-examples proving red before green, followed by regression testing.
 
 ---
 
-## 2. External Model & Permission Routing Policy
+## 2. Execution Permissions and CLI Safety
 
 ### Permission Levels
 
 | Permission Level | Description | Execution Constraints |
 | :--- | :--- | :--- |
-| **`READ_ONLY`** | Code and evidence inspection | No workspace modifications |
-| **`WORKSPACE_WRITE`** | Authorized code edits | Isolated worktree; one writer |
-| **`HUMAN_APPROVAL`** | High-cost or sensitive action | Explicit user authorization before invocation |
+| **`READ_ONLY`** (Default) | Code analysis, algorithm inspection, and existing result review | Shares project source view. No workspace modifications permitted. |
+| **`WORKSPACE_WRITE`** | Concrete authorized code edits | Allowed **only** inside an isolated Git worktree. Requires explicit user approval. Never modify active working branch. |
+| **`HUMAN_APPROVAL`** | High-risk, destructive, or high-cost actions | Requires explicit user sign-off before invocation. |
 
-### Approval and Permission Rules
-- Third-party paid Claude calls require explicit user authorization; Opus requires explicit authorization.
-- Do not use `--auto`, `--yolo`, `--force`, or dangerous permission bypass flags for review.
-- An OpenCode F23 review must use a verified read-only agent/profile. That execution profile is not yet confirmed; keep the audit prepared but do not start it.
-- Never inspect or print authentication material. Do not invoke an unapproved provider or fallback.
+### Mandatory Approval Triggers
+The following require explicit user authorization before execution:
+- Any Claude call outside the Opus 5.5 standing authorization in `~/.config/ai-collaboration/POLICY.md`, and any Opus call that would exceed that authorization.
+- Any transition of an external CLI to **`WORKSPACE_WRITE`**.
+- Any authentication mode that could incur additional API charges (e.g., fallback to pay-per-token API keys).
+- Submitting large-scale or high-duration Slurm tasks.
+- Installing external dependencies over the network or broadening filesystem access.
 
-### Current Model Routing
+### Strictly Prohibited Flags
+- `codex --dangerously-bypass-approvals-and-sandbox` / `--yolo`
+- `claude --dangerously-skip-permissions` / `--allow-dangerously-skip-permissions`
+- `agent --force` / `--yolo`
+- `agy --dangerously-skip-permissions`
 
-| Tool | Provider / Auth | Task | Model ID | Reasoning | Permission / Invocation |
-| :--- | :--- | :--- | :--- | :--- | :--- |
-| **OpenCode** | Existing Zhipu AI Coding Plan | Routine implementation, tests, scripts | `zhipuai-coding-plan/glm-5.3-flash` | CLI default; variant unverified | Explicit model and provider; no automatic provider fallback |
-| **OpenCode** | Existing Zhipu AI Coding Plan | Complex diagnosis and F23 independent review | `zhipuai-coding-plan/glm-5.3` | `EFFORT_UNVERIFIED`; `#max` unverified | F23 review requires verified read-only agent/profile |
-| **Antigravity** | Existing Gemini subscription | Tests, Slurm, benchmarks, bioinformatics; fallback controller | Gemini 3.8 Flash | Use an installed selectable effort and record it | Preserve normal permission prompts; no bypass |
-| **Cursor Pro** | Subscription | Suitable development worker | Auto / Grok 4.7 High or XHigh, if available | Actual mode must be checked | Manual handoff until execution entry is verified; never controller |
-| **Claude Sonnet** | Authorized third-party/local session | Key algorithm design and independent review | Sonnet 5.5 | High | Explicit authorization for paid calls |
-| **Claude Opus** | Authorized third-party/local session | Major architecture/correctness disputes | Opus 5.5 | High | Explicit authorization |
-| **Codex** | ChatGPT OAuth | High-risk Rust algorithms and defects | GPT-6.1 Sol | Medium; High by authorization | Read-only for review; use isolated worktree for writes |
+### CLI Capability, Verified Model & Flag Routing Matrix
 
-OpenCode 2.1.4 currently lists `zhipuai-coding-plan/glm-5.3`, `glm-5.3-flash`, and `glm-5.3-highspeed`. The CLI accepts `provider/model#variant` syntax, but no GLM reasoning variant has been verified. Do not claim GLM-5.3 Max. ZCode use in older logs is historical and is not a current execution route.
+Role duties and autonomous escalation live in `~/.config/ai-collaboration/POLICY.md`. The matrix below is the verified fastBact invocation record. It is not a second policy.
 
-### Simplified Quota State
-- Before selecting a GLM/Gemini worker, read `python3 ~/.local/share/ai-routing/quota_manager.py status`; use its `route <task_type>` output as a recommendation. Do not read the manager source/tests at every session start.
-- Shared state: `~/.local/state/ai-routing/quota-state.json`. GLM and Gemini pools are independent. `UNKNOWN` means availability is unconfirmed.
-- Record only an explicit limit with `record-limit <pool_id> --observed-at <ISO-8601-UTC>`. Add `--retry-after <ISO-8601-UTC>` only if the provider supplied a trustworthy recovery time. Otherwise the first retry is eligible about five hours after the first limit; a further explicit limit schedules another retry about 45 minutes later. Expiry does not automatically restore availability.
-- Record a successful normal task with `record-success <pool_id> --observed-at <ISO-8601-UTC> --identity-verified --pool-confirmed` only when provider, model, pool, and execution success are confirmed. Network, auth, permission, and model errors do not clear a limit.
-- This is a local state recorder, not a real CLI output parser or monitor. Stage 3A adapter envelopes are simulation-only. Do not infer limits from arbitrary text or run automatic probes.
+| Tool | Verified Binary Path | Current Auth Mode | Verified binding | Verified Model ID | Reasoning Effort | Default Permissions / CLI Invocation Pattern |
+| :--- | :--- | :--- | :--- | :--- | :--- | :--- |
+| **Antigravity** | `~/.local/bin/agy` | Google AI Pro | **Controller** (Task planning, sequencing, gate checks, handoffs) | `gemini-3.8-flash-medium` | Medium | `agy --model gemini-3.8-flash-medium --sandbox`; approve commands individually; never use `--dangerously-skip-permissions` |
+| **OpenCode** | `~/.opencode/bin/opencode` | Existing Zhipu AI Coding Plan login | **Developer (Priority 1)**: Routine development | `zhipuai-coding-plan/glm-5.3-flash` | CLI default; variant unverified | `opencode run --model zhipuai-coding-plan/glm-5.3-flash --format json <prompt>`; never add `--auto` by default |
+| **OpenCode** | `~/.opencode/bin/opencode` | Existing Zhipu AI Coding Plan login | **Developer (Priority 1)**: Complex development | `zhipuai-coding-plan/glm-5.3` | `EFFORT_UNVERIFIED`; `#max` not verified | `opencode run --model zhipuai-coding-plan/glm-5.3 --format json <prompt>`; prioritize consuming GLM quota |
+| **Cursor Pro** | `~/.local/bin/cursor-agent` | Cursor Pro subscription | **Developer (Priority 2)**: Fallback implementation | `grok-4.7-high-fast` (default) / `grok-4.7-xhigh-fast` (complex) | High Fast / XHigh Fast | `cursor-agent -p --model <model> <prompt>`; strictly when GLM is exhausted; if CLI is constrained, use human handoff |
+| **Codex** | `~/.local/bin/codex` | ChatGPT OAuth | **Reviewer**: Code, test, Oracle & regression review | `gpt-6.1-terra` | Medium | `codex exec -m gpt-6.1-terra -c model_reasoning_effort="medium" <prompt>`; strictly independent of implementer |
+| **Codex** | `~/.local/bin/codex` | ChatGPT OAuth | **Reviewer**: Core algorithm, state machine & correctness | `gpt-6.1-sol` | Medium (High upon authorization) | `codex exec -m gpt-6.1-sol -c model_reasoning_effort="medium" <prompt>`; independent review |
+| **Codex** | `~/.local/bin/codex` | ChatGPT OAuth | **Validator**: Test validation, Slurm/Cargo exit code & gate checks | `gpt-6-luna` | Low (higher if justified) | `codex exec -m gpt-6-luna -c model_reasoning_effort="low" <prompt>`; checks evidence, never replaces test evidence |
+| **Codex** | `~/.local/bin/codex` | ChatGPT OAuth | **Architect (On Demand)**: High-risk design & scientific contracts | `gpt-6-astra` | Low / Medium / High | Verified in cache (`gpt-6-astra`); single invocation per decision; cannot override deterministic tests |
+| **Claude Code** | `~/.local/share/omniakey/bin/claude` | User's third-party relay API | **Architect (On Demand)**: High-risk technical rulings | `claude-opus-5-5` | Verified per call | Requires explicit task budget authorization; check `claude-budget.json` reminder; reserve USD 10 |
+
+The OpenCode model directory lists `zhipuai-coding-plan/glm-5.3`, `glm-5.3-flash`, and `glm-5.3-highspeed`. The CLI accepts a `#variant` syntax, but no reasoning variant has been verified for these models. Do not claim GLM-5.3 Max.
+
+Antigravity 1.4.8 lists `gemini-3.8-flash-low`, `gemini-3.8-flash-medium`, and `gemini-3.8-flash-high`. Gemini 3.8 Flash Medium serves as the primary controller. Do not use `--dangerously-skip-permissions`.
+
+Cursor CLI is available via `~/.local/bin/cursor-agent` (`grok-4.7-high-fast`, `grok-4.7-xhigh-fast`). If non-interactive CLI worker execution is restricted or requires interactive IDE handling, record as human handoff mode.
+
+Codex models `gpt-6.1-terra`, `gpt-6.1-sol`, `gpt-6-luna`, and `gpt-6-astra` are verified in local model cache (`~/.codex/models_cache.json`).
 
 ### Execution Safety & Subprocess Rules
-- Python subprocesses use argument arrays and `shell=False`; never build unvetted shell strings.
-- External reviews are informational and do not automatically establish verification PASS.
-- Log authorized external review invocations in `AUDIT_FINDINGS.md` with task ID, actual model/effort, permissions, source SHA, sanitized command, exit code, output location, findings, and next actions.
+- When calling external CLIs via Python, always use argument arrays (`argv: list[str]`) with `shell=False`.
+- Never perform unvetted string concatenation into shell commands.
+- External model reviews are informational evidence; they do not automatically constitute verification PASS.
+- Every invocation must be logged to [`AUDIT_FINDINGS.md`](./AUDIT_FINDINGS.md) with Task ID, Agent, Model, Effort, Permissions, Git SHA, sanitized CLI command, exit code, output path, findings, and next actions.
+
+### Quota & Rate Limit Handling
+- Before choosing a GLM/Gemini worker for a task, read the shared summary with `python3 ~/.local/share/ai-routing/quota_manager.py status`; use `route routine`, `route slurm`, or another supported task type as a recommendation. Do not read manager source/tests on every session start.
+- State path: `~/.local/state/ai-routing/quota-state.json`; tool: `~/.local/share/ai-routing/quota_manager.py`. GLM and Gemini pools are independent. `UNKNOWN` means availability is unconfirmed, not exhausted or verified available.
+- Record only an explicit quota exhaustion observation. Use `record-limit <pool_id> --observed-at <ISO-8601-UTC>` and add `--retry-after <ISO-8601-UTC>` only when the platform supplied a trustworthy time. Without one, the manager schedules the first retry about five hours after first limit and later retries about 45 minutes after another explicit limit. Expiry only makes a normal task retry eligible; it never changes status automatically.
+- After a normal successful request, use `record-success <pool_id> --observed-at <ISO-8601-UTC> --identity-verified --pool-confirmed` only when provider, model, pool, and success are actually confirmed. Ordinary network, auth, permission, or model errors do not clear a limit. Preserve task and worktree state when handing work to Cursor; do not preempt a running worker or allow multiple writers in one worktree.
+- This manager is a local state recorder, not a real CLI parser or monitor. Stage 3A adapter envelopes are simulation-only. Do not infer limits from arbitrary log text, run automatic probes, or assume a five-hour timer proves recovery.
 
 ---
 
@@ -96,8 +219,9 @@ OpenCode 2.1.4 currently lists `zhipuai-coding-plan/glm-5.3`, `glm-5.3-flash`, a
 | **Phase F18** | Independent Codex Audit of F17-I | `c37ef6e` | **CONDITIONAL PASS** | Audit `AUDIT-20261022-013`: 0 P0, 0 P1, 5 P2 test findings. Commit `39f11ca`. |
 | **Phase F19** | Codex-Led P2 Verification Repair | `a993047` | **AUDITED (4/5 CLOSED, 1 P2 OPEN)** | Repaired oracle and sensitivity tests. Audit `AUDIT-20261022-014`. Commit `0606be4`. 183 tests pass on `vnode1`. |
 | **Phase F20** | Codex-Led Selective Real-Data A/B Benchmark (R1-001, R1-003) | `0606be4` vs `b9727c3` | **COMPLETED (REGRESSION DETECTED)** | Slurm job `3001561` on `vnode1`. R1-003 improved (-50% misassemblies, 0 indels, +10% NGA50); R1-001 regressed (+1 misassembly, indels 0.48 $\to$ 1.03). Audit `AUDIT-20261022-015`. C0-02R strictly NOT ACCEPTED. |
-| **Phase F21-A** | Targeted Forensic Investigation of Real-Data Regression | `4b956a4` | **FORENSIC COMPLETED** | Proved R1-001 extra misassembly is real chimeric join (`contig_16`, 7 short nodes). Proved base errors are 84.6% boundary polishing artifacts. Audit `AUDIT-20261023-016`. C0-02R strictly NOT ACCEPTED. Commit `07e0e5f`. |
-| **Phase F21-B** | Repeat-Join Decision Provenance & Mechanism Verification | `07e0e5f` | **AUDITED (FAIL / QUALIFIED)** | Provenance ledger & graph geometry verified; Baseline A pre-existence confirmed in R1-003; coverage loss reconciled to 25.5 kb. Audit `AUDIT-20261023-017`. Status: `PHASE_F21B_DIAGNOSTIC_EVIDENCE_REQUIRED`. C0-02R strictly NOT ACCEPTED. |
+| **Phase F21-A** | Targeted Forensic Investigation of Real-Data Regression | `4b956a4` | **FORENSIC COMPLETED** | Proved R1-001 extra misassembly is real chimeric join (`contig_16`, 7 short nodes). Proved base errors are 84.6% boundary polishing artifacts. Audit `AUDIT-20261023-016`. C0-02R strictly NOT ACCEPTED. |
+| **Phase F21-B** | Repeat-Join Decision Provenance & Mechanism Verification | `07e0e5f` | **AUDITED (FAIL / QUALIFIED)** | Static evidence reconstruction of the 7-node repeat chain decision. Audit `AUDIT-20261023-017`: derived evidence insufficient to certify mechanism (`u1476` locus specificity contradicted; pair-weight reconciliation failures). Commit `2ae4acc`. C0-02R strictly NOT ACCEPTED. |
+| **Phase F22-D** | Runtime Repeat-Join Decision Trace (`resolver-trace` diagnostics) | `2ae4acc` | **DIAGNOSTIC COMPLETE** | Feature-gated runtime decision/pair tracing; bit-identical non-interference verified vs F20 Candidate B on R1-001/R1-003. Root cause: anchor loss onto shared repeat node `u2102` (`unitig_1476`) let ectopic 3.66 Mb PE evidence hijack exit choice at `DEC_000022` (16:6, ratio 2.819 > 1.2). Diagnostics commit `9c543a0` (not merged to production). Counterfactual matrix recommends F23 = Option A Unique Anchor Invariant (B/D/E rejected). Independent audit deferred to post-F23 benchmark. C0-02R strictly NOT ACCEPTED. |
 
 ---
 

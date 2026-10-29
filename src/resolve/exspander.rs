@@ -4,10 +4,11 @@
 //! connecting unique flanking unitigs across repetitive regions.
 
 use crate::graph::cdbg::{CdbgGraph, DirUnitigId, GraphEdge, ResolverLifecycleState, UnitigNode};
-use crate::resolve::mapper::{InsertSizeDist, PairLinkMatrix};
+use crate::resolve::mapper::{InsertSizeDist, PairLinkMatrix, ReadPairEvidence};
 use hashbrown::HashSet;
 use smallvec::SmallVec;
-use std::collections::VecDeque;
+use std::cmp::Reverse;
+use std::collections::{BinaryHeap, VecDeque};
 
 /// Configuration parameters for exSPAnder repeat resolution.
 #[derive(Clone, Copy, Debug)]
@@ -40,11 +41,559 @@ pub struct JunctionStats {
     pub rejected_ambiguous_joins: usize,
     /// Joins rejected due to sequence mismatch or invalid overlap
     pub rejected_invalid_joins: usize,
-    /// Fork decisions withheld by the F23 horizon guard: the walk's last
-    /// long-unique anchor was beyond the insert horizon at a branching repeat,
-    /// so the fork refused to decide on repeat-internal (locus-ambiguous)
-    /// links. Counts horizon rejections only.
+    /// Fork decisions and seed walks withheld by the F23 provenance guard:
+    /// the walk's last long-unique anchor was beyond the insert horizon at a
+    /// branching repeat (horizon rejection, CS-3), no attributable anchor
+    /// covered a fork in a contaminated zone (PAG), a branch had no
+    /// admissible pairs under PAG (§3.10.2), or the seed itself was not
+    /// anchor-eligible (SI-2 seed rejection).
     pub withheld_no_unique_anchor: usize,
+    /// Breakdown: SI-2 unanchored seed rejected before exploration
+    pub withheld_si2_seed: usize,
+    /// Breakdown: fork distance exceeds max_insert
+    pub withheld_horizon: usize,
+    /// Breakdown: contaminated fork with no attributable anchor
+    pub withheld_no_attributable_anchor: usize,
+    /// Breakdown: contaminated branch with no admissible pairs under PAG
+    pub withheld_pag_empty: usize,
+}
+
+// ==========================================================================
+// F23 provenance architecture — Opus Hybrid Option A+B
+// (DCC + BCI + PB, enforced at runtime by ARG and PAG)
+//
+// Reference: F23_FINAL_PROVENANCE_ARCHITECTURE.md (Claude Opus 5.5 ruling):
+//   DCC  — Directed Context Count per node orientation (§3.1, Q1/Q2)
+//   BCI  — Bounded Contamination Index via bounded reverse search (§Q6, LB-1)
+//   PB   — Provenance Boundary scalar on composite unitigs (§Q4, MR-1/MR-2)
+//   ARG  — Anchor Reset Gate (§3.7, AR-1..AR-4)
+//   PAG  — PE Admissibility Gate: in a shared/contaminated zone, evidence
+//          keyed at the walk head has zero deciding weight and candidates
+//          are scored from the unique anchor instead (§3.6)
+// ==========================================================================
+
+/// Provenance metadata for a single unitig node, kept in a side table keyed by
+/// node id (the graph node itself is untouched).
+///
+/// All classification fields are orientation-specific (DSC-3): a walk that
+/// enters a node in the reverse-complement direction reads the `_rev` fields,
+/// computed independently on the reverse-complement strand graph.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct NodeProvenanceMeta {
+    /// DCC: number of distinct external incoming lineages (graph context
+    /// sources) that reach this node's forward orientation. Capped at 2.
+    /// 0 means no external context is established (a cyclic source SCC with
+    /// no 0-in-degree vertex): attribution is unknown, so the node is not
+    /// contaminating but is never anchor-eligible (DCC strict, AR-2).
+    pub external_context_count_fwd: u8,
+    /// DCC: same, for the reverse-complement orientation.
+    pub external_context_count_rev: u8,
+    /// BCI: a multi-context confluence is reachable from the forward
+    /// orientation within `max_insert` bp (pooled-locus zone lies ahead).
+    pub bci_fwd: bool,
+    /// BCI: same, for the reverse-complement orientation.
+    pub bci_rev: bool,
+    /// BCI downstream: this node is within `max_insert` bp downstream of a
+    /// multi-context confluence in the walk direction.
+    pub bci_downstream_fwd: bool,
+    /// BCI downstream: same, for reverse-complement orientation.
+    pub bci_downstream_rev: bool,
+    /// PB: for composite unitigs, the spliced 5'-offset at which the sequence
+    /// shifts from a unique-locus prefix to a pooled-locus suffix
+    /// (`None` = uniformly classified). Merge contract MR-1. A read at
+    /// 5'-offset `p` has `dist_u1_exit = seq_len - p`, so pairs from the
+    /// pooled suffix — those with `dist_u1_exit <= seq_len - boundary` —
+    /// are inadmissible as unique-locus evidence (MR-2).
+    pub provenance_boundary: Option<u32>,
+}
+
+impl NodeProvenanceMeta {
+    /// DCC context count in the given walk direction.
+    #[inline]
+    pub fn external_context_count(&self, is_rc: bool) -> u8 {
+        if is_rc {
+            self.external_context_count_rev
+        } else {
+            self.external_context_count_fwd
+        }
+    }
+
+    /// BCI flag in the given walk direction.
+    #[inline]
+    pub fn bci(&self, is_rc: bool) -> bool {
+        if is_rc {
+            self.bci_rev
+        } else {
+            self.bci_fwd
+        }
+    }
+
+    /// BCI downstream flag in the given walk direction.
+    #[inline]
+    pub fn bci_downstream(&self, is_rc: bool) -> bool {
+        if is_rc {
+            self.bci_downstream_rev
+        } else {
+            self.bci_downstream_fwd
+        }
+    }
+
+    /// True when this orientation of the node is a pooled (multi-context) locus.
+    #[inline]
+    pub fn is_multi_context(&self, is_rc: bool) -> bool {
+        self.external_context_count(is_rc) >= 2
+    }
+
+    /// True when traversing this orientation taints the walk: shared locus or
+    /// bounded contamination ahead (§3.4 step 1).
+    #[inline]
+    pub fn contaminating(&self, is_rc: bool) -> bool {
+        self.is_multi_context(is_rc) || self.bci(is_rc)
+    }
+}
+
+fn ctx_insert(set: &mut SmallVec<[u32; 2]>, id: u32) {
+    if set.len() < 2 && !set.contains(&id) {
+        set.push(id);
+    }
+}
+
+/// Union of capped context sets. Capping at 2 distinct identities preserves
+/// the only property the gates need — whether at least two independent
+/// external lineages reach a node — through arbitrary merge orders.
+fn ctx_merge(dst: &mut SmallVec<[u32; 2]>, src: &SmallVec<[u32; 2]>) {
+    for &id in src {
+        if dst.len() >= 2 {
+            return;
+        }
+        if !dst.contains(&id) {
+            dst.push(id);
+        }
+    }
+}
+
+/// Side table of [`NodeProvenanceMeta`], one entry per graph node (including
+/// composite unitigs pushed during resolution).
+#[derive(Clone, Debug, Default)]
+pub struct ProvenanceTable {
+    metas: Vec<NodeProvenanceMeta>,
+}
+
+/// Traces an incoming branch backwards along unique predecessor chains to identify
+/// its upstream origin locus. A node is an origin if it is a long unitig (>= 500 bp),
+/// a graph source root (in-degree == 0), or a branching junction (in-degree > 1).
+/// Branches originating from the same upstream node (e.g. bubble alternatives)
+/// return the same origin, distinguishing bubbles from multi-locus repeats.
+fn find_branch_origin(
+    graph: &CdbgGraph,
+    in_off: &[u32],
+    in_adj: &[(u32, u8)],
+    start_v: u32,
+) -> Option<u32> {
+    let mut curr = start_v;
+    let mut dist = 0usize;
+    let mut visited: SmallVec<[u32; 16]> = SmallVec::new();
+    loop {
+        if graph.nodes[(curr >> 1) as usize].seq_len >= 500 {
+            return Some(curr);
+        }
+        let in_start = in_off[curr as usize];
+        let in_end = in_off[curr as usize + 1];
+        let deg = in_end - in_start;
+        if deg == 0 {
+            return Some(curr);
+        }
+        if deg > 1 {
+            return Some(curr);
+        }
+        let (p, ov) = in_adj[in_start as usize];
+        let c_len = graph.nodes[(curr >> 1) as usize].seq_len as usize;
+        dist += c_len.saturating_sub(ov as usize);
+        if dist > 2000 {
+            return Some(curr);
+        }
+        if visited.contains(&p) {
+            return Some(curr);
+        }
+        visited.push(p);
+        curr = p;
+    }
+}
+
+impl ProvenanceTable {
+    /// Static provenance analysis over the whole graph: DCC and BCI, computed
+    /// once per resolution in O(V + E) on the strand-directed walk graph.
+    ///
+    /// The walk graph has one vertex per (node, strand) orientation; every
+    /// directed edge `u -> v` appears together with its reverse-complement
+    /// twin `v.twin() -> u.twin()`, so forward and reverse walks read
+    /// symmetric, independently computed fields (DSC-1..DSC-3).
+    ///
+    /// DCC: context sources are the graph's external entries — strand
+    /// vertices with no incoming external edge. Self-loops are internal to
+    /// the node's equivalence class and never introduce a context (AR-4).
+    /// Source lineages propagate over the SCC condensation: simple bubbles
+    /// diverging from a single ancestor reconverge with one context, while
+    /// nodes with two or more independent external incoming lineages get
+    /// `external_context_count == 2` (capped).
+    ///
+    /// BCI: bounded multi-source reverse search from every multi-context
+    /// vertex, with `max_insert` budget and edge cost `seq_len - overlap`
+    /// (matching the walk's overlap-adjusted anchor distance). Any node that
+    /// leads into a multi-context confluence within the horizon is flagged.
+    /// A long (>= 500 bp) single-context predecessor absorbs the contamination
+    /// instead of propagating it: the region behind a clean unique anchor
+    /// stays attributable, so the anchor itself is never flagged (Q8
+    /// over-truncation avoidance; F5/F6 contracts).
+    pub fn analyze(graph: &CdbgGraph, max_insert: usize) -> Self {
+        let n = graph.nodes.len();
+        let nv = n * 2;
+
+        // Strand-directed CSR adjacency (skipping deleted nodes and AR-4
+        // self-loops).
+        let mut out_deg = vec![0u32; nv];
+        let mut in_deg = vec![0u32; nv];
+        let mut edges: Vec<(u32, u32, u8)> = Vec::new();
+        for id in 0..n {
+            if graph.nodes[id].is_deleted {
+                continue;
+            }
+            for rc in [false, true] {
+                let from = DirUnitigId::new(id as u32, rc);
+                for e in graph.nodes[id].edges(rc) {
+                    if e.target == from || e.target.id() as usize >= n {
+                        continue;
+                    }
+                    if graph.nodes[e.target.id() as usize].is_deleted {
+                        continue;
+                    }
+                    edges.push((from.0, e.target.0, e.overlap_k));
+                    out_deg[from.0 as usize] += 1;
+                    in_deg[e.target.0 as usize] += 1;
+                }
+            }
+        }
+
+        let build_csr = |deg: &[u32]| -> (Vec<u32>, Vec<(u32, u8)>) {
+            let mut off = Vec::with_capacity(nv + 1);
+            let mut acc = 0u32;
+            off.push(0);
+            for &d in deg {
+                acc += d;
+                off.push(acc);
+            }
+            (off, vec![(0u32, 0u8); acc as usize])
+        };
+        let (out_off, mut out_adj) = build_csr(&out_deg);
+        let (in_off, mut in_adj) = build_csr(&in_deg);
+        {
+            let mut cursor = out_off[..nv].to_vec();
+            for &(from, to, ov) in &edges {
+                out_adj[cursor[from as usize] as usize] = (to, ov);
+                cursor[from as usize] += 1;
+            }
+            let mut cursor = in_off[..nv].to_vec();
+            for &(from, to, ov) in &edges {
+                in_adj[cursor[to as usize] as usize] = (from, ov);
+                cursor[to as usize] += 1;
+            }
+        }
+        drop(edges);
+
+        // Iterative Tarjan SCC over the walk graph. Tarjan emits SCC ids in
+        // reverse topological order of the condensation, so a smaller id is
+        // downstream: descending id order is source-first (topological).
+        let mut scc = vec![u32::MAX; nv];
+        let mut index = vec![u32::MAX; nv];
+        let mut low = vec![0u32; nv];
+        let mut on_stack = vec![false; nv];
+        let mut vertex_stack: Vec<u32> = Vec::new();
+        let mut call_stack: Vec<(u32, u32)> = Vec::new();
+        let mut next_index = 0u32;
+        let mut scc_count = 0u32;
+        for start in 0..nv {
+            if index[start] != u32::MAX {
+                continue;
+            }
+            index[start] = next_index;
+            low[start] = next_index;
+            next_index += 1;
+            vertex_stack.push(start as u32);
+            on_stack[start] = true;
+            call_stack.push((start as u32, out_off[start]));
+            while let Some(&(v, next_child)) = call_stack.last() {
+                if next_child < out_off[v as usize + 1] {
+                    call_stack.last_mut().unwrap().1 += 1;
+                    let (w, _) = out_adj[next_child as usize];
+                    let wu = w as usize;
+                    if index[wu] == u32::MAX {
+                        index[wu] = next_index;
+                        low[wu] = next_index;
+                        next_index += 1;
+                        vertex_stack.push(w);
+                        on_stack[wu] = true;
+                        call_stack.push((w, out_off[wu]));
+                    } else if on_stack[wu] {
+                        low[v as usize] = low[v as usize].min(index[wu]);
+                    }
+                } else {
+                    call_stack.pop();
+                    if let Some(&(parent, _)) = call_stack.last() {
+                        low[parent as usize] = low[parent as usize].min(low[v as usize]);
+                    }
+                    if low[v as usize] == index[v as usize] {
+                        loop {
+                            let w = vertex_stack
+                                .pop()
+                                .expect("Tarjan vertex stack cannot be empty");
+                            on_stack[w as usize] = false;
+                            scc[w as usize] = scc_count;
+                            if w == v {
+                                break;
+                            }
+                        }
+                        scc_count += 1;
+                    }
+                }
+            }
+        }
+
+        // Astra DCC (§1 Precise distinction rule & §2 Shared-context trigger):
+        // An SCC is a multi-context repeat confluence if and only if 2 or more
+        // distinct upstream locus classes converge into it.
+        // Certified same-locus bubble alternatives and error tips share the same
+        // upstream origin and do NOT introduce shared context.
+        let mut scc_nodes: Vec<SmallVec<[u32; 2]>> = vec![SmallVec::new(); scc_count as usize];
+        for v in 0..nv {
+            scc_nodes[scc[v] as usize].push(v as u32);
+        }
+
+        let mut scc_ctx = vec![1u8; scc_count as usize];
+        for s in 0..scc_count {
+            let su = s as usize;
+            let mut distinct_origins: SmallVec<[u32; 4]> = SmallVec::new();
+
+            for &v in &scc_nodes[su] {
+                for ei in in_off[v as usize]..in_off[v as usize + 1] {
+                    let (p, _) = in_adj[ei as usize];
+                    let sp = scc[p as usize] as usize;
+                    if sp != su {
+                        if let Some(orig) = find_branch_origin(graph, &in_off, &in_adj, p) {
+                            if !distinct_origins.contains(&orig) {
+                                distinct_origins.push(orig);
+                            }
+                        }
+                    }
+                }
+            }
+
+            if distinct_origins.len() >= 2 {
+                scc_ctx[su] = 2;
+            } else {
+                scc_ctx[su] = 1;
+            }
+        }
+
+        let mut ctx_count = vec![1u8; nv];
+        for v in 0..nv {
+            ctx_count[v] = scc_ctx[scc[v] as usize];
+        }
+
+        // BCI: bounded reverse Dijkstra from all multi-context vertices.
+        let budget = max_insert as i64;
+        let mut bci = vec![false; nv];
+        if budget > 0 {
+            let mut best = vec![u64::MAX; nv];
+            let mut heap: BinaryHeap<Reverse<(u64, u32)>> = BinaryHeap::new();
+            for v in 0..nv {
+                if ctx_count[v] >= 2 {
+                    best[v] = 0;
+                    bci[v] = true;
+                    heap.push(Reverse((0u64, v as u32)));
+                }
+            }
+            while let Some(Reverse((d, v))) = heap.pop() {
+                if d > best[v as usize] {
+                    continue;
+                }
+                // Peeling vertex v off the path costs v.len - overlap, the
+                // same quantity the forward walk adds to `anchor_gap`.
+                let v_len = graph.nodes[(v as usize) >> 1].seq_len as i64;
+                for ei in in_off[v as usize]..in_off[v as usize + 1] {
+                    let (p, ov) = in_adj[ei as usize];
+                    let pu = p as usize;
+                    let nd = d + (v_len - ov as i64).max(0) as u64;
+                    if nd as i64 > budget {
+                        continue;
+                    }
+                    // Anchor absorption (Q8): a long single-context
+                    // predecessor is a valid unique anchor; the pooled zone
+                    // ahead of it does not flag it or anything behind it.
+                    if ctx_count[pu] <= 1 && graph.nodes[pu >> 1].seq_len >= 500 {
+                        continue;
+                    }
+                    if nd < best[pu] {
+                        best[pu] = nd;
+                        bci[pu] = true;
+                        heap.push(Reverse((nd, p)));
+                    }
+                }
+            }
+        }
+
+        // BCI downstream: bounded forward Dijkstra from all multi-context vertices.
+        // A node within max_insert downstream of a multi-context confluence is
+        // in its shadow and cannot establish uniqueness (e.g. F4).
+        let mut bci_downstream = vec![false; nv];
+        if budget > 0 {
+            let mut best_fwd = vec![u64::MAX; nv];
+            let mut heap_fwd: BinaryHeap<Reverse<(u64, u32)>> = BinaryHeap::new();
+            for v in 0..nv {
+                if ctx_count[v] >= 2 {
+                    best_fwd[v] = 0;
+                    bci_downstream[v] = true;
+                    heap_fwd.push(Reverse((0u64, v as u32)));
+                }
+            }
+            while let Some(Reverse((d, v))) = heap_fwd.pop() {
+                if d > best_fwd[v as usize] {
+                    continue;
+                }
+                let v_len = graph.nodes[(v as usize) >> 1].seq_len as i64;
+                for ei in out_off[v as usize]..out_off[v as usize + 1] {
+                    let (w, ov) = out_adj[ei as usize];
+                    let wu = w as usize;
+                    let nd = d + (v_len - ov as i64).max(0) as u64;
+                    if nd as i64 > budget {
+                        continue;
+                    }
+                    if nd < best_fwd[wu] {
+                        best_fwd[wu] = nd;
+                        bci_downstream[wu] = true;
+                        heap_fwd.push(Reverse((nd, w)));
+                    }
+                }
+            }
+        }
+
+        let mut metas = Vec::with_capacity(n);
+        for id in 0..n {
+            metas.push(NodeProvenanceMeta {
+                external_context_count_fwd: ctx_count[id * 2],
+                external_context_count_rev: ctx_count[id * 2 + 1],
+                bci_fwd: bci[id * 2],
+                bci_rev: bci[id * 2 + 1],
+                bci_downstream_fwd: bci_downstream[id * 2],
+                bci_downstream_rev: bci_downstream[id * 2 + 1],
+                provenance_boundary: None,
+            });
+        }
+        let mut count_0 = 0usize;
+        let mut count_1 = 0usize;
+        let mut count_2plus = 0usize;
+        let mut bci_count = 0usize;
+        for v in 0..nv {
+            if ctx_count[v] == 0 {
+                count_0 += 1;
+            } else if ctx_count[v] == 1 {
+                count_1 += 1;
+            } else {
+                count_2plus += 1;
+            }
+            if bci[v] {
+                bci_count += 1;
+            }
+        }
+        tracing::info!(
+            "[ProvenanceTable] nv={}, scc_count={}, count_0={}, count_1={}, count_2plus={}, bci_nodes={}",
+            nv, scc_count, count_0, count_1, count_2plus, bci_count
+        );
+
+        Self { metas }
+    }
+
+    #[inline]
+    pub fn meta(&self, id: u32) -> &NodeProvenanceMeta {
+        &self.metas[id as usize]
+    }
+
+    /// Provenance cleanliness of a directed node in its walk direction:
+    /// exactly one established external lineage (DCC strict: count == 1,
+    /// originated either from a 0-in-degree root or an entry source SCC in
+    /// the condensation graph) and no bounded contamination ahead (BCI).
+    /// Count >= 2 indicates a multi-context pooled locus.
+    #[inline]
+    pub fn anchor_clean(&self, d: DirUnitigId) -> bool {
+        let m = self.meta(d.id());
+        m.external_context_count(d.is_rc()) == 1
+            && !m.bci(d.is_rc())
+            && !m.bci_downstream(d.is_rc())
+    }
+
+    /// Appends metadata for a newly pushed composite unitig, keeping the
+    /// table in lockstep with `graph.nodes`.
+    pub fn push_composite(&mut self, meta: NodeProvenanceMeta) {
+        self.metas.push(meta);
+    }
+}
+
+/// ARG (Anchor Reset Gate, AR-1..AR-4): a traversed node may become the
+/// walk's unique anchor only if it is long (>= 500 bp), single-context with
+/// an established lineage in the walk direction (DCC count exactly 1 —
+/// count 0 is unknown attribution, e.g. cyclic source SCCs, and must not
+/// establish uniqueness), uncontaminated ahead (BCI), and the walk itself is
+/// still clean — contamination is monotonically increasing and never resets
+/// (AR-3).
+fn anchor_reset_eligible(
+    graph: &CdbgGraph,
+    prov: &ProvenanceTable,
+    node: DirUnitigId,
+    contaminated: bool,
+) -> bool {
+    graph.nodes[node.id() as usize].seq_len >= 500 && prov.anchor_clean(node) && !contaminated
+}
+
+/// SI-1/SI-2 (Seed Integrity gate): a walk may originate from `seed` only if it
+/// is a long unique locus (>= 500 bp), carries exactly one established incoming
+/// context (external_context_count == 1), and is not in the downstream shadow of
+/// an upstream multi-context confluence (!bci_downstream).
+#[inline]
+fn seed_anchor_eligible(
+    graph: &CdbgGraph,
+    prov: &ProvenanceTable,
+    node: DirUnitigId,
+) -> bool {
+    let m = prov.meta(node.id());
+    graph.nodes[node.id() as usize].seq_len >= 500
+        && m.external_context_count(node.is_rc()) == 1
+        && !m.bci_downstream(node.is_rc())
+}
+
+/// PAG withhold with no attributable anchor covering the fork: everything the
+/// walk spliced past its last valid anchor is locus-ambiguous and must not be
+/// committed. Truncates `ext` back to the anchor (`keep == 0` means the
+/// anchor is the seed itself) and undoes this call's `used_unique`
+/// registrations for the dropped steps so later seeds can still use them.
+fn discard_unattributable_walk(
+    ext: &mut Vec<PathStep>,
+    keep: usize,
+    used_unique: &mut HashSet<u32>,
+    inserted_now: &mut Vec<u32>,
+    cleanup_protected_nodes: &mut HashSet<u32>,
+) {
+    for step in ext.drain(keep..) {
+        cleanup_protected_nodes.insert(step.dir.id());
+    }
+    let retained: SmallVec<[u32; 8]> = ext.iter().map(|s| s.dir.id()).collect();
+    let mut i = 0;
+    while i < inserted_now.len() {
+        if retained.contains(&inserted_now[i]) {
+            i += 1;
+        } else {
+            let id = inserted_now.swap_remove(i);
+            used_unique.remove(&id);
+        }
+    }
 }
 
 /// Internal path step preserving directed unitig identity, chosen incoming edge,
@@ -150,11 +699,26 @@ pub fn score_candidate_path(
     u2: DirUnitigId,
     path_separation: i64,
 ) -> (u32, f64) {
-    let evidences = match matrix.get_evidence(u1, u2) {
-        Some(evs) => evs,
-        None => return (0, 0.0),
-    };
+    match matrix.get_evidence(u1, u2) {
+        Some(evidences) => score_evidence_rows(evidences, dist, path_separation, None),
+        None => (0, 0.0),
+    }
+}
 
+/// Kernel scoring over evidence rows, optionally restricted by a composite
+/// unitig's provenance boundary (PB / MR-2). `pooled_suffix_exit` is the
+/// boundary already converted into exit coordinates (`u1_len - boundary`):
+/// `dist_u1_exit` is the distance from the read to u1's 3' exit, so a read
+/// at 5'-offset `p` has `dist_u1_exit = u1_len - p` and belongs to the
+/// unique-locus prefix `[0, boundary)` iff `dist_u1_exit > u1_len -
+/// boundary`. Rows with `dist_u1_exit <= pooled_suffix_exit` originate from
+/// the pooled-locus suffix and are inadmissible as unique-locus evidence.
+fn score_evidence_rows(
+    evidences: &[ReadPairEvidence],
+    dist: &InsertSizeDist,
+    path_separation: i64,
+    pooled_suffix_exit: Option<u32>,
+) -> (u32, f64) {
     let mut valid_count = 0u32;
     let mut total_weight = 0.0f64;
     let mut seen_pair_ids = HashSet::with_capacity(evidences.len());
@@ -163,6 +727,11 @@ pub fn score_candidate_path(
     let norm_factor = 1.4826 * mad;
 
     for ev in evidences {
+        if let Some(suffix_exit) = pooled_suffix_exit {
+            if (ev.dist_u1_exit as u64) <= suffix_exit as u64 {
+                continue;
+            }
+        }
         let span = ev.dist_u1_exit as i64 + path_separation + ev.dist_u2_entry as i64;
         if span >= dist.min_insert as i64 && span <= dist.max_insert as i64 {
             if !seen_pair_ids.insert(ev.pair_id) {
@@ -178,6 +747,30 @@ pub fn score_candidate_path(
     (valid_count, total_weight)
 }
 
+/// PB-aware scoring used by the resolver: converts the evidence-source
+/// composite's provenance boundary (a 5'-offset) into the exit-coordinate
+/// cutoff `u1_len - boundary` before kernel scoring (PAG attribution, §3.6
+/// rule 3). A read at 5'-offset `p` lies in the unique-locus prefix
+/// `[0, boundary)` iff `dist_u1_exit = u1_len - p > u1_len - boundary`.
+fn score_candidate_path_prov(
+    matrix: &PairLinkMatrix,
+    graph: &CdbgGraph,
+    prov: &ProvenanceTable,
+    dist: &InsertSizeDist,
+    u1: DirUnitigId,
+    u2: DirUnitigId,
+    path_separation: i64,
+) -> (u32, f64) {
+    let boundary = prov
+        .meta(u1.id())
+        .provenance_boundary
+        .map(|b| graph.nodes[u1.id() as usize].seq_len.saturating_sub(b));
+    match matrix.get_evidence(u1, u2) {
+        Some(evidences) => score_evidence_rows(evidences, dist, path_separation, boundary),
+        None => (0, 0.0),
+    }
+}
+
 const MAX_CANDIDATE_DEPTH: usize = 4;
 const MAX_CANDIDATE_PATHS: usize = 32;
 const MAX_DFS_STATES: usize = 256;
@@ -187,8 +780,10 @@ const MAX_QUEUE_CAPACITY: usize = 1024;
 #[derive(Clone, Debug)]
 struct CandidatePath {
     steps: SmallVec<[(DirUnitigId, GraphEdge); 4]>,
+    /// Anchor-to-node separation for each step (parallel to `steps`), used
+    /// by F6b differential scoring over path-local evidence.
+    step_seps: SmallVec<[i64; 4]>,
     endpoint: DirUnitigId,
-    #[allow(dead_code)]
     separation: i64,
     support_count: u32,
     total_weight: f64,
@@ -326,12 +921,23 @@ fn classify_hop(
     }
 }
 
-/// Bounded multi-hop candidate path search from `fork_node` to endpoints supported by read pairs with `curr_dir`.
+/// Bounded multi-hop candidate path search from `fork_node` to endpoints
+/// supported by read pairs.
+///
+/// Candidate scoring is keyed at `evidence_anchor` with separation offset
+/// `sep_offset` (PAG): for an uncontaminated walk the anchor is the walk head
+/// `curr_dir` with offset 0 — the pre-F23 semantics; for a walk in a
+/// shared/contaminated zone the anchor is the walk's unique anchor and the
+/// offset is the overlap-adjusted anchor-to-head distance, so only pairs
+/// attributable to the unique locus can decide the fork.
+#[allow(clippy::too_many_arguments)]
 fn find_candidate_paths(
     graph: &CdbgGraph,
     matrix: &PairLinkMatrix,
     dist: &InsertSizeDist,
-    curr_dir: DirUnitigId,
+    prov: &ProvenanceTable,
+    evidence_anchor: DirUnitigId,
+    sep_offset: i64,
     fork_node: DirUnitigId,
     init_sep: i64,
     used_unique: &HashSet<u32>,
@@ -339,7 +945,7 @@ fn find_candidate_paths(
     ext_nodes: &HashSet<u32>,
 ) -> (Vec<CandidatePath>, SearchStatus) {
     let max_separation = dist.max_insert as i64;
-    let beta = separation_beta(matrix, curr_dir);
+    let beta = separation_beta(matrix, evidence_anchor);
     let mut candidate_paths = Vec::new();
     let mut search_status = SearchStatus::Complete;
     let mut states_visited = 0usize;
@@ -347,7 +953,7 @@ fn find_candidate_paths(
     let mut queue = VecDeque::new();
     for target in distinct_outgoing(graph, fork_node) {
         let mut visited: SmallVec<[u32; 8]> = SmallVec::new();
-        visited.push(curr_dir.id());
+        visited.push(evidence_anchor.id());
         visited.push(fork_node.id());
         match classify_hop(
             graph,
@@ -357,7 +963,7 @@ fn find_candidate_paths(
             &visited,
             0,
             false,
-            curr_dir,
+            evidence_anchor,
             ext_nodes,
             used_unique,
             consumed_nodes,
@@ -370,8 +976,10 @@ fn find_candidate_paths(
                     break;
                 }
                 let mut steps: SmallVec<[(DirUnitigId, GraphEdge); 4]> = SmallVec::new();
+                let mut step_seps: SmallVec<[i64; 4]> = SmallVec::new();
                 steps.push((target, edge));
-                queue.push_back((target, sep, steps, visited, shadow));
+                step_seps.push(sep);
+                queue.push_back((target, sep, steps, step_seps, visited, shadow));
             }
             HopClass::Unresolved => {
                 search_status = SearchStatus::Truncated;
@@ -381,7 +989,9 @@ fn find_candidate_paths(
         }
     }
 
-    'bfs: while let Some((u, sep_u, steps, mut visited, through_consumed)) = queue.pop_front() {
+    'bfs: while let Some((u, sep_u, steps, step_seps, mut visited, through_consumed)) =
+        queue.pop_front()
+    {
         states_visited += 1;
         if states_visited > MAX_DFS_STATES {
             search_status = SearchStatus::Truncated;
@@ -390,20 +1000,36 @@ fn find_candidate_paths(
 
         visited.push(u.id());
 
-        // A return to the anchor is evidence about this anchor, not an extension
-        // endpoint. In-window support makes the decision unresolved; either way
-        // the walk continues so a later exit can still be scored.
-        if u.id() == curr_dir.id() {
-            let (support_count, _) = score_candidate_path(matrix, dist, curr_dir, u, sep_u);
+        // A return to the anchor is evidence about this anchor, not an
+        // extension endpoint. In-window support makes the decision unresolved;
+        // either way the walk continues so a later exit can still be scored.
+        if u.id() == evidence_anchor.id() {
+            let (support_count, _) = score_candidate_path_prov(
+                matrix,
+                graph,
+                prov,
+                dist,
+                evidence_anchor,
+                u,
+                sep_offset + sep_u,
+            );
             if support_count > 0 {
                 search_status = SearchStatus::Truncated;
             }
         } else {
-            let (support_count, total_weight) =
-                score_candidate_path(matrix, dist, curr_dir, u, sep_u);
+            let (support_count, total_weight) = score_candidate_path_prov(
+                matrix,
+                graph,
+                prov,
+                dist,
+                evidence_anchor,
+                u,
+                sep_offset + sep_u,
+            );
             if support_count > 0 {
                 candidate_paths.push(CandidatePath {
                     steps: steps.clone(),
+                    step_seps: step_seps.clone(),
                     endpoint: u,
                     separation: sep_u,
                     support_count,
@@ -427,7 +1053,7 @@ fn find_candidate_paths(
                     &visited,
                     steps.len(),
                     through_consumed,
-                    curr_dir,
+                    evidence_anchor,
                     ext_nodes,
                     used_unique,
                     consumed_nodes,
@@ -439,7 +1065,9 @@ fn find_candidate_paths(
                             graph,
                             matrix,
                             dist,
-                            curr_dir,
+                            prov,
+                            evidence_anchor,
+                            sep_offset,
                             u,
                             neighbor,
                             sep_u,
@@ -463,7 +1091,16 @@ fn find_candidate_paths(
                         }
                         let mut next_steps = steps.clone();
                         next_steps.push((neighbor, edge));
-                        queue.push_back((neighbor, sep, next_steps, visited.clone(), shadow));
+                        let mut next_seps = step_seps.clone();
+                        next_seps.push(sep);
+                        queue.push_back((
+                            neighbor,
+                            sep,
+                            next_steps,
+                            next_seps,
+                            visited.clone(),
+                            shadow,
+                        ));
                     }
                     HopClass::Unresolved => {
                         search_status = SearchStatus::Truncated;
@@ -479,7 +1116,7 @@ fn find_candidate_paths(
             &visited,
             steps.len(),
             through_consumed,
-            curr_dir,
+            evidence_anchor,
             ext_nodes,
             used_unique,
             consumed_nodes,
@@ -503,11 +1140,14 @@ fn find_candidate_paths(
 /// The walk uses `classify_hop`, so a short node may recur and a node of at
 /// least 500 bp may appear at most once. Landing inside the insert window with
 /// paired-end support, including support for the anchor itself, abstains.
+#[allow(clippy::too_many_arguments)]
 fn pruned_repeat_hides_supported_endpoint(
     graph: &CdbgGraph,
     matrix: &PairLinkMatrix,
     dist: &InsertSizeDist,
-    curr_dir: DirUnitigId,
+    prov: &ProvenanceTable,
+    evidence_anchor: DirUnitigId,
+    sep_offset: i64,
     from: DirUnitigId,
     next_target: DirUnitigId,
     sep_u: i64,
@@ -528,7 +1168,7 @@ fn pruned_repeat_hides_supported_endpoint(
         visited,
         steps_before,
         shadow_u,
-        curr_dir,
+        evidence_anchor,
         ext_nodes,
         used_unique,
         consumed_nodes,
@@ -559,7 +1199,15 @@ fn pruned_repeat_hides_supported_endpoint(
 
         node_visited.push(node.id());
 
-        let (count, _) = score_candidate_path(matrix, dist, curr_dir, node, sep);
+        let (count, _) = score_candidate_path_prov(
+            matrix,
+            graph,
+            prov,
+            dist,
+            evidence_anchor,
+            node,
+            sep_offset + sep,
+        );
         if count > 0 {
             return true;
         }
@@ -572,7 +1220,7 @@ fn pruned_repeat_hides_supported_endpoint(
                 &node_visited,
                 steps,
                 shadow,
-                curr_dir,
+                evidence_anchor,
                 ext_nodes,
                 used_unique,
                 consumed_nodes,
@@ -593,7 +1241,7 @@ fn pruned_repeat_hides_supported_endpoint(
                 &node_visited,
                 steps,
                 shadow,
-                curr_dir,
+                evidence_anchor,
                 ext_nodes,
                 used_unique,
                 consumed_nodes,
@@ -684,6 +1332,188 @@ fn shadow_blocks_decision(best: &CandidatePath, shadows: &[CandidatePath], thres
     })
 }
 
+/// Per-pair kernel weights of the in-window evidence rows keyed at
+/// `evidence_anchor` about `node` at `path_separation` — the same window,
+/// kernel, and PB restriction (MR-2) as [`score_evidence_rows`]: when the
+/// anchor is a composite carrying a provenance boundary, rows keyed inside
+/// its pooled-locus suffix (`dist_u1_exit <= pooled_suffix_exit`, with
+/// `pooled_suffix_exit` already in exit coordinates as `u1_len - boundary`)
+/// are inadmissible as attributable evidence and are dropped before kernel
+/// weighting.
+fn in_window_pair_weights(
+    matrix: &PairLinkMatrix,
+    dist: &InsertSizeDist,
+    evidence_anchor: DirUnitigId,
+    node: DirUnitigId,
+    path_separation: i64,
+    pooled_suffix_exit: Option<u32>,
+) -> SmallVec<[(u32, f64); 8]> {
+    let mut out: SmallVec<[(u32, f64); 8]> = SmallVec::new();
+    let Some(evidences) = matrix.get_evidence(evidence_anchor, node) else {
+        return out;
+    };
+    let mad = if dist.mad > 1.0 { dist.mad } else { 1.0 };
+    let norm_factor = 1.4826 * mad;
+    for ev in evidences {
+        if let Some(suffix_exit) = pooled_suffix_exit {
+            if (ev.dist_u1_exit as u64) <= suffix_exit as u64 {
+                continue;
+            }
+        }
+        let span = ev.dist_u1_exit as i64 + path_separation + ev.dist_u2_entry as i64;
+        if span < dist.min_insert as i64 || span > dist.max_insert as i64 {
+            continue;
+        }
+        let z = (span as f64 - dist.median).abs() / norm_factor;
+        let w = (-0.5 * z * z).exp();
+        match out.iter_mut().find(|(pid, _)| *pid == ev.pair_id) {
+            Some(slot) => {
+                if w > slot.1 {
+                    slot.1 = w;
+                }
+            }
+            None => out.push((ev.pair_id, w)),
+        }
+    }
+    out
+}
+
+/// Admissible pair weights over one candidate route: every node the route
+/// enters — each step at its own anchor separation, plus the endpoint —
+/// counted once per pair at its best in-window weight (F6b). A direct pair
+/// link into an intermediate node (e.g. the S -> B1 allele bridge across a
+/// same-length SNP bubble) is thereby part of the route's own support.
+/// Rows are PB-restricted at `evidence_anchor` (MR-2): when the anchor is a
+/// composite carrying a provenance boundary, rows keyed inside its
+/// pooled-locus suffix are inadmissible attributable evidence.
+fn candidate_pair_weights(
+    matrix: &PairLinkMatrix,
+    graph: &CdbgGraph,
+    prov: &ProvenanceTable,
+    dist: &InsertSizeDist,
+    evidence_anchor: DirUnitigId,
+    sep_offset: i64,
+    candidate: &CandidatePath,
+) -> SmallVec<[(u32, f64); 8]> {
+    let pooled_suffix_exit = prov
+        .meta(evidence_anchor.id())
+        .provenance_boundary
+        .map(|b| graph.nodes[evidence_anchor.id() as usize].seq_len.saturating_sub(b));
+    let mut acc: SmallVec<[(u32, f64); 8]> = SmallVec::new();
+    let mut absorb = |rows: SmallVec<[(u32, f64); 8]>| {
+        for (pid, w) in rows {
+            match acc.iter_mut().find(|(p, _)| *p == pid) {
+                Some(slot) => {
+                    if w > slot.1 {
+                        slot.1 = w;
+                    }
+                }
+                None => acc.push((pid, w)),
+            }
+        }
+    };
+    absorb(in_window_pair_weights(
+        matrix,
+        dist,
+        evidence_anchor,
+        candidate.endpoint,
+        sep_offset + candidate.separation,
+        pooled_suffix_exit,
+    ));
+    for (&(node, _), &sep) in candidate.steps.iter().zip(candidate.step_seps.iter()) {
+        absorb(in_window_pair_weights(
+            matrix,
+            dist,
+            evidence_anchor,
+            node,
+            sep_offset + sep,
+            pooled_suffix_exit,
+        ));
+    }
+    acc
+}
+
+/// F6b differential rivals test. Two rival routes through a same-length
+/// bubble reconverge on a shared endpoint: pairs that bridge the whole
+/// bubble and land in the shared node are in-window for both arms at the
+/// SAME kernel weight and carry no evidence about which arm the walk should
+/// take, whatever their count. The rivals ratio therefore compares each
+/// candidate's *differential* support over every node of its own route: a
+/// pair's differential contribution is its weight surplus over the same
+/// pair's best admissible weight in the rival route (zero when the rival
+/// explains it at least as well), so a direct pair link into one arm (e.g.
+/// S -> B1 vs S -> B2) decides the fork cleanly, while routes of different
+/// length still separate through the span shift of their shared pairs.
+/// When the candidates share no admissible pairs this reduces to the
+/// pre-F23 weight ratio.
+fn differential_rivals_agree(
+    matrix: &PairLinkMatrix,
+    graph: &CdbgGraph,
+    prov: &ProvenanceTable,
+    dist: &InsertSizeDist,
+    evidence_anchor: DirUnitigId,
+    sep_offset: i64,
+    best: &CandidatePath,
+    second: &CandidatePath,
+    min_support: u32,
+    decision_threshold: f64,
+) -> bool {
+    let best_pairs = candidate_pair_weights(
+        matrix, graph, prov, dist, evidence_anchor, sep_offset, best,
+    );
+    let second_pairs = candidate_pair_weights(
+        matrix, graph, prov, dist, evidence_anchor, sep_offset, second,
+    );
+    let rival_weight = |pairs: &SmallVec<[(u32, f64); 8]>, pid: u32| {
+        pairs
+            .iter()
+            .find(|&&(p, _)| p == pid)
+            .map(|&(_, w)| w)
+            .unwrap_or(0.0)
+    };
+
+    let mut best_exclusive = (0u32, 0.0f64);
+    for &(pid, w) in &best_pairs {
+        let rival_w = rival_weight(&second_pairs, pid);
+        if w > rival_w {
+            best_exclusive.0 += 1;
+            best_exclusive.1 += w - rival_w;
+        }
+    }
+    let mut second_exclusive = (0u32, 0.0f64);
+    for &(pid, w) in &second_pairs {
+        let best_w = rival_weight(&best_pairs, pid);
+        if w > best_w {
+            second_exclusive.0 += 1;
+            second_exclusive.1 += w - best_w;
+        }
+    }
+
+    if second_exclusive.1 < 1e-9 {
+        // The runner-up is explained at least as well as the winner by every
+        // pair it has: only the winner's differential pairs may decide, and
+        // they must stand on their own — count >= min_support and the
+        // single-candidate average-weight quality bar (Z <= 2.45) against
+        // tail outliers.
+        best_exclusive.0 >= min_support.max(1) && best_exclusive.1 / best_exclusive.0 as f64 >= 0.05
+    } else {
+        best_exclusive.1 / second_exclusive.1 >= decision_threshold
+    }
+}
+
+/// Two candidate paths are compatible (the same route) if one is a prefix
+/// of the other — they agree on every step up to the shorter path's length.
+/// Compatible paths do not compete with each other at a fork; only paths
+/// that diverge (choose different outgoing branches or different downstream
+/// exits) are rival alternatives.
+fn are_divergent_rivals(a: &CandidatePath, b: &CandidatePath) -> bool {
+    let min_len = a.steps.len().min(b.steps.len());
+    !a.steps[..min_len]
+        .iter()
+        .map(|s| s.0)
+        .eq(b.steps[..min_len].iter().map(|s| s.0))
+}
+
 /// Keep outgoing neighbors that the step cap did not merge.
 ///
 /// After the prefix contig deletes `curr_dir`, a short neighbor whose only active
@@ -706,12 +1536,25 @@ fn protect_unmerged_frontier(
 
 /// Extends path from `curr_dir` in one direction using paired-end read constraints
 /// while recording the exact `PathStep` for every transition.
+///
+/// F23 provenance walk state (ARG + PAG):
+/// - `unique_anchor` is the walk's last ARG-eligible anchor; the seed itself
+///   must be ARG-eligible or the walk is abandoned before it starts (SI-2:
+///   an anchor-less walk must never commit, not even linear paths from a
+///   shared seed such as pooled L in A,B -> L -> F -> T).
+/// - `contaminated` is set when any traversed node is a shared locus
+///   (multi-context) or BCI-flagged, and is monotonically increasing (AR-3).
+/// - At a fork in a contaminated zone, evidence keyed at the walk head has
+///   zero deciding weight: candidates are scored from `unique_anchor` when it
+///   covers the fork within `max_insert`, otherwise the fork is withheld and
+///   the unattributable portion of the walk is rolled back.
 fn extend_one_direction(
     mut curr_dir: DirUnitigId,
     graph: &CdbgGraph,
     matrix: &PairLinkMatrix,
     dist: &InsertSizeDist,
     params: ExspanderParams,
+    prov: &ProvenanceTable,
     used_unique: &mut HashSet<u32>,
     stats: &mut JunctionStats,
     cleanup_protected_nodes: &mut HashSet<u32>,
@@ -728,8 +1571,36 @@ fn extend_one_direction(
     // is withheld instead of decided. Within the horizon, forks keep the
     // pre-F23 curr_dir-anchored semantics unchanged (accepted T26/T27/T30/T34
     // contracts). Entry nodes are always seeds (>= 500 bp).
-    let mut unique_anchor = curr_dir;
+    //
+    // SI-1/SI-2 (seed initialization): a seed anchors the walk only if it is
+    // ARG-eligible in the walk direction — single-context with an
+    // established lineage (DCC count exactly 1) and BCI-clean. A shared long
+    // seed (e.g. pooled L in A,B -> L -> F -> T) must not commit anything,
+    // not even unbranched linear splices: an anchor-less walk could commit
+    // linear paths from the shared seed while relying on every later fork to
+    // withhold. The walk is therefore abandoned before it starts (SI-2). A
+    // seed with no outgoing edge in this direction had nothing to withhold
+    // (pre-SI-2 walks terminated immediately there), so the rejection is
+    // counted only when an unanchored walk could otherwise have committed.
+    if !seed_anchor_eligible(graph, prov, curr_dir) {
+        if !graph.nodes[curr_dir.id() as usize]
+            .edges(curr_dir.is_rc())
+            .is_empty()
+        {
+            stats.withheld_no_unique_anchor += 1;
+            stats.withheld_si2_seed += 1;
+        }
+        return ext;
+    }
+    let mut unique_anchor: Option<DirUnitigId> = Some(curr_dir);
+    // Number of ext steps (inclusive) that end at the current anchor;
+    // 0 means the anchor is the seed itself.
+    let mut anchor_steps = 0usize;
     let mut anchor_gap = 0i64;
+    let mut contaminated = false;
+    // Node ids this call newly registered in `used_unique`, so a PAG rollback
+    // can undo exactly its own registrations.
+    let mut inserted_now: Vec<u32> = Vec::new();
 
     loop {
         if ext.len() >= MAX_EXTENSION_STEPS {
@@ -823,27 +1694,63 @@ fn extend_one_direction(
 
             if next_continuations.len() > 1 {
                 // Target is a branching repeat node! Evaluate complete candidate paths exiting the repeat.
-                // F23 horizon guard: a fork beyond the last unique anchor's insert
-                // horizon cannot be decided by locus-specific evidence — withhold
-                // (overlap-adjusted anchor-to-fork distance, Codex-reviewed formulas).
-                let fork_dist = anchor_gap
-                    + target_node.seq_len as i64
-                    - edge_to_target.overlap_k as i64;
-                if unique_anchor != curr_dir && fork_dist > dist.max_insert as i64 {
-                    stats.withheld_no_unique_anchor += 1;
-                    cleanup_protected_nodes.insert(target.id());
-                    for &(cand, _) in &next_continuations {
-                        cleanup_protected_nodes.insert(cand.id());
+                let fork_dist =
+                    anchor_gap + target_node.seq_len as i64 - edge_to_target.overlap_k as i64;
+
+                // PAG (contaminated zone first): evidence keyed at the walk
+                // head is pooled and has zero deciding weight; only pairs
+                // attributable to the walk's unique anchor may decide.
+                let (evidence_anchor, sep_offset) = if contaminated {
+                    match unique_anchor {
+                        Some(anchor) if anchor_gap <= dist.max_insert as i64 => {
+                            (anchor, anchor_gap)
+                        }
+                        _ => {
+                            // No attributable anchor covers this fork: withhold
+                            // and roll the walk back to its anchor (§3.10.1/4).
+                            stats.withheld_no_unique_anchor += 1;
+                            stats.withheld_no_attributable_anchor += 1;
+                            discard_unattributable_walk(
+                                &mut ext,
+                                anchor_steps,
+                                used_unique,
+                                &mut inserted_now,
+                                cleanup_protected_nodes,
+                            );
+                            cleanup_protected_nodes.insert(target.id());
+                            for &(cand, _) in &next_continuations {
+                                cleanup_protected_nodes.insert(cand.id());
+                            }
+                            break;
+                        }
                     }
-                    break;
-                }
+                } else {
+                    // F23 horizon guard: an uncontaminated fork beyond the
+                    // last unique anchor's insert horizon cannot be decided by
+                    // locus-specific evidence — withhold (overlap-adjusted
+                    // anchor-to-fork distance, Codex-reviewed formulas). The
+                    // committed prefix stands (CS-3).
+                    if unique_anchor != Some(curr_dir) && fork_dist > dist.max_insert as i64 {
+                        stats.withheld_no_unique_anchor += 1;
+                        stats.withheld_horizon += 1;
+                        cleanup_protected_nodes.insert(target.id());
+                        for &(cand, _) in &next_continuations {
+                            cleanup_protected_nodes.insert(cand.id());
+                        }
+                        break;
+                    }
+                    (curr_dir, 0)
+                };
+
                 let ext_nodes: HashSet<u32> = ext.iter().map(|s: &PathStep| s.dir.id()).collect();
                 let init_sep = target_node.seq_len as i64 - edge_to_target.overlap_k as i64;
                 let (candidate_paths, search_status) = find_candidate_paths(
                     graph,
                     matrix,
                     dist,
-                    curr_dir,
+                    prov,
+                    evidence_anchor,
+                    sep_offset,
                     target,
                     init_sep,
                     used_unique,
@@ -859,16 +1766,42 @@ fn extend_one_direction(
                     break;
                 }
 
-                let (shadow_paths, mut candidate_paths): (Vec<_>, Vec<_>) = candidate_paths
+                let (mut shadow_paths, mut candidate_paths): (Vec<_>, Vec<_>) = candidate_paths
                     .into_iter()
                     .partition(|candidate| candidate.through_consumed);
 
                 if candidate_paths.is_empty() {
+                    if contaminated {
+                        // §3.10.2: branch with no admissible pairs under PAG.
+                        stats.withheld_no_unique_anchor += 1;
+                        stats.withheld_pag_empty += 1;
+                    }
                     cleanup_protected_nodes.insert(target.id());
                     for &(cand, _) in &next_continuations {
                         cleanup_protected_nodes.insert(cand.id());
                     }
                     break;
+                }
+
+                // Route-wide support: the DFS admits a route on endpoint
+                // evidence alone, but the fork must rank and compare whole
+                // routes (F6b) — every node the route enters contributes its
+                // PB-restricted in-window pairs. Shadows get the same
+                // recomputation so `shadow_blocks_decision` compares like
+                // for like.
+                for cand in &mut candidate_paths {
+                    let pairs = candidate_pair_weights(
+                        matrix, graph, prov, dist, evidence_anchor, sep_offset, cand,
+                    );
+                    cand.support_count = pairs.len() as u32;
+                    cand.total_weight = pairs.iter().map(|&(_, w)| w).sum();
+                }
+                for shadow in &mut shadow_paths {
+                    let pairs = candidate_pair_weights(
+                        matrix, graph, prov, dist, evidence_anchor, sep_offset, shadow,
+                    );
+                    shadow.support_count = pairs.len() as u32;
+                    shadow.total_weight = pairs.iter().map(|&(_, w)| w).sum();
                 }
 
                 candidate_paths.sort_by(|a, b| {
@@ -879,24 +1812,47 @@ fn extend_one_direction(
                 });
 
                 let best = &candidate_paths[0];
-                let second_count = if candidate_paths.len() > 1 {
-                    candidate_paths[1].support_count
-                } else {
-                    0
-                };
-                let second_weight = if candidate_paths.len() > 1 {
-                    candidate_paths[1].total_weight
-                } else {
-                    0.0
-                };
+
+                // The winner must beat every DIVERGENT rival route, not
+                // only the runner-up. A prefix-compatible candidate agrees
+                // with `best` on every step up to its own length (the same
+                // route, just a shorter exit), so it is not an alternative
+                // at this fork and does not compete; only divergent routes
+                // — a different outgoing branch or a different downstream
+                // exit — can veto the decision.
+                let divergent_rivals: Vec<&CandidatePath> = candidate_paths[1..]
+                    .iter()
+                    .filter(|rival| are_divergent_rivals(best, rival))
+                    .collect();
 
                 let rivals_agree = if best.support_count < params.min_support {
                     false
-                } else if second_count == 0 || second_weight < 1e-9 {
-                    // Single candidate: require average weight >= 0.05 (Z <= 2.45) to reject tail outliers
+                } else if divergent_rivals.is_empty() {
+                    // Every other candidate is prefix-compatible with `best`:
+                    // only the single-candidate quality bar applies (average
+                    // weight >= 0.05, Z <= 2.45, rejects tail outliers).
                     (best.total_weight / best.support_count as f64) >= 0.05
                 } else {
-                    (best.total_weight / second_weight) >= params.decision_threshold
+                    // F6b: pairs admissible for both rivals (e.g. rows that
+                    // bridge a whole same-length bubble into the shared
+                    // endpoint) carry no differential evidence, so the ratio
+                    // compares exclusive support only. A rival with no
+                    // exclusive pairs degenerates to the single-candidate
+                    // quality bar inside `differential_rivals_agree`.
+                    divergent_rivals.iter().all(|rival| {
+                        differential_rivals_agree(
+                            matrix,
+                            graph,
+                            prov,
+                            dist,
+                            evidence_anchor,
+                            sep_offset,
+                            best,
+                            rival,
+                            params.min_support,
+                            params.decision_threshold,
+                        )
+                    })
                 };
                 let is_decision_valid = rivals_agree
                     && !shadow_blocks_decision(best, &shadow_paths, params.decision_threshold);
@@ -908,6 +1864,15 @@ fn extend_one_direction(
                 });
 
                 if is_decision_valid && all_steps_valid {
+                    // Commit the fork: push the fork node, then the winning
+                    // candidate steps, updating walk contamination
+                    // (monotonic, AR-3) and the ARG anchor.
+                    if prov.meta(target.id()).contaminating(target.is_rc()) {
+                        contaminated = true;
+                    }
+                    if target_node.seq_len >= 500 && used_unique.insert(target.id()) {
+                        inserted_now.push(target.id());
+                    }
                     ext.push(PathStep {
                         dir: target,
                         incoming_edge: Some(edge_to_target),
@@ -915,24 +1880,21 @@ fn extend_one_direction(
                         support: edge_to_target.support as u32,
                     });
                     anchor_gap += target_node.seq_len as i64 - edge_to_target.overlap_k as i64;
-                    if target_node.seq_len >= 500 {
-                        unique_anchor = target;
+                    if anchor_reset_eligible(graph, prov, target, contaminated) {
+                        unique_anchor = Some(target);
+                        anchor_steps = ext.len();
                         anchor_gap = 0;
-                    }
-                    if target_node.seq_len >= 500 {
-                        used_unique.insert(target.id());
                     }
 
                     for (step_dir, step_edge) in &best.steps {
                         let step_node = &graph.nodes[step_dir.id() as usize];
-                        if step_node.seq_len >= 500 {
-                            used_unique.insert(step_dir.id());
+                        if prov.meta(step_dir.id()).contaminating(step_dir.is_rc()) {
+                            contaminated = true;
+                        }
+                        if step_node.seq_len >= 500 && used_unique.insert(step_dir.id()) {
+                            inserted_now.push(step_dir.id());
                         }
                         anchor_gap += step_node.seq_len as i64 - step_edge.overlap_k as i64;
-                        if step_node.seq_len >= 500 {
-                            unique_anchor = *step_dir;
-                            anchor_gap = 0;
-                        }
                         let support = if *step_dir == best.endpoint {
                             best.support_count
                         } else {
@@ -944,6 +1906,11 @@ fn extend_one_direction(
                             overlap: step_edge.overlap_k as usize,
                             support,
                         });
+                        if anchor_reset_eligible(graph, prov, *step_dir, contaminated) {
+                            unique_anchor = Some(*step_dir);
+                            anchor_steps = ext.len();
+                            anchor_gap = 0;
+                        }
                     }
 
                     curr_dir = best.endpoint;
@@ -965,7 +1932,12 @@ fn extend_one_direction(
                     if used_unique.contains(&target.id()) {
                         break;
                     }
-                    used_unique.insert(target.id());
+                    if used_unique.insert(target.id()) {
+                        inserted_now.push(target.id());
+                    }
+                }
+                if prov.meta(target.id()).contaminating(target.is_rc()) {
+                    contaminated = true;
                 }
                 ext.push(PathStep {
                     dir: target,
@@ -974,8 +1946,9 @@ fn extend_one_direction(
                     support: edge_to_target.support as u32,
                 });
                 anchor_gap += target_node.seq_len as i64 - edge_to_target.overlap_k as i64;
-                if target_node.seq_len >= 500 {
-                    unique_anchor = target;
+                if anchor_reset_eligible(graph, prov, target, contaminated) {
+                    unique_anchor = Some(target);
+                    anchor_steps = ext.len();
                     anchor_gap = 0;
                 }
                 curr_dir = target;
@@ -992,21 +1965,49 @@ fn extend_one_direction(
             }
         }
 
-        // Case B: multiple outgoing edges directly from curr_dir.
-        // F23 horizon guard (Case B formula: the walk stands on the fork).
-        if unique_anchor != curr_dir && anchor_gap > dist.max_insert as i64 {
-            stats.withheld_no_unique_anchor += 1;
-            for &(cand, _) in &valid_continuations {
-                cleanup_protected_nodes.insert(cand.id());
+        // Case B: multiple outgoing edges directly from curr_dir (the walk
+        // stands on the fork). PAG (contaminated zone) first, then the F23
+        // horizon guard (Case B formula: fork distance == anchor_gap).
+        let (evidence_anchor, sep_offset) = if contaminated {
+            match unique_anchor {
+                Some(anchor) if anchor_gap <= dist.max_insert as i64 => (anchor, anchor_gap),
+                _ => {
+                    // No attributable anchor covers this fork: withhold and
+                    // roll the walk back to its anchor (§3.10.1/4).
+                    stats.withheld_no_unique_anchor += 1;
+                    stats.withheld_no_attributable_anchor += 1;
+                    discard_unattributable_walk(
+                        &mut ext,
+                        anchor_steps,
+                        used_unique,
+                        &mut inserted_now,
+                        cleanup_protected_nodes,
+                    );
+                    for &(cand, _) in &valid_continuations {
+                        cleanup_protected_nodes.insert(cand.id());
+                    }
+                    break;
+                }
             }
-            break;
-        }
+        } else {
+            if unique_anchor != Some(curr_dir) && anchor_gap > dist.max_insert as i64 {
+                stats.withheld_no_unique_anchor += 1;
+                stats.withheld_horizon += 1;
+                for &(cand, _) in &valid_continuations {
+                    cleanup_protected_nodes.insert(cand.id());
+                }
+                break;
+            }
+            (curr_dir, 0)
+        };
         let ext_nodes: HashSet<u32> = ext.iter().map(|s: &PathStep| s.dir.id()).collect();
         let (candidate_paths, search_status) = find_candidate_paths(
             graph,
             matrix,
             dist,
-            curr_dir,
+            prov,
+            evidence_anchor,
+            sep_offset,
             curr_dir,
             0,
             used_unique,
@@ -1021,15 +2022,39 @@ fn extend_one_direction(
             break;
         }
 
-        let (shadow_paths, mut candidate_paths): (Vec<_>, Vec<_>) = candidate_paths
+        let (mut shadow_paths, mut candidate_paths): (Vec<_>, Vec<_>) = candidate_paths
             .into_iter()
             .partition(|candidate| candidate.through_consumed);
 
         if candidate_paths.is_empty() {
+            if contaminated {
+                // §3.10.2: branch with no admissible pairs under PAG.
+                stats.withheld_no_unique_anchor += 1;
+                stats.withheld_pag_empty += 1;
+            }
             for &(cand, _) in &valid_continuations {
                 cleanup_protected_nodes.insert(cand.id());
             }
             break;
+        }
+
+        // Route-wide support: the DFS admits a route on endpoint evidence
+        // alone, but the fork must rank and compare whole routes (F6b) —
+        // every node the route enters contributes its PB-restricted
+        // in-window pairs. Shadows get the same recomputation so
+        // `shadow_blocks_decision` compares like for like.
+        for cand in &mut candidate_paths {
+            let pairs =
+                candidate_pair_weights(matrix, graph, prov, dist, evidence_anchor, sep_offset, cand);
+            cand.support_count = pairs.len() as u32;
+            cand.total_weight = pairs.iter().map(|&(_, w)| w).sum();
+        }
+        for shadow in &mut shadow_paths {
+            let pairs = candidate_pair_weights(
+                matrix, graph, prov, dist, evidence_anchor, sep_offset, shadow,
+            );
+            shadow.support_count = pairs.len() as u32;
+            shadow.total_weight = pairs.iter().map(|&(_, w)| w).sum();
         }
 
         candidate_paths.sort_by(|a, b| {
@@ -1040,24 +2065,46 @@ fn extend_one_direction(
         });
 
         let best = &candidate_paths[0];
-        let second_count = if candidate_paths.len() > 1 {
-            candidate_paths[1].support_count
-        } else {
-            0
-        };
-        let second_weight = if candidate_paths.len() > 1 {
-            candidate_paths[1].total_weight
-        } else {
-            0.0
-        };
+
+        // The winner must beat every DIVERGENT rival route, not only the
+        // runner-up. A prefix-compatible candidate agrees with `best` on
+        // every step up to its own length (the same route, just a shorter
+        // exit), so it is not an alternative at this fork and does not
+        // compete; only divergent routes — a different outgoing branch or a
+        // different downstream exit — can veto the decision.
+        let divergent_rivals: Vec<&CandidatePath> = candidate_paths[1..]
+            .iter()
+            .filter(|rival| are_divergent_rivals(best, rival))
+            .collect();
 
         let rivals_agree = if best.support_count < params.min_support {
             false
-        } else if second_count == 0 || second_weight < 1e-9 {
-            // Single candidate: require average weight >= 0.05 (Z <= 2.45) to reject tail outliers
+        } else if divergent_rivals.is_empty() {
+            // Every other candidate is prefix-compatible with `best`: only
+            // the single-candidate quality bar applies (average weight
+            // >= 0.05, Z <= 2.45, rejects tail outliers).
             (best.total_weight / best.support_count as f64) >= 0.05
         } else {
-            (best.total_weight / second_weight) >= params.decision_threshold
+            // F6b: pairs admissible for both rivals (e.g. rows that bridge a
+            // whole same-length bubble into the shared endpoint) carry no
+            // differential evidence, so the ratio compares exclusive
+            // support only. A rival with no exclusive pairs degenerates to
+            // the single-candidate quality bar inside
+            // `differential_rivals_agree`.
+            divergent_rivals.iter().all(|rival| {
+                differential_rivals_agree(
+                    matrix,
+                    graph,
+                    prov,
+                    dist,
+                    evidence_anchor,
+                    sep_offset,
+                    best,
+                    rival,
+                    params.min_support,
+                    params.decision_threshold,
+                )
+            })
         };
         let is_decision_valid =
             rivals_agree && !shadow_blocks_decision(best, &shadow_paths, params.decision_threshold);
@@ -1071,14 +2118,13 @@ fn extend_one_direction(
         if is_decision_valid && all_steps_valid {
             for (step_dir, step_edge) in &best.steps {
                 let step_node = &graph.nodes[step_dir.id() as usize];
-                if step_node.seq_len >= 500 {
-                    used_unique.insert(step_dir.id());
+                if prov.meta(step_dir.id()).contaminating(step_dir.is_rc()) {
+                    contaminated = true;
+                }
+                if step_node.seq_len >= 500 && used_unique.insert(step_dir.id()) {
+                    inserted_now.push(step_dir.id());
                 }
                 anchor_gap += step_node.seq_len as i64 - step_edge.overlap_k as i64;
-                if step_node.seq_len >= 500 {
-                    unique_anchor = *step_dir;
-                    anchor_gap = 0;
-                }
                 let support = if *step_dir == best.endpoint {
                     best.support_count
                 } else {
@@ -1090,6 +2136,11 @@ fn extend_one_direction(
                     overlap: step_edge.overlap_k as usize,
                     support,
                 });
+                if anchor_reset_eligible(graph, prov, *step_dir, contaminated) {
+                    unique_anchor = Some(*step_dir);
+                    anchor_steps = ext.len();
+                    anchor_gap = 0;
+                }
             }
 
             curr_dir = best.endpoint;
@@ -1311,6 +2362,89 @@ impl Drop for ResolverLifecycleGuard<'_> {
     }
 }
 
+/// PB (provenance boundary): builds the provenance meta of the composite
+/// unitig about to be pushed for a committed `full_path`.
+///
+/// `provenance_boundary` is the spliced 5'-offset at which the committed
+/// path enters its first pooled-locus node (multi-context or BCI-flagged in
+/// the walked orientation). A pair read at 5'-offset `p` sits at exit
+/// distance `dist_u1_exit = seq_len - p`, so it is attributable to the
+/// unique locus only while `p < boundary`, i.e. while
+/// `dist_u1_exit > seq_len - boundary`; rows at or below that cutoff belong
+/// to the shared zone and are inadmissible as unique-locus evidence (MR-2).
+/// Constituent context counts merge by max (MR-1), read in each
+/// constituent's walked orientation (DSC-3): an rc-entered constituent
+/// contributes its `_rev` scalars to the composite's `_fwd` side. A
+/// constituent that already carries its own composite boundary preserves
+/// it in composite spliced coordinates: in reverse orientation
+/// `[0, seq_len - b)` is pooled, so the composite boundary begins
+/// immediately at the constituent's entry offset (`step_start_offset`);
+/// in forward orientation `[0, b)` is unique, so the composite boundary
+/// is `step_start_offset + b`. A pristine constituent is marked at its
+/// entry offset when its walked orientation is contaminating. `None` means
+/// the whole composite is uniformly classified (no pooled-locus
+/// constituent).
+fn composite_provenance(
+    graph: &CdbgGraph,
+    prov: &ProvenanceTable,
+    full_path: &[PathStep],
+) -> NodeProvenanceMeta {
+    let mut meta = NodeProvenanceMeta::default();
+    let mut assembled_len: u32 = 0;
+    for (idx, step) in full_path.iter().enumerate() {
+        let node = &graph.nodes[step.dir.id() as usize];
+        let m = prov.meta(step.dir.id());
+        let (fwd_cnt, rev_cnt, bci_fwd, bci_rev) = if step.dir.is_rc() {
+            (
+                m.external_context_count_rev,
+                m.external_context_count_fwd,
+                m.bci_rev,
+                m.bci_fwd,
+            )
+        } else {
+            (
+                m.external_context_count_fwd,
+                m.external_context_count_rev,
+                m.bci_fwd,
+                m.bci_rev,
+            )
+        };
+        meta.external_context_count_fwd = meta.external_context_count_fwd.max(fwd_cnt);
+        meta.external_context_count_rev = meta.external_context_count_rev.max(rev_cnt);
+        meta.bci_fwd |= bci_fwd;
+        meta.bci_rev |= bci_rev;
+
+        let step_start_offset = if idx == 0 {
+            0
+        } else {
+            assembled_len.saturating_sub(step.overlap as u32)
+        };
+
+        if meta.provenance_boundary.is_none() {
+            if let Some(b) = m.provenance_boundary {
+                if step.dir.is_rc() {
+                    // In reverse orientation, [0, seq_len - b) is pooled, so the
+                    // constituent enters pooled territory immediately at step_start_offset.
+                    meta.provenance_boundary = Some(step_start_offset);
+                } else {
+                    // In forward orientation, [0, b) is unique, so the pooled boundary
+                    // occurs at step_start_offset + b.
+                    meta.provenance_boundary = Some(step_start_offset.saturating_add(b));
+                }
+            } else if m.contaminating(step.dir.is_rc()) {
+                meta.provenance_boundary = Some(step_start_offset);
+            }
+        }
+
+        if idx == 0 {
+            assembled_len = node.seq_len;
+        } else {
+            assembled_len = step_start_offset + node.seq_len;
+        }
+    }
+    meta
+}
+
 /// Resolves repeats in `graph` using paired-end link constraints from `PairLinkMatrix`,
 /// returning comprehensive junction statistics.
 ///
@@ -1346,6 +2480,10 @@ fn execute_repeat_resolution(
     let n = graph.nodes.len() as u32;
     let mut stats = JunctionStats::default();
 
+    // F23 provenance precompute (DCC + BCI): static graph analysis in
+    // O(V + E), read-only over the graph, executed once per resolution.
+    let mut prov = ProvenanceTable::analyze(graph, dist.max_insert);
+
     // 1. Identify long unique seed unitigs (length >= 500 bp, non-deleted, non-circular)
     let mut seeds: Vec<u32> = (0..n)
         .filter(|&id| {
@@ -1356,6 +2494,29 @@ fn execute_repeat_resolution(
 
     // Sort seeds by length descending
     seeds.sort_by_key(|&id| std::cmp::Reverse(graph.nodes[id as usize].seq_len));
+
+    let mut fail_ctx = 0usize;
+    let mut fail_bci_ds = 0usize;
+    let mut fail_bci = 0usize;
+    for &seed_id in &seeds {
+        let m = prov.meta(seed_id);
+        if m.external_context_count_fwd != 1 {
+            fail_ctx += 1;
+        }
+        if m.bci_downstream_fwd {
+            fail_bci_ds += 1;
+        }
+        if m.bci_fwd {
+            fail_bci += 1;
+        }
+    }
+    tracing::info!(
+        "[SeedProfile] total_seeds={}, fail_ctx={}, fail_bci_ds={}, fail_bci={}",
+        seeds.len(),
+        fail_ctx,
+        fail_bci_ds,
+        fail_bci
+    );
 
     let mut used_in_path: HashSet<u32> = HashSet::new();
     let mut cleanup_protected_nodes: HashSet<u32> = HashSet::new();
@@ -1379,6 +2540,7 @@ fn execute_repeat_resolution(
             matrix,
             dist,
             params,
+            &prov,
             &mut local_used,
             &mut stats,
             &mut cleanup_protected_nodes,
@@ -1392,6 +2554,7 @@ fn execute_repeat_resolution(
             matrix,
             dist,
             params,
+            &prov,
             &mut local_used,
             &mut stats,
             &mut cleanup_protected_nodes,
@@ -1550,6 +2713,13 @@ fn execute_repeat_resolution(
                     let node = UnitigNode::new(new_node_id, new_seq_id, new_len, 20.0);
                     graph.nodes.push(node);
 
+                    // PB (MR-1): the composite unitig records where its
+                    // sequence shifts from the unique-locus prefix into the
+                    // pooled-locus suffix, keeping the provenance side table
+                    // in lockstep with the graph.
+                    let composite_meta = composite_provenance(graph, &prov, &full_path);
+                    prov.push_composite(composite_meta);
+
                     // Commit used nodes
                     used_in_path.extend(local_used);
                 }
@@ -1615,6 +2785,14 @@ pub fn resolve_repeats_exspander(
         stats.valid_k_minus_1_joins,
         stats.rejected_ambiguous_joins,
         stats.rejected_invalid_joins
+    );
+    tracing::info!(
+        "[exSPAnder] F23 Horizon/PAG stats: withheld no unique anchor = {} (si2_seed = {}, horizon = {}, no_attr_anchor = {}, pag_empty = {})",
+        stats.withheld_no_unique_anchor,
+        stats.withheld_si2_seed,
+        stats.withheld_horizon,
+        stats.withheld_no_attributable_anchor,
+        stats.withheld_pag_empty
     );
     Ok(())
 }
@@ -1751,5 +2929,153 @@ mod tests {
             assert_eq!(graph.resolver_state(), state);
             assert_eq!(format!("{graph:?}"), before);
         }
+    }
+
+    fn push_plain_node(graph: &mut CdbgGraph, len: usize) -> u32 {
+        let id = graph.nodes.len() as u32;
+        let seq: Vec<u8> = (0..len).map(|i| b"ACGT"[(i + id as usize) % 4]).collect();
+        let seq_id = graph.arena.push_seq(&seq);
+        graph
+            .nodes
+            .push(UnitigNode::new(id, seq_id, len as u32, 25.0));
+        id
+    }
+
+    fn link(graph: &mut CdbgGraph, from: DirUnitigId, to: DirUnitigId, ov: u8) {
+        graph.nodes[from.id() as usize].add_edge(from.is_rc(), GraphEdge::new(to, ov, 10));
+        graph.nodes[to.id() as usize]
+            .add_edge(to.twin().is_rc(), GraphEdge::new(from.twin(), ov, 10));
+    }
+
+    /// PB coordinate orientation (MR-2): `dist_u1_exit` is the distance from
+    /// the read to u1's 3' exit, so a read at 5'-offset `p` has
+    /// `dist_u1_exit = u1_len - p` and falls in the unique prefix
+    /// `[0, boundary)` iff `dist_u1_exit > u1_len - boundary`. With
+    /// u1_len = 470 and boundary = 300, a prefix read at offset 50
+    /// (dist_u1_exit = 420) must stay admissible while a suffix read at
+    /// offset 350 (dist_u1_exit = 120) must be excluded.
+    #[test]
+    fn pb_boundary_filters_pooled_suffix_in_exit_coordinates() {
+        let mut graph = CdbgGraph::new(31);
+        let u1_id = push_plain_node(&mut graph, 470);
+        let u2_id = push_plain_node(&mut graph, 400);
+        let u1 = DirUnitigId::new(u1_id, false);
+        let u2 = DirUnitigId::new(u2_id, false);
+
+        let mut prov = ProvenanceTable::default();
+        prov.push_composite(NodeProvenanceMeta {
+            provenance_boundary: Some(300),
+            ..NodeProvenanceMeta::default()
+        });
+        prov.push_composite(NodeProvenanceMeta::default());
+
+        let mut matrix = PairLinkMatrix::new();
+        // Both spans (620 and 320) are inside the default [250, 700] window,
+        // so the only filter that can separate the rows is the boundary.
+        matrix.add_evidence(
+            u1,
+            u2,
+            ReadPairEvidence {
+                pair_id: 0,
+                dist_u1_exit: 420,
+                dist_u2_entry: 100,
+                r1_len: 100,
+                r2_len: 100,
+            },
+        );
+        matrix.add_evidence(
+            u1,
+            u2,
+            ReadPairEvidence {
+                pair_id: 1,
+                dist_u1_exit: 120,
+                dist_u2_entry: 100,
+                r1_len: 100,
+                r2_len: 100,
+            },
+        );
+
+        let dist = InsertSizeDist::default();
+        let kernel = |span: i64| -> f64 {
+            let z = (span as f64 - dist.median).abs() / (1.4826 * dist.mad);
+            (-0.5 * z * z).exp()
+        };
+
+        let (count, weight) = score_candidate_path_prov(&matrix, &graph, &prov, &dist, u1, u2, 100);
+        assert_eq!(count, 1, "only the unique-prefix row may count");
+        assert!(
+            (weight - kernel(620)).abs() < 1e-12,
+            "weight must be the prefix row's kernel weight, got {weight}"
+        );
+
+        // Without a boundary both rows are admissible (control orientation).
+        let mut unbounded = ProvenanceTable::default();
+        unbounded.push_composite(NodeProvenanceMeta::default());
+        unbounded.push_composite(NodeProvenanceMeta::default());
+        let (count, weight) =
+            score_candidate_path_prov(&matrix, &graph, &unbounded, &dist, u1, u2, 100);
+        assert_eq!(count, 2);
+        assert!(
+            (weight - (kernel(620) + kernel(320))).abs() < 1e-12,
+            "unbounded control must score both rows, got {weight}"
+        );
+    }
+
+    /// DCC source SCC origin (AR-2): a source node of a linear chain has
+    /// exactly one established lineage and stays anchor-eligible; similarly,
+    /// an isolated circular chromosome or plasmid cycle (a source SCC in the
+    /// condensation graph) originates its own authentic genomic lineage and
+    /// is anchor-clean.
+    #[test]
+    fn dcc_cyclic_source_scc_originates_established_lineage() {
+        let mut chain = CdbgGraph::new(31);
+        let s = push_plain_node(&mut chain, 600);
+        let c = push_plain_node(&mut chain, 300);
+        link(
+            &mut chain,
+            DirUnitigId::new(s, false),
+            DirUnitigId::new(c, false),
+            30,
+        );
+        let prov = ProvenanceTable::analyze(&chain, 700);
+        assert_eq!(
+            prov.meta(s).external_context_count(false),
+            1,
+            "linear source carries its own established lineage"
+        );
+        assert!(
+            prov.anchor_clean(DirUnitigId::new(s, false)),
+            "single-lineage source must remain anchor-eligible"
+        );
+
+        let mut cycle = CdbgGraph::new(31);
+        let a = push_plain_node(&mut cycle, 600);
+        let b = push_plain_node(&mut cycle, 600);
+        link(
+            &mut cycle,
+            DirUnitigId::new(a, false),
+            DirUnitigId::new(b, false),
+            30,
+        );
+        link(
+            &mut cycle,
+            DirUnitigId::new(b, false),
+            DirUnitigId::new(a, false),
+            30,
+        );
+        let prov = ProvenanceTable::analyze(&cycle, 700);
+        assert_eq!(
+            prov.meta(a).external_context_count(false),
+            1,
+            "cyclic source SCC originates its own authentic lineage"
+        );
+        assert!(
+            !prov.meta(a).is_multi_context(false),
+            "single source SCC is not multi-context"
+        );
+        assert!(
+            prov.anchor_clean(DirUnitigId::new(a, false)),
+            "cyclic source SCC must be anchor-clean"
+        );
     }
 }
