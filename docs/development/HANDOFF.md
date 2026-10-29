@@ -1,5 +1,24 @@
 # fastBact Development Handoff
 
+## F24 architecture handoff — 2026-10-29
+
+- CURRENT_PROJECT: fastBact
+- CURRENT_MILESTONE: F24 — Provenance-Safe Contiguity Recovery
+- CURRENT_STATUS: F24_ARCHITECTURE_SPECIFIED; implementation and validation not performed
+- ACTIVE_WORKTREE: `/hpcfs/fhome/caizhh/Desktop/03_Tool_Development/fastBact-phase-f24-contiguity-worktree`
+- SOURCE_SHA: `68b19f06d22537cf199e8fe124ea6b62bb0bb50a` (peeled frozen tag `f23-accepted-2026-10-29`)
+- ACTIVE_WORKER: architecture-authoring session; no implementation worker dispatched
+- Contract: [F24_ARCHITECTURE_AND_ACCEPTANCE_CONTRACT.md](../../F24_ARCHITECTURE_AND_ACCEPTANCE_CONTRACT.md)
+- COMPLETED_GATES: policy/source/test-definition inspection and architectural specification only
+- OPEN_FINDINGS: length isolates upstream physical influence but cannot establish locus uniqueness; certificate availability limits recovery; strict linear analysis requires replacing heap-based propagation; numerical targets remain unvalidated
+- LATEST_VALIDATION_EVIDENCE: static inspection only; no new Cargo, assembly or QUAST run
+- REMAINING_BUDGET: not assessed; no paid-provider call or compute job requested
+- NEXT_ACTION: Controller schedules sequential implementation, independent Sol review and Luna verification against the contract; preserve scientific acceptance authority
+
+**Status conflict recorded:** root AGENTS.md still says `F23_ALGORITHM_CONTRACT_BLOCKED` and C0-02R NOT ACCEPTED. The dated acceptance record below and the current user's explicit accepted-baseline instruction establish F23 as the frozen comparator for this architectural task. Older text is preserved as history; this specification neither reverses F23 acceptance nor grants F24 acceptance. Scientific safety, isolated worktree, compute, merge/push/release restrictions remain in force.
+
+**Architectural qualification:** the requested unconditional inference from `length >= max_insert` to a locus-specific exit conflicts with frozen shared-long-node protections. F24 retains the stricter safety requirement: physical isolation and independent attribution are separate certificates. Missing attribution fails closed, even if recovery targets are missed.
+
 ## General policy
 
 Normative cross-project collaboration rules are Multi-AI Collaboration V3.2:

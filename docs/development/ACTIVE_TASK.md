@@ -1,4 +1,8 @@
-# ACTIVE TASK: fastBact C0-02R Phase F23 — COMPLETED AND ACCEPTED
+# ACTIVE TASK: fastBact F24 — Architecture Specified
+
+**F24 status (2026-10-29):** The user requested the Principal Architect specification for Provenance-Safe Contiguity Recovery. [F24_ARCHITECTURE_AND_ACCEPTANCE_CONTRACT.md](../../F24_ARCHITECTURE_AND_ACCEPTANCE_CONTRACT.md) defines the implementation invariants and acceptance gates against frozen F23 commit `68b19f06d22537cf199e8fe124ea6b62bb0bb50a`, in branch `feature/f24-provenance-safe-contiguity` and its designated isolated worktree. No F24 implementation, Cargo validation or benchmark has been performed. Next: sequential implementation, independent Sol review and Luna verification. The contract explicitly separates physical isolation from locus attribution; missing attribution cannot be replaced by node length. F24 scientific acceptance remains ungranted.
+
+## Frozen F23 acceptance record
 
 > **Project status (2026-10-29; general rules are Multi-AI Collaboration V3.2 in `~/.config/ai-collaboration/POLICY.md`, which is not restated here):** Phase F23 Provenance-Aware Repeat Resolution has achieved complete technical completion and final scientific acceptance. Following comprehensive acceptance evidence closure (`FASTBACT_F23_ACCEPTANCE_EVIDENCE_CLOSURE.md`) and independent review PASS by Codex GPT-6.1 Sol Medium (R1–R6), the user as `FINAL_AUTHORIZATION_AUTHORITY` formally granted final merge and acceptance authorization (`USER_FINAL_MERGE_AUTHORIZATION_GRANTED` on 2026-10-29). The candidate implementation from `feature/c0-02r-phase-f23-unique-anchor` (Commit `0b567c6`) has been integrated into `main`. The scientific contract `C0-02R` is formally **`ACCEPTED`**, and Phase F23 is transitioned to **`F23_COMPLETED`**.
 
