@@ -1,21 +1,32 @@
-# ACTIVE TASK: fastBact F24 — Completed, Accepted and Synchronized to Remote
+# ACTIVE TASK: fastBact F24 — Final Technical Acceptance (F24_ACCEPTED_WITH_P1-4_WAIVER)
 
-**F24 status (2026-10-30):** Phase F24 Provenance-Safe Contiguity Recovery has achieved complete technical completion, final scientific acceptance, and remote synchronization to GitHub (`origin/main`) under explicit user authorization (`将F24推送到github`).
-- P1-1 (R1-003 base errors): **RESOLVED**. Root cause identified as Stage 06 polisher grid-sampling artifact; fixed via Pass 2 contig-wide sliding-window uniqueness filtering in `consensus.rs`. Mismatches dropped to **0.13 per 100 kbp** (-78.0% below baseline F23 0.59) and indels to **0.00**.
-- P1-2 (Sol R5 Long Anchor Absorption): **RESOLVED** via strict $p > b + H$ evidence filtering.
-- P1-3 (3-State Lineage Lattice): **RESOLVED** via monotonic 3-state lattice (`CleanUnique` $\to$ `Contaminated` $\to$ `Absorbed`).
-- P1-4 (R1-003 NGA50 44,702 bp vs static 46,800 bp floor): Forensic evidence established that 44,702 bp (+155.3% over F23 17,509 bp) represents the mathematically provable maximal safe contiguity boundary without risking speculative misassemblies; static floor formally waived under user authorization.
-- Real-data 3-replicate paired benchmark: 100% deterministic reproducibility ($\sigma^2 = 0.000000$) on Slurm Job `3066737`.
-- Full release test suite: 213/213 passed on Slurm Job `3066736`.
-Full documentation: [`F24_FINAL_P1_CLOSURE_AND_SCIENTIFIC_ACCEPTANCE_REPORT.md`](../../../../.gemini/antigravity-cli/brain/7e7479aa-7a0c-4a62-84bd-459360983831/F24_FINAL_P1_CLOSURE_AND_SCIENTIFIC_ACCEPTANCE_REPORT.md).
+**F24 Status (2026-10-30):** Phase F24 Provenance-Safe Contiguity Recovery has achieved formal technical and scientific acceptance under User Authorization: **`F24_ACCEPTED_WITH_P1-4_WAIVER`**.
+- **Disposition**: `F24_ACCEPTED_WITH_P1-4_WAIVER` (Formal user decision on 2026-10-30).
+- **P1-4 Floor Retained & Waiver Rationale**: The original static floor target of 46,800 bp for R1-003 NGA50 is formally retained in the historical contract record. The waiver of this floor in favor of the observed 44,702 bp is approved based on:
+  1. Significant contiguity recovery: +155.3% NGA50 over the frozen F23 baseline (17,509 bp).
+  2. Substantial base-level accuracy gains: mismatches dropped to 0.13 per 100 kbp (-78.0% below baseline 0.59) and indels strictly 0.00.
+  3. Zero new extensive or local misassemblies reported relative to F23.
+  4. Methodological correctness: conservative evidence isolation takes strict precedence over speculative repeat joining.
+  5. Contiguity qualification: 44,702 bp is characterized strictly as the *empirically observed safe contiguity boundary under the implemented conservative evidence isolation criteria*, and is explicitly **not** described as a mathematically proven maximum.
+- **P1-1 (R1-003 Base Errors)**: Fully resolved. Polisher grid-sampling artifact in `consensus.rs` eliminated via Pass 2 full sliding-window candidate frequency counting (`seq.windows(k)`).
+- **P1-2 & P1-3**: Fully resolved via strict $p > b + H$ evidence filtering and monotonic 3-state lattice (`CleanUnique` $\to$ `Contaminated` $\to$ `Absorbed`).
+- **Residual F23-Era Misassemblies Preserved**:
+  - `R1-001` (*E. coli* K-12): Strictly 5 extensive misassemblies (identical to F23 baseline; AUD-01 2.1 Mb chimera remains eliminated; 5th misassembly on `contig_48` is a QUAST min-alignment/ambiguity threshold artifact over a pre-existing baseline precursor).
+  - `R1-003` (*S. aureus* MW2): Strictly 0 extensive misassemblies, 1 residual local misassembly (identical to baseline).
+- **Integrated Commit SHA**: `cfbd00503b3031853bb41441160717d1e5bc3e69` (tag: `f24-accepted-2026-10-30`).
+- **Post-Integration Verification**: Slurm Job `3072360` on `vnode1` (`qfree`): 213/213 release tests passed, CLI smoke test OK, binary SHA-256 `53998c592cfe2155fca21a57fa1f39b36f5fc5fb1aeb11db970e760a4742b8fd`.
+- **Benchmark Reproducibility**: Slurm Job `3066737`: 3 paired computational replicates (12 assemblies + 12 QUAST evaluations), empirical variance strictly $\sigma^2 = 0.000000$.
 
 ## Phase F24 Acceptance Record
 
-- **Overall Status**: **`F24_COMPLETED_AND_ACCEPTED`**
-- **Remote Synchronization**: Synchronized to GitHub `Caizhaohui/fastBact:main` with immutable tag `f24-accepted-2026-10-30`.
-- **Merged Main SHA**: `ba69365`
-- **Candidate Release Binary**: `target/release/fastBact` SHA-256 `1f1e5d8770c7657f880a6387cf221a2b530c02993b36ccb89d92f5391723886d`
-- **Deterministic Verification**: 213/213 release tests passed (Job `3066736`), 12/12 assemblies and QUAST evaluations passed with $\sigma^2 = 0.000000$ (Job `3066737`).
+- **Overall Status**: **`F24_ACCEPTED_WITH_P1-4_WAIVER`**
+- **User Authorization**: Formal Technical Acceptance approved with conditions on 2026-10-30.
+- **Integrated Main Commit SHA**: `cfbd00503b3031853bb41441160717d1e5bc3e69`
+- **Immutable Freeze Tag**: `f24-accepted-2026-10-30`
+- **Post-Integration Release Binary SHA-256**: `53998c592cfe2155fca21a57fa1f39b36f5fc5fb1aeb11db970e760a4742b8fd` (Slurm Job `3072360`)
+- **Pre-Merge Candidate Binary SHA-256**: `1f1e5d8770c7657f880a6387cf221a2b530c02993b36ccb89d92f5391723886d` (Slurm Job `3066736`)
+- **Baseline Release Binary SHA-256**: `97adb3c2ae386d453ba3f50fa61920836fd6c37d83924c0e0bc04d6763caaeb7` (Commit `68b19f06d22537cf199e8fe124ea6b62bb0bb50a`)
+- **Post-Integration Tests**: 213/213 release tests passed (Slurm Job `3072360`), exit `0:0`, CLI smoke test OK.
 - **Real-Data A/B 3-Replicate Benchmark (QUAST v5.2.0, Job `3066737` on `vnode1`)**:
   - `R1-001` (*E. coli* K-12): NGA50 27,031 $\to$ **45,092 bp** (+66.8%), Misassemblies: strictly **5** (zero new vs F23), Local misassemblies: strictly **0**, Mismatches: 2.24 $\to$ **0.85** (-62.1%), Indels: 1.09 $\to$ **0.53** (-51.4%), Valid k joins: 542 $\to$ **790**.
   - `R1-003` (*S. aureus* MW2): NGA50 17,509 $\to$ **44,702 bp** (+155.3%), Misassemblies: strictly **0** (zero new), Local misassemblies: strictly **1** (identical to baseline), Mismatches: 0.59 $\to$ **0.13** (-78.0%), Indels: 0.00 $\to$ **0.00**, Valid k joins: 63 $\to$ **341**.
