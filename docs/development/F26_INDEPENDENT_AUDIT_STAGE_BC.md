@@ -1,5 +1,72 @@
 # F26 independent audit of Stages B and C
 
+## F26-AUDIT-003: final independent verification, 2026-10-30
+
+- Role: Independent Auditor / Stage B-C Final Verification, Codex Sol assignment; sole writer of this report.
+- Audited HEAD: `e4310ccc46bd5f3ed0193c6ffc64c555e4d71213`; primary-evidence commit: `f7560a6c1cf5f43d2e2ead73e528d762b51c78ac` (F26-DATA-004).
+- Branch: `feature/f26-cross-species-robustness`; assigned isolated F26 worktree.
+- **Overall verdict: STAGE_BC_AUDIT_PASS.** BC-01 is satisfactorily closed for verified-reference-lineage use and Stage B-C readiness. This section supersedes the historical blocked verdicts below.
+
+| Finding | Final status | Basis |
+|---|---|---|
+| BC-01 / P1 | **CLOSED / RESOLVED** | Accessible primary alignment counts, reference breadth/depth, discriminatory marker support and shared controls establish MW2-lineage bacterial content with Staph1N co-culture; binding protocol requires per-contig sequence attribution. |
+| BC-02 / P1 | **CLOSED / RESOLVED** | F26-AUDIT-002 verification retained; its wrapper, harness and benchmark contract are unchanged since `bf19db7`. |
+| BC-03 / P2 | **CLOSED / RESOLVED** | F26-AUDIT-002 three-replicate and experiment-identity verification retained; affected files are unchanged. |
+
+### BC-01 primary evidence and denominator reconciliation
+
+Inspected the evidence report, provenance document, full discrimination script and retained artifacts under `docs/development/evidence/cs_sa01_strain_discrimination/`. Exact idxstats/flagstat counts, coverage tables, binned chromosome depth, per-base locus/exclusive-marker/phage depth, filtered chunk-alignment hit tables, marker BED/FASTA sets, origin audit, gates, sensitivity table, input hashes, transcript and exit-code file are accessible. BAMs and intermediate QNAME/SAM files were scratch artifacts deleted by the script; this audit certifies the retained primary count/depth evidence, not retention of every alignment record or independent replay of the aligner.
+
+Fresh `sacct -j 3074103,3074125,3074242 --format=JobID,Partition,State,ExitCode,Elapsed -n` confirms all three jobs COMPLETED on `qfree`, exit `0:0`. The definitive retained transcript is **3074242**, `vnode1`, 07:46:28–07:48:33 UTC, with completion marker and trap exit 0; 3074103/3074125 are earlier successful iterations. The script passes `bash -n`. No pipeline was rerun, and protected evidence was not regenerated.
+
+The input denominator is **4,479,306 primary read records**, comprising 2,239,653 records per mate. Fresh SHA-256 calculations on both external FASTQs and the MW2 reference match the retained input ledger and pinned values exactly. The two comparator reference hashes pass the retained digest check. Contrary to the evidence report's statement that all five hashes are hard-pinned, the script asserts expected values only for R1, R2 and MW2; it records the other two hashes.
+
+| Alignment | Bacterial mapped alignment records | Phage mapped alignment records | Supplementary | Total idxstats records |
+|---|---:|---:|---:|---:|
+| MW2 + Staph1N | 1,339,405 | 2,964,345 | 736 | 4,480,042 |
+| MRSA252 + Staph1N | 1,295,397 | 2,964,345 | 4,353 | 4,483,659 |
+
+Both totals minus supplementary counts equal 4,479,306 exactly. These mapped counts include supplementary records and must not be described as unique reads. The summary's 123,856 / 142,998 “unmapped” values are only the idxstats `*` row; per-reference unmapped records must also be included. For example, MW2 has 14,689 + 37,747 + 123,856 = **176,292 primary unmapped records**, agreeing with flagstat (4,479,306 − 4,303,014 primary mapped). This accounting resolves the denominator without relying on preliminary k-mer percentages.
+
+MW2 coverage is **2,820,462/2,820,462 bases (100.0000%), 69.9473×**. Staph1N coverage is **145,228/145,647 bases (99.7123%), 2,984.21×**. A fresh AWK reduction of retained full phage depth independently gives 145,647 positions, 145,228 covered and mean 2,984.213406×. MRSA252 has 90.2396% breadth and 64.8355×, consistent with extensive shared sequence but an inferior whole-chromosome match.
+
+### Diagnostic marker support and limits
+
+Fresh `zcat .../cs_sa01_disc_exclusive_depth.tsv.gz | awk ...` aggregation independently reproduces the marker results from actual per-base rows (the file header has six labels, but data rows have five fields: tag, reference, position, q0 depth, q20 depth).
+
+| Operational marker set | Bases | MAPQ≥20 mean depth | Covered bases / breadth |
+|---|---:|---:|---:|
+| MW2 PVL-exclusive | 388 | 50.814433× | 388 / 100% |
+| MW2 SCCmec IV-exclusive | 9,650 | 69.021658× | 9,650 / 100% |
+| MRSA252 SCCmec II-exclusive | 36,904 | 0.322811× | 343 / 0.929439% |
+| MRSA252 SCCmec II shared control (retained support table) | 14,506 | 74.29× | 97.40% |
+
+The longest q20-covered island in the MRSA252-exclusive set independently recomputes to **113 bp**. Its 4,570-bp first block has zero supporting reads. Present MW2 markers at bacterial depth and the shared positive control demonstrate sensitivity; broad MRSA252 cassette content is absent at the observed bacterial abundance. This is sufficient for reference-lineage discrimination, not proof of an exact ancestral isolate, absolute absence of trace mixtures, or a calibrated low-abundance detection limit.
+
+The origin transcript reports **360 primary alignment records but 330 distinct QNAMEs, all 330 also MW2-chromosome-supported**. The report's subtraction “330/360, leaving 30 unsupported” mixes units and is incorrect; the proposed plasmid explanation for those 30 is unnecessary. QNAME support may come from either mate and does not establish a unique genomic origin. Mean divergence 6.21%, sparse aligned-base coverage and MW2 QNAME support are consistent with cross-mapped homologs/paralogs rather than an intact MRSA252 cassette. They do not prove the molecular origin of every residual alignment.
+
+Marker exclusivity is operational: complements of MAPQ≥10, 5-kb chunked `-x sr` hit intervals against the other chromosome and phage, filtered to blocks ≥200 bp. It is not exhaustive proof of absence of every homolog. The retained shared-core control and positive MW2 marker depth support its use here. G3a's read-span criterion remains visibly failed/superseded; G3 uses aligned-base coverage, which is appropriate for deletion-spanning alignments. The audit independently evaluates the continuous evidence rather than accepting the revised threshold or `ALL PASS` marker alone. The script's final gate-reporting branch does not enforce a failing process exit for failed gates; exit 0 alone is therefore not certification. Poisson `exp(-D·L)` underflow is an idealized model, not a measured probability of these partially covered markers; this verdict does not rely on that claim.
+
+### Integrity, bibliographic provenance and binding interpretation
+
+`sha256sum -c SHA256SUMS.txt` returns **1: 43 entries OK, run.log FAILED**. This discrepancy is fully reproducible: STEP 11 hashes the still-open transcript before appending the printed checksum ledger, completion line and trap. Running `sed '/^--- SHA256SUMS.txt ---$/,$d' cs_sa01_disc_run.log | sha256sum` yields exactly the recorded `b1d402f93728a7270ef91ebdbdde646cfd96f45e31d64f577d5e77b470a01530`. The complete retained log's independently measured hash is **`c6b16c94461c596078e30c90e077a7c0c4b0a4ed819eddf79143606fa31037c4`**; script hash is **`4d37c8422fb49587635f82ae1b12fbe07075eed90430902760ceaf1e41c620da`**. Thus the mismatch has a demonstrated finalization cause and does not invalidate the count/depth files. The exit-code file is accessible but absent from that ledger. Future evidence production should hash closed logs externally.
+
+The eLife paper and Mo Lab repository attribution are documented and corroborated by the [study repository](https://github.com/MolabUW/mrsa-project-eLife2025) and [eLife article](https://elifesciences.org/reviewed-preprints/102743v1). Version 1 is dated October 25, 2024; the version of record is July 10, 2025, so “2025 reviewed preprint, .1” conflates versions. The run alias `MW2_A_Staph1N_E12_S196_R1_001.fastq.gz` is retained in the provenance/metadata chain; decoding E12 as row E/column 12 and S196 as sample index is plausible filename interpretation. No submitter plate map or correction establishes an adjacent-record copying mechanism. Treat the exact cause of the conflicting Title as an inference; the sequence-based MW2-lineage conclusion is independently supported and does not require that mechanism.
+
+Evidence report §5 explicitly withdraws the preliminary 31-mer figures as certifying evidence. Provenance §4.1.1 and §6.1 still repeat them, including the old phage length and unsupported independence claims. **For this certification, those statements are superseded by the retained alignment evidence and the qualifications in this audit.** They are documentation advisories, not an additional independent line of empirical proof.
+
+Evidence report §6 is binding: use chromosome-only `NC_003923.1`; retain raw QUAST output; classify **sequence-confirmed** Staph1N contigs as expected viral co-culture content; require per-contig sequence attribution before exemption; investigate partial/chimeric contigs; leave unresolved sequence unresolved. Approximately 145.6 kb length or high depth alone grants no exemption. Chromosome-aligned metrics remain separate from whole-assembly metrics, and identical inputs do not guarantee unchanged bacterial quality rankings when viral recovery differs. This interpretation governs the broader shorthand in provenance §6.1. Actual assembled viral-contig identity and benchmark outcomes remain Stage D/G verification obligations.
+
+### Certification scope and handoff
+
+**STAGE_BC_AUDIT_PASS: BC-01, BC-02 and BC-03 CLOSED.** The retained primary evidence satisfactorily supports MW2-reference-lineage use under the existing dataset contract and the sequence-confirmed viral interpretation rule. Nonblocking reporting/producer limitations above are explicit; no frozen scientific criterion, dataset or reference is changed. BC-04/05 remain historical advisories requiring their respective pre-benchmark/implementation follow-up. This is not Stage D performance/determinism certification or final scientific acceptance.
+
+Verification in this audit comprised read-only artifact inspection, fresh external-input hashes, all 44 digest checks with the single explained log mismatch, per-base arithmetic, script syntax, scheduler accounting and unchanged-file comparison for BC-02/03. No Rust compilation/tests, assembly or QUAST was executed. HANDOFF and ACTIVE_TASK were read; their older phase/status discrepancy remains outside this assignment. Only this owned report changes; no protected artifacts, merge, push or release. Next action: Controller proceeds to the authorized Stage D gates with these interpretation constraints and the outstanding BC-04/05 advisories.
+
+---
+
+## Historical F26-AUDIT-002 report (preserved; superseded by F26-AUDIT-003)
+
 ## F26-AUDIT-002: independent re-audit, 2026-10-30
 
 - Role: independent auditor, Codex Sol assignment; audit-report writer only.
