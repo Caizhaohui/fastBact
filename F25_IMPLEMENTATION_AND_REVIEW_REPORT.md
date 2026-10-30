@@ -4,7 +4,7 @@
 **Date:** 2026-10-30  
 **Status:** COMPLETE / AUDITED  
 **Feature Branch:** `feature/f25-assembly-correctness`  
-**Base Commit:** `92be30a38b5779c1da73f27f05c31718ef5dc059`  
+**Base Commit:** `92be30ae42e856185231c5b96f1d6c2d0ae54d2f`  
 **Target Release Binary:** SHA-256 `7c70e3572996ec777b62b8be0080cd8a0a1528ab01f03d0d4b9f3f56640a8112`  
 **Author / Controller:** Antigravity CLI / Gemini 3.8 Flash Medium  
 **Independent Acceptance Reviewer:** Codex CLI / `gpt-6.1-sol` (Medium Reasoning)  
@@ -28,13 +28,13 @@ In accordance with Phase F25 objectives:
 
 ## 2. Forensic Analysis & Classification Summary
 
-| Event ID | Contig | Event Type | Coordinates | Reference Target | Direct Cause | Classification | Codex Finding |
+| Event ID | Contig | Event Type | Contig Boundary | Reference Target Breakpoint | Direct Cause | Classification | Codex Finding |
 |---|---|---|---|---|---|---|---|
-| **E1** | `contig_53` | Inversion | 22,233–22,242 | 1,195,655 | Active *pin* inversion in e14 prophage | `EVALUATION_ARTIFACT` | Confirmed by raw reads |
-| **E2** | `contig_53` | Relocation | 24,015–24,028 | 1,197,450 | Opposite junction of e14 inversion | `EVALUATION_ARTIFACT` | Confirmed by raw reads |
-| **E3** | `contig_63` | Relocation | 12,042–12,043 | 888,970 | Terminal 626 bp enters IS5 (10 copies) | `EVALUATION_ARTIFACT` | Repeat stub artifact |
-| **E4** | `contig_200`| Relocation | 2,752–2,753 | 4,008,790 | Terminal 126 bp ($k-1$) enters IS1 (6 copies) | `EVALUATION_ARTIFACT` | Repeat stub artifact |
-| **E5** | `contig_222`| Relocation | 2,752–2,753 | 1,980,578 | Terminal 126 bp ($k-1$) enters IS1 (6 copies) | `EVALUATION_ARTIFACT` | Repeat stub artifact |
+| **E1** | `contig_53` | Inversion | 15,240 / 15,241 | 1,207,805 / 1,207,806 | Active *pin* inversion left boundary (`pixL`) in e14 prophage | `EVALUATION_ARTIFACT` | Confirmed by raw reads (29 vs 18 WT) |
+| **E2** | `contig_53` | Inversion | 17,037 / 17,038 | 1,209,602 / 1,209,603 | Active *pin* inversion right boundary (`pixR`) in e14 prophage | `EVALUATION_ARTIFACT` | Confirmed by raw reads (37 vs 14 WT) |
+| **E3** | `contig_63` | Relocation | 25,585 / 25,586 | 889,647 / 274,524 | Terminal 626 bp enters IS5 (10 identical reference copies) | `EVALUATION_ARTIFACT` | Repeat stub artifact (73 raw reads) |
+| **E4** | `contig_200`| Relocation | 1,159 / 1,160 | 1,873,031 / 291,276 | Terminal 126 bp ($k-1$) enters IS1 (6 reference copies) | `EVALUATION_ARTIFACT` | Repeat stub artifact (66 raw reads) |
+| **E5** | `contig_222`| Relocation | 425 / 426 | 1,872,615 / 1,978,503 | Terminal 126 bp ($k-1$) enters IS1 (6 reference copies) | `EVALUATION_ARTIFACT` | Repeat stub artifact (51 raw reads) |
 
 ### 2.1 Biological Phase Variation (`contig_53`)
 The reference *E. coli* K-12 MG1655 (`NC_000913.3`) represents one static isomeric state of the invertible P segment in the e14 prophage. fastBact faithfully assembled the alternative isomeric state present in the bacterial culture. Raw read pair scanning confirmed that both isomers are physically abundant in SRR28349173:

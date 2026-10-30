@@ -8,7 +8,7 @@
 - USER_DECISION: Awaiting user decision as `FINAL_AUTHORIZATION_AUTHORITY` for final merge to `main`.
 - FEATURE_BRANCH: `feature/f25-assembly-correctness`
 - ACTIVE_WORKTREE: `/hpcfs/fhome/caizhh/Desktop/03_Tool_Development/fastBact-phase-f25-correctness-worktree`
-- BASELINE_SHA: `92be30a38b5779c1da73f27f05c31718ef5dc059` (peeled tag `f24-accepted-2026-10-30`)
+- BASELINE_SHA: `92be30ae42e856185231c5b96f1d6c2d0ae54d2f` (peeled tag `f24-accepted-2026-10-30`)
 - RELEASE_BINARY_SHA256: `7c70e3572996ec777b62b8be0080cd8a0a1528ab01f03d0d4b9f3f56640a8112` (Slurm Job `3072530`)
 - TEST_SUITE: 213/213 release tests passed (`cargo test --release`, Slurm Job `3072530`), CLI smoke test OK.
 - INDEPENDENT_ACCEPTANCE_AUDITOR: Codex CLI / `gpt-6.1-sol` (Medium Reasoning, session `01a18a77-...`, Audit `AUD-F25-03`).

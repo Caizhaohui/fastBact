@@ -4,16 +4,16 @@
 **Date:** 2026-10-30  
 **Status:** COMPLETE / ACCEPTED  
 **Feature Branch:** `feature/f25-assembly-correctness`  
-**Base Commit:** `92be30a38b5779c1da73f27f05c31718ef5dc059`  
+**Base Commit:** `92be30ae42e856185231c5b96f1d6c2d0ae54d2f`  
 **Release Binary:** `target/release/fastBact` (SHA-256 `7c70e3572996ec777b62b8be0080cd8a0a1528ab01f03d0d4b9f3f56640a8112`)  
 **Slurm Execution:** Job ID `3072539`, Partition `qfree`, Node `vnode1`  
-**Evaluation Harness:** QUAST v5.2.0 (`--min-contig 500`) against *E. coli* K-12 MG1655 (`NC_000913.3`, 4,641,652 bp)  
+**Evaluation Harness:** QUAST v5.2.0 (`--min-contig 200`) against strain-specific reference genomes (`NC_000913.3` for MG1655, `CP009273.1` for BW25113)  
 
 ---
 
 ## 1. Executive Summary
 
-Phase F25 benchmark validation was conducted across four biological sequencing datasets of *Escherichia coli* K-12 MG1655 from BioProject PRJNA1088182.
+Phase F25 benchmark validation was conducted across four biological sequencing datasets of *Escherichia coli* (K-12 MG1655 and BW25113) from BioProject PRJNA1088182.
 
 Key achievements:
 1. **Strict Frozen Non-Regression (R1-001 and R1-003)**:
@@ -43,8 +43,8 @@ Key achievements:
 All four datasets represent Illumina paired-end sequencing (2x151 bp) from NCBI BioProject **PRJNA1088182**. 
 
 ### 3.1 Provenance Reconciliation & Discrepancy Resolution
-- **F24 Historical Notation Discrepancy**: Earlier documentation during Phase F24 integration erroneously referred to R1-003 as `*S. aureus* MW2`. Investigation of the underlying Slurm benchmark scripts (`run_f24_repaired_benchmark.sbatch`, Job `3066737`; and `run_f23_benchmark.sh`, Job `3052717`) confirms this was a **documentation-only typographic error**.
-- **Execution Truth**: In all benchmark runs across F23, F24, and F25, R1-003 has always executed against the genuine SRA accession `SRR28349164` (*E. coli* BW25113) evaluated with QUAST against `CP009273.1.fasta`. No benchmark ever used an incorrect reference.
+- **F24 Historical Notation Discrepancy**: Earlier documentation during Phase F24 integration erroneously referred to R1-003 as `*S. aureus* MW2`. Investigation of the underlying Slurm benchmark scripts (`run_f24_repaired_benchmark.sbatch`, Job `3066737`; and initial paired benchmark Job `3065210`) confirms this was a **documentation-only typographic error**.
+- **Execution Truth**: In all verified benchmark runs across F24 (Jobs `3065210`, `3066737`) and F25 (Job `3072539`), R1-003 has strictly executed against the genuine SRA accession `SRR28349164` (*E. coli* BW25113) evaluated with QUAST against `CP009273.1.fasta`. Inspected benchmark runs confirmed reference fidelity.
 
 ### 3.2 Complete Run-to-Reference Mapping
 

@@ -4,7 +4,7 @@
 **Date:** 2026-10-30  
 **Phase Disposition:** `F25_READY_FOR_USER_ACCEPTANCE`  
 **Feature Branch:** `feature/f25-assembly-correctness`  
-**Base Commit:** `92be30a38b5779c1da73f27f05c31718ef5dc059`  
+**Base Commit:** `92be30ae42e856185231c5b96f1d6c2d0ae54d2f`  
 **Binary Checksum:** SHA-256 `7c70e3572996ec777b62b8be0080cd8a0a1528ab01f03d0d4b9f3f56640a8112`  
 **Autonomous Controller:** Antigravity CLI / Gemini 3.8 Flash Medium  
 **Independent Acceptance Auditor:** Codex CLI / `gpt-6.1-sol` (Medium Reasoning)  
@@ -61,7 +61,7 @@ The branch is scientifically sound, fully audited, regression-free, and prepared
 ### 3.1 Dataset Provenance & Reference Reconciliation
 - **R1-001** (`SRR28349173`) & **R1-001-Val** (`SRR28349174`): *Escherichia coli* str. K-12 substr. MG1655 evaluated against `NC_000913.3.fasta` (4,641,652 bp; SHA-256 `e999dceccb76562d40e49a10d9e6d4cf1c05d184f4f80b92bb32d4a2420c11d0`).
 - **R1-003** (`SRR28349164`) & **R1-003-Val** (`SRR28349165`): *Escherichia coli* BW25113 evaluated against `CP009273.1.fasta` (4,631,469 bp; SHA-256 `3761072f8884add5e9facdafc583de5d81a4cf5dbc7e51023ba966f3cf4887ce`).
-- **Discrepancy Note**: The earlier reference to `*S. aureus* MW2` in F24 notes was a documentation-only typographical error; all benchmark runs in F23, F24, and F25 executed against the exact references listed above matching SRA metadata.
+- **Discrepancy Note**: The earlier reference to `*S. aureus* MW2` in F24 notes was a documentation-only typographical error; all verified benchmark runs in F24 (Jobs `3065210`, `3066737`) and F25 (Job `3072539`) executed against the exact references listed above matching SRA metadata.
 
 ### 3.2 Performance and Misassembly Accounting Matrix
 

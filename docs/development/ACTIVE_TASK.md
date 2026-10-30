@@ -3,7 +3,7 @@
 **F25 Status (2026-10-30):** Phase F25 has achieved technical completion, independent audit pass by Codex Sol, full deterministic verification (213/213 release tests), and four-dataset benchmark validation.
 - **Disposition:** **`F25_READY_FOR_USER_ACCEPTANCE`**
 - **Feature Branch:** `feature/f25-assembly-correctness` (Worktree: `/hpcfs/fhome/caizhh/Desktop/03_Tool_Development/fastBact-phase-f25-correctness-worktree`)
-- **Base Commit:** `92be30a38b5779c1da73f27f05c31718ef5dc059`
+- **Base Commit:** `92be30ae42e856185231c5b96f1d6c2d0ae54d2f`
 - **Release Binary Checksum:** `target/release/fastBact` SHA-256 `7c70e3572996ec777b62b8be0080cd8a0a1528ab01f03d0d4b9f3f56640a8112`
 - **Autonomous Controller:** Antigravity CLI / Gemini 3.8 Flash Medium
 - **Independent Acceptance Auditor:** Codex CLI / `gpt-6.1-sol` (Medium Reasoning, Audit `AUD-F25-03`)
