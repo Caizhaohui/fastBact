@@ -1,5 +1,36 @@
 # fastBact Development Handoff
 
+## F26 cross-species robustness and competitive validation handoff — 2026-10-30
+
+- CURRENT_PROJECT: fastBact
+- CURRENT_MILESTONE: F26 — Cross-Species Assembly Benchmarking, Robustness Hardening & Competitive Validation
+- CURRENT_STATUS: `PARTIALLY_VALIDATED / F26_ACCEPTANCE_WITHHELD` (independent audit completed by Codex Sol; acceptance withheld pending user adjudication of F26-H01 and F26-H02).
+- ACTIVE_WORKTREE: `/hpcfs/fhome/caizhh/Desktop/03_Tool_Development/fastBact-phase-f26-robustness-worktree`
+- FEATURE_BRANCH: `feature/f26-cross-species-robustness`
+- AUDITED_HEAD: `22ea17b`
+- FROZEN_BASELINE: `02872f81811402d2bd603ff7c0a2ecf8b3dbe528`
+- SOURCE_SHA_DIFF: `git diff 02872f81811402d2bd603ff7c0a2ecf8b3dbe528 -- src/` is empty (0 lines modified).
+- RELEASE_BINARY_SHA256: `517402653fcefc625cb79912ade7e7e382b0d05343bbeb483d7c82dd807947d1`
+- TEST_SUITE: Slurm Job `3076232` on `qfree`: 213/213 release tests passed, 0 failures, 0 ignored.
+- BENCHMARK_EVIDENCE:
+  - 40 total runs in `benchmarks/f26_results/summary.json` (SHA-256 `c00ba3c41697bc4d13cc435c3390fa7769ea6be64ed08bd471369b97388a0f9c`):
+    - Stage D: 16 runs (4 species x 4 tools) -> fastBact 1.33x–19.5x faster than SPAdes/Unicycler, bounded RAM, competitive contiguity.
+    - Stage E: 16 depth-gradient runs (30x, 50x, 100x, 150x) -> robust scaling across GC 32.8% to 66.6%.
+    - Stage G: 8 replicate runs -> 100% bit-for-bit identical contig FASTA SHA-256 hashes across all 3 replicates for all 4 species.
+- INDEPENDENT_AUDIT: Codex CLI / `gpt-6.1-sol` (Report: [`docs/development/F26_FINAL_SCIENTIFIC_ACCEPTANCE_REPORT.md`](docs/development/F26_FINAL_SCIENTIFIC_ACCEPTANCE_REPORT.md), Verdict: `PARTIALLY_VALIDATED / F26_ACCEPTANCE_WITHHELD`).
+- OPEN_FINDINGS_FOR_USER_DECISION:
+  - `F26-H01` (P1): Stage G replicate pooling identity mismatch in collator (Replicate 1 git HEAD differed from Replicates 2-3 despite identical binary, inputs, and outputs).
+  - `F26-H02` (P1): Historical F25 full-depth *E. coli* oracle non-regression was not newly reassembled in this 40-run execution batch.
+  - `F26-H03` (P2): Nominal depth vs bacterial chromosome depth qualifications (MW2 phage co-culture, PAO1 150x clamp).
+  - `F26-H04` (P2): Biological attribution vs raw QUAST misassemblies qualified.
+- GIT_SAFETY_CONFIRMATION:
+  - Local `main` is NOT merged (`02872f8` untouched).
+  - Remote repository is NOT pushed.
+- NEXT_ACTION: Escalate to user for decision on `F26-H01` (replicate pooling adjudication) and `F26-H02` (E. coli oracle replay requirement vs frozen baseline verification).
+
+---
+
+
 ## F25 final scientific acceptance and local integration handoff — 2026-10-30
 
 - CURRENT_PROJECT: fastBact

@@ -1,3 +1,53 @@
+# ACTIVE TASK: fastBact F26 — Cross-Species Assembly Benchmarking, Robustness Hardening & Competitive Validation (PARTIALLY_VALIDATED / F26_ACCEPTANCE_WITHHELD)
+
+**F26 Status (2026-10-30):** Phase F26 has completed full cross-species benchmark matrix execution (16/16 Stage D runs vs SPAdes, SKESA, Unicycler), depth sensitivity gradient (16/16 Stage E runs at 30x, 50x, 100x, 150x), Stage F robustness hardening evaluation (zero speculative code edits required), and full-depth N=3 replicate determinism runs (8/8 Stage G runs). Total 40/40 benchmark runs executed on Slurm `qfree` with 100% PASS. Independent scientific acceptance audit completed by Codex Sol (`F26-SOL-FINAL-AUDIT-001`).
+- **Disposition:** **`PARTIALLY_VALIDATED / F26_ACCEPTANCE_WITHHELD`** (Stage H audit by Sol completed; acceptance withheld pending user adjudication of F26-H01 and F26-H02).
+- **Feature Branch:** `feature/f26-cross-species-robustness`
+- **Current Feature Branch Commit:** `22ea17b`
+- **Frozen Baseline Reference:** `02872f81811402d2bd603ff7c0a2ecf8b3dbe528` (local `main`)
+- **Source Code Integrity:** `git diff 02872f81811402d2bd603ff7c0a2ecf8b3dbe528 -- src/` is strictly empty (0 lines changed).
+- **Release Binary SHA-256:** `517402653fcefc625cb79912ade7e7e382b0d05343bbeb483d7c82dd807947d1`
+- **Release Test Suite:** Slurm Job `3076232` on `qfree`: 213/213 release tests passed, 0 failed, 0 ignored.
+- **Stage D Benchmark Matrix (16/16 PASS)**:
+  - 4 cross-species taxa: *B. subtilis* 168 (43.5% GC), *P. aeruginosa* PAO1 (66.6% GC), *S. aureus* MW2 (32.8% GC), *S. enterica* LT2 (52.2% GC).
+  - 4 assemblers: fastBact 0.1.0, SPAdes v4.2.0, SKESA v2.5.1, Unicycler v0.5.1.
+  - fastBact achieves 1.33x–19.5x runtime speedup over SPAdes and Unicycler with bounded memory (<=1.55 GB RSS, except Salmonella full-depth at 7.8 GB).
+  - 0 misassemblies on *B. subtilis*, 2 on *P. aeruginosa*, 2 on *S. aureus*, 1 on *S. enterica*.
+- **Stage E Coverage Gradient (16/16 PASS)**:
+  - 30x, 50x, 100x, 150x depth series across all 4 cross-species taxa.
+  - Smooth scaling, bounded memory (<4.1 GB at 150x, <=1.55 GB on 3 of 4 species), sub-3-minute runtimes.
+  - Low GC (*S. aureus*): recovers from 64.58% at 30x to 95.20% at 50x and 98.44% at 150x with strictly 0 misassemblies at all subsampled depths.
+  - High GC (*P. aeruginosa*): misassemblies decrease with higher depth (4 at 30x -> 3 at 50x -> 2 at 100x/150x).
+- **Stage F Robustness Hardening Evaluation**:
+  - $p > b + H$ invariant and loop re-entrancy safeguards strictly held across all 28 fastBact runs (0 crashes, 0 unhandled panics, 0 OOMs).
+  - Speculative code changes rejected: algorithm generalized correctly without modification.
+- **Stage G Bitwise Determinism Observation**:
+  - All 4 species triplets produced bit-for-bit identical contig FASTA SHA-256 hashes across Replicates 1, 2, and 3:
+    - *B. subtilis*: `2bb0ecdd10f09b2320f4ba557b15a79bc5069f02f89352eceb9ec053b43a8861`
+    - *P. aeruginosa*: `b15ebd2289fb7f7ca39a49698f9049aa281d83a00982199f69da0722a068a9ff`
+    - *S. aureus*: `86081b422341266a5a32feef424080bc0595f8ce599d996817b3e7d6c26a1962`
+    - *S. enterica*: `4b72cfaa1b4fa8406be3f9d29c790047a8cae2ce2cb996cea9c9f31859314bfb`
+- **Stage H Independent Scientific Acceptance Audit (Codex Sol)**:
+  - Disposition: `PARTIALLY_VALIDATED / F26_ACCEPTANCE_WITHHELD`.
+  - Open Findings:
+    - `F26-H01` (P1): Stage G replicate pooling identity mismatch in collator (Replicate 1 git HEAD differed from Replicates 2-3 despite identical binary, inputs, and outputs).
+    - `F26-H02` (P1): Historical F25 full-depth *E. coli* oracle non-regression was not newly reassembled in this 40-run execution batch.
+    - `F26-H03` (P2): Nominal depth vs bacterial chromosome depth qualifications (MW2 phage co-culture, PAO1 150x clamp).
+    - `F26-H04` (P2): Biological attribution vs raw QUAST misassemblies qualified.
+- **Deliverables Inventory**:
+  - Contract: [`F26_ARCHITECTURE_AND_ACCEPTANCE_CONTRACT.md`](../../F26_ARCHITECTURE_AND_ACCEPTANCE_CONTRACT.md)
+  - Competitor Contract: [`F26_COMPETITOR_BENCHMARK_CONTRACT.md`](../../F26_COMPETITOR_BENCHMARK_CONTRACT.md)
+  - Dataset Manifest: [`F26_DATASET_MANIFEST.tsv`](../../F26_DATASET_MANIFEST.tsv)
+  - Stage E Manifest: [`F26_STAGE_E_MANIFEST.tsv`](../../F26_STAGE_E_MANIFEST.tsv)
+  - Stage D Baseline Report: [`docs/development/F26_CROSS_SPECIES_BASELINE_REPORT.md`](docs/development/F26_CROSS_SPECIES_BASELINE_REPORT.md)
+  - Stage E & G Coverage Report: [`docs/development/F26_COVERAGE_ROBUSTNESS_REPORT.md`](docs/development/F26_COVERAGE_ROBUSTNESS_REPORT.md)
+  - Stage H Final Acceptance Audit: [`docs/development/F26_FINAL_SCIENTIFIC_ACCEPTANCE_REPORT.md`](docs/development/F26_FINAL_SCIENTIFIC_ACCEPTANCE_REPORT.md)
+  - Benchmark Data: `benchmarks/f26_results/summary.json` (SHA-256 `c00ba3c4...`) and `benchmarks/f26_results/summary.tsv`
+- **Safety Status**: Local `main` is NOT merged (`02872f8` untouched). Remote repository is NOT pushed.
+- **Next Action**: Halted at `F26_AWAITING_USER_DECISION` for human authorization regarding F26-H01 and F26-H02.
+
+---
+
 # ACTIVE TASK: fastBact F25 — Final Scientific Acceptance and Local Integration (F25_ACCEPTED_AND_LOCALLY_INTEGRATED)
 
 **F25 Status (2026-10-30):** Phase F25 has achieved technical completion, independent audit PASS by Codex Sol (`AUD-F25-03` / session `01a18afa-...`), full deterministic verification (213/213 release tests), four-dataset benchmark validation, and controlled local integration into `main`.
