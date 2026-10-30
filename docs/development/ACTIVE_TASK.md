@@ -1,31 +1,27 @@
-# ACTIVE TASK: fastBact F25 — Assembly Correctness, Residual Misassembly Forensics, and Cross-Dataset Robustness
+# ACTIVE TASK: fastBact F25 — Final Scientific Acceptance and Local Integration (F25_ACCEPTED_AND_LOCALLY_INTEGRATED)
 
-**F25 Status (2026-10-30):** Phase F25 has achieved technical completion, independent audit pass by Codex Sol, full deterministic verification (213/213 release tests), and four-dataset benchmark validation.
-- **Disposition:** **`F25_READY_FOR_USER_ACCEPTANCE`**
-- **Feature Branch:** `feature/f25-assembly-correctness` (Worktree: `/hpcfs/fhome/caizhh/Desktop/03_Tool_Development/fastBact-phase-f25-correctness-worktree`)
-- **Base Commit:** `92be30ae42e856185231c5b96f1d6c2d0ae54d2f`
+**F25 Status (2026-10-30):** Phase F25 has achieved technical completion, independent audit PASS by Codex Sol (`AUD-F25-03` / session `01a18afa-...`), full deterministic verification (213/213 release tests), four-dataset benchmark validation, and controlled local integration into `main`.
+- **Disposition:** **`F25_ACCEPTED_AND_LOCALLY_INTEGRATED`**
+- **Integrated Commit SHA:** `28fee48a69337f8854ec5bd2a1baf3f275744c7d`
+- **Recoverable Pre-Integration Reference:** `backup/pre-f25-integration-92be30a` (`92be30ae42e856185231c5b96f1d6c2d0ae54d2f`)
 - **Release Binary Checksum:** `target/release/fastBact` SHA-256 `7c70e3572996ec777b62b8be0080cd8a0a1528ab01f03d0d4b9f3f56640a8112`
 - **Autonomous Controller:** Antigravity CLI / Gemini 3.8 Flash Medium
-- **Independent Acceptance Auditor:** Codex CLI / `gpt-6.1-sol` (Medium Reasoning, Audit `AUD-F25-03`)
-- **Key Scientific Achievements:**
-  1. **F25-P1 (Forensic Trace & Classification)**: The five residual extensive misassemblies in R1-001 were conclusively proven to be `EVALUATION_ARTIFACT`:
-     - Two events (`contig_53` Left/Right) are active biological phase variations in the e14 prophage (Pin recombinase DNA inversion), confirmed by raw read-pair support for both isoforms in `SRR28349173` (29 and 37 reads for inverted vs 18 and 14 for reference).
-     - Three events (`contig_63`, `contig_200`, `contig_222`) are multi-copy repeat entries (IS5 and IS1) that terminate safely at the repeat boundary without false joins; QUAST arbitrarily aligns the terminal stubs to distant genomic copies.
-     - Zero of the five events represent chimeric joins or assembly defects.
-  2. **Independent Audit Pass**: Codex Sol verified read support directly on compute node `vnode2`, endorsed all five classifications, and verified all corrections in [`F25_ROOT_CAUSE_FORENSICS.md`](file:///hpcfs/fhome/caizhh/Desktop/03_Tool_Development/fastBact-phase-f25-correctness-worktree/F25_ROOT_CAUSE_FORENSICS.md).
-  3. **F25-P2 (Safety Invariants)**: Conservative evidence isolation ($p > b + H$) and loop re-entrancy protections remain intact.
-  4. **F25-P3 (Cross-Dataset Robustness & Benchmark)**: Evaluated on Slurm node `vnode1` (`qfree`, Job `3072539`):
-     - R1-001 & R1-003: 100% mathematical determinism ($\Delta = 0, \sigma^2 = 0.000000$) against accepted F24 baseline.
-     - R1-001-Val (`SRR28349174`): N50/NGA50 **54,554 bp** (+21.0% vs R1-001), 98.233% genome fraction, **0 extensive misassemblies**, **0 local misassemblies**.
-     - R1-003-Val (`SRR28349165`, 270x coverage, 4.27M read pairs): **0 extensive misassemblies**, NGA50 39,314 bp in 296.4s wall time.
-- **Verification Gates**: Slurm Job `3072530` passed 213/213 release tests (`cargo test --release`).
-- **Core Deliverables Produced**:
-  - [`F25_ARCHITECTURE_AND_ACCEPTANCE_CONTRACT.md`](file:///hpcfs/fhome/caizhh/Desktop/03_Tool_Development/fastBact-phase-f25-correctness-worktree/F25_ARCHITECTURE_AND_ACCEPTANCE_CONTRACT.md)
-  - [`F25_ROOT_CAUSE_FORENSICS.md`](file:///hpcfs/fhome/caizhh/Desktop/03_Tool_Development/fastBact-phase-f25-correctness-worktree/F25_ROOT_CAUSE_FORENSICS.md)
-  - [`F25_IMPLEMENTATION_AND_REVIEW_REPORT.md`](file:///hpcfs/fhome/caizhh/Desktop/03_Tool_Development/fastBact-phase-f25-correctness-worktree/F25_IMPLEMENTATION_AND_REVIEW_REPORT.md)
-  - [`F25_BENCHMARK_AND_REGRESSION_REPORT.md`](file:///hpcfs/fhome/caizhh/Desktop/03_Tool_Development/fastBact-phase-f25-correctness-worktree/F25_BENCHMARK_AND_REGRESSION_REPORT.md)
-  - [`F25_FINAL_SCIENTIFIC_ACCEPTANCE_REPORT.md`](file:///hpcfs/fhome/caizhh/Desktop/03_Tool_Development/fastBact-phase-f25-correctness-worktree/F25_FINAL_SCIENTIFIC_ACCEPTANCE_REPORT.md)
-- **Next Action**: Awaiting user decision as `FINAL_AUTHORIZATION_AUTHORITY` for final merge to `main`.
+- **Independent Acceptance Auditor:** Codex CLI / `gpt-6.1-sol` (Medium Reasoning, Audit Verdict: `PASS`)
+- **Post-Integration Verification:** Slurm Job `3073262` on `vnode1` (`qfree`): 213/213 release tests passed, binary SHA-256 verified, CLI smoke test OK, synthetic assembly OK.
+- **Mandatory Gates Resolution:**
+  - **Gate 1 (Provenance Reconciliation)**: Verified that R1-003 is *E. coli* BW25113 (`SRR28349164`) evaluated against `CP009273.1.fasta`. Inspected F24 (Jobs `3065210`, `3066737`) and F25 (Job `3072539`) benchmark runs confirmed 100% reference fidelity. The historical draft mention of *S. aureus* MW2 was confirmed to be a documentation-only typographic error with zero execution divergence.
+  - **Gate 2 (Scientific Claim Integrity)**: 5 raw QUAST extensive misassemblies explicitly accounted for as 2 biological phase variations (e14 prophage Pin inversion with single-copy chromosomal anchors) + 3 multi-copy repeat terminal entry stubs (IS5 and IS1) + 0 algorithm defects + 0 unresolved ambiguities. Cross-dataset generalization strictly scoped to *E. coli* (MG1655 and BW25113 across 150x-270x coverage).
+  - **Gate 3 (Code & Regression Integrity)**: Source diff `git diff 92be30a..HEAD src/` is strictly empty. Algorithmic invariants ($p > b + H$, loop re-entrancy) strictly preserved.
+  - **Gate 4 (Final Independent Audit)**: Codex Sol returned explicit `VERDICT: PASS` across Gates 1, 2, and 3.
+  - **Gate 5 (Controlled Local Integration)**: Fast-forward merged into `main` at `28fee48a69337f8854ec5bd2a1baf3f275744c7d`. Full release test suite and smoke tests passed on Slurm compute node `vnode1`.
+- **Core Deliverables Inventory:**
+  - Contract: [`F25_ARCHITECTURE_AND_ACCEPTANCE_CONTRACT.md`](file:///hpcfs/fhome/caizhh/Desktop/03_Tool_Development/01_fastBact/F25_ARCHITECTURE_AND_ACCEPTANCE_CONTRACT.md)
+  - Forensics: [`F25_ROOT_CAUSE_FORENSICS.md`](file:///hpcfs/fhome/caizhh/Desktop/03_Tool_Development/01_fastBact/F25_ROOT_CAUSE_FORENSICS.md)
+  - Implementation & Review: [`F25_IMPLEMENTATION_AND_REVIEW_REPORT.md`](file:///hpcfs/fhome/caizhh/Desktop/03_Tool_Development/01_fastBact/F25_IMPLEMENTATION_AND_REVIEW_REPORT.md)
+  - Benchmark & Regression: [`F25_BENCHMARK_AND_REGRESSION_REPORT.md`](file:///hpcfs/fhome/caizhh/Desktop/03_Tool_Development/01_fastBact/F25_BENCHMARK_AND_REGRESSION_REPORT.md)
+  - Final Scientific Acceptance: [`F25_FINAL_SCIENTIFIC_ACCEPTANCE_REPORT.md`](file:///hpcfs/fhome/caizhh/Desktop/03_Tool_Development/01_fastBact/F25_FINAL_SCIENTIFIC_ACCEPTANCE_REPORT.md)
+  - Final Integration Report: [`F25_FINAL_INTEGRATION_REPORT.md`](file:///hpcfs/fhome/caizhh/Desktop/03_Tool_Development/01_fastBact/F25_FINAL_INTEGRATION_REPORT.md)
+- **Next Action:** Phase F25 is complete and locally integrated. All gates PASS. Ready for remote synchronization under user standing authorization.
 
 ---
 
