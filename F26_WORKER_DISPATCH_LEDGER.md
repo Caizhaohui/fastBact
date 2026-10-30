@@ -52,7 +52,7 @@ Prior to the F26 Hotfix enforcement, the Controller performed the following init
 | **DISP-F26-012** | `F26-BM-003` | `cursor-agent` | `grok-4.7-high` | Stage D Batch Benchmark Submitter & Results Collation Utility | `scripts/collate_benchmark_results.py`, `scripts/submit_stage_d_benchmarks.sh` | **COMPLETED** (Commit `968b06f`, Self-Test PASS) | `logs/disp_f26_013_cursor.log` |
 | **DISP-F26-013** | `F26-EXEC-002`| `slurm` (Jobs 3074506-3074509) | HPC `qfree` | fastBact Stage D Replicate 1 Benchmarks (CS-SA01, CS-BS01, CS-PA01, CS-SE01) | `benchmarks/f26_results/raw/*_fastbact_r1/*` | **COMPLETED** (4/4 PASS, Genome Frac >98.5%, Misassemblies <=2) | `benchmarks/f26_results/summary.tsv` |
 | **DISP-F26-014** | `F26-EXEC-003`| `slurm` (Jobs 3074516-3074527) | HPC `qfree` | Competitor Stage D Replicate 1 Benchmarks (SKESA, SPAdes, Unicycler) | `benchmarks/f26_results/raw/*` | **RUNNING** | Slurm Queue (Jobs 3074516-3074527) |
-| **DISP-F26-015** | `F26-BM-005` | `cursor-agent` | `grok-4.7-high` | Stage E Deterministic FASTQ Pair Subsampling Utility | `scripts/subsample_fastq_pairs.py` | **DISPATCHED** | `logs/disp_f26_015_cursor.log` |
+| **DISP-F26-015** | `F26-BM-005` | `cursor-agent` | `grok-4.7-high` | Stage E Deterministic FASTQ Pair Subsampling Utility | `scripts/subsample_fastq_pairs.py` | **COMPLETED** (Commit `8ecfac7`, Self-Test PASS) | `logs/disp_f26_015_cursor.log` |
 
 ---
 
