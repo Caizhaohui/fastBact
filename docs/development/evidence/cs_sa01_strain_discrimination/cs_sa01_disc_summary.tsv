@@ -1,0 +1,25 @@
+metric	value	unit	source
+input_read_records	4479306	single-end records (= 2 x 2239653 pairs)	F26_FASTQ_CHECKSUMS.tsv
+supplementary_alignments_mw2align	736	records	cs_sa01_disc_mw2.flagstat.txt
+supplementary_alignments_m252align	4353	records	cs_sa01_disc_mrsa252.flagstat.txt
+vs_MW2Staph1N_total_records	4480042	records	cs_sa01_disc_mw2.idxstats.tsv (denominator: all input records, mapped+unmapped)
+vs_MW2Staph1N_mapped_bacterial	1339405	reads	idxstats NC_003923.1 mapped
+vs_MW2Staph1N_mapped_phage	2964345	reads	idxstats NC_047722.1 mapped
+vs_MW2Staph1N_unmapped	123856	records	idxstats '*'
+vs_M252Staph1N_total_records	4483659	records	cs_sa01_disc_mrsa252.idxstats.tsv
+vs_M252Staph1N_mapped_bacterial	1295397	reads	idxstats NC_002952.2 mapped
+vs_M252Staph1N_mapped_phage	2964345	reads	idxstats NC_047722.1 mapped
+vs_M252Staph1N_unmapped	142998	records	idxstats '*'
+record_consistency	PASS	boolean	sum(idxstats mapped+unmapped) - supplementary alignments == input records (supplementary: 736 / 4353)
+vs_MW2Staph1N_bacterial_mean_depth	69.9473	x	samtools coverage NC_003923.1 meandepth
+vs_MW2Staph1N_bacterial_breadth	100	pct_bases_covered	samtools coverage NC_003923.1 coverage
+vs_MW2Staph1N_phage_mean_depth	2984.21	x	samtools coverage NC_047722.1 meandepth
+vs_MW2Staph1N_phage_breadth	99.7123	pct_bases_covered	samtools coverage NC_047722.1 coverage
+vs_M252Staph1N_bacterial_mean_depth	64.8355	x	samtools coverage NC_002952.2 meandepth
+vs_M252Staph1N_bacterial_breadth	90.2396	pct_bases_covered	samtools coverage NC_002952.2 coverage
+vs_M252Staph1N_phage_mean_depth	2984.21	x	samtools coverage NC_047722.1 meandepth
+vs_M252Staph1N_phage_breadth	99.7123	pct_bases_covered	samtools coverage NC_047722.1 coverage
+control_MW2chunks_aligned_to_MRSA252	2461851	bp of chunked MW2 with sr-level homology in MRSA252	ctrl_mw2_vs_MRSA252.paf
+SCC2_exclusive_reads_q20_primary	360	primary qnames (MAPQ>=20)	cs_sa01_disc_exclusive_origin_audit.tsv
+SCC2_exclusive_reads_chromosome_supported	330	qnames also mapped on NC_003923.1 in MW2 alignment	cs_sa01_disc_exclusive_origin_audit.tsv
+SCC2_exclusive_reads_mean_identity	0.9379	1 - mean divergence de:f (i.e. mean identity fraction)	cs_sa01_disc_exclusive_origin_audit.tsv

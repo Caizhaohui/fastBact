@@ -1,0 +1,4 @@
+alignment	locus	region	overlapping_reads
+MW2_align	PVL_lukS-lukF_MW2	NC_003923.1:1515001-1517500	1071
+MW2_align	SCCmecIV_MW2	NC_003923.1:34001-58000	12230
+M252_align	SCCmecII_MRSA252	NC_002952.2:34001-86000	8700

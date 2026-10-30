@@ -1,0 +1,8 @@
+gate	criterion	observed	verdict
+G1_MW2_PVL_coverage	whole-window mean_depth>=30x AND breadth_ge30x>=0.95 over NC_003923.1:1515001-1517500 (2500 bp)	mean=59.82x breadth30x=1.0000 reads=1071	PASS
+G2_MW2_SCCmecIV_coverage	whole-window mean_depth>=30x AND breadth_ge30x>=0.95 over NC_003923.1:34001-58000 (24000 bp)	mean=73.51x breadth30x=1.0000 reads=12230	PASS
+G3a_MRSA252_SCCmecII_exclusive_raw_absence	raw MAPQ20 absence over the sequence-verified MRSA252-exclusive marker set (36904 bp): mean<1x AND breadth<=0.01 AND reads<10	bp=36904 mean_q20=0.32x breadth1x_q20=0.0093 reads_q20=360	FAIL_superseded_by_G3_origin_audit
+G3_MRSA252_SCCmecII_exclusive_baselevel_absence	aligned-base absence over the sequence-verified MRSA252-exclusive marker set (36904 bp): breadth_ge1x_q20<=0.01 AND mean_depth_q20<1x AND total q20-covered bases<=500 AND max contiguous q20-covered island<=500 bp (read-span cross-maps are not presence evidence; origin audit characterizes them)	bp=36904 mean_q20=0.32x breadth1x_q20=0.0093 covered_q20=343bp max_island=113bp reads_span_q20=360 (origin audit: 360 reads, 330 MW2-chromosome-supported, mean divergence de:f=0.0621)	PASS
+G4_bacterial_preference	MW2-align mapped bacterial reads > MRSA252-align mapped bacterial reads	mw2=1339405 mrsa252=1295397	PASS
+G5_phage_coculture_signature	phage mapped>0 AND phage mean depth >= 10x bacterial mean depth (MW2 alignment)	phage_reads=2964345 phage_depth=2984.21x bacterial_depth=69.9473x	PASS
+G6_core_genome_control	chunked MW2-vs-MRSA252 cross-alignment must cover >=1.4 Mb (proves the chunked homology pipeline detects shared sequence)	aligned_bp=2461851	PASS
