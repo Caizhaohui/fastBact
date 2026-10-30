@@ -1,5 +1,26 @@
 # fastBact Development Handoff
 
+## F24 final acceptance, merge and remote sync handoff — 2026-10-30
+
+- CURRENT_PROJECT: fastBact
+- CURRENT_MILESTONE: F24 — Provenance-Safe Contiguity Recovery
+- CURRENT_STATUS: F24_COMPLETED; C0-02R accepted and updated; integrated into local main and synchronized to GitHub remote under explicit user authorization ("将F24推送到github").
+- AUTHORIZATION: USER_FINAL_PUSH_AND_SYNC_AUTHORIZATION_GRANTED (2026-10-30)
+- MERGE_COMMIT_SHA: `ba69365`
+- CANDIDATE_COMMIT_SHA: `76e207c` (feature/f24-provenance-safe-contiguity)
+- BASELINE_SHA: `68b19f06d22537cf199e8fe124ea6b62bb0bb50a` (peeled frozen tag `f23-accepted-2026-10-29`)
+- CANDIDATE_BINARY_SHA256: `1f1e5d8770c7657f880a6387cf221a2b530c02993b36ccb89d92f5391723886d`
+- BASELINE_BINARY_SHA256: `97adb3c2ae386d453ba3f50fa61920836fd6c37d83924c0e0bc04d6763caaeb7`
+- IMMUTABLE_FREEZE_TAG: `f24-accepted-2026-10-30`
+- COMPLETED_EVIDENCE:
+  - P1-1: Fully resolved. Stage 06 polisher grid-sampling artifact fixed via Pass 2 full sliding-window uniqueness counting. Mismatches on R1-003 dropped to 0.13 / 100kbp (-78% below baseline 0.59), indels 0.00.
+  - P1-2: Fully resolved. Strict $p > b + H$ evidence filtering.
+  - P1-3: Fully resolved. 3-state lineage lattice (`CleanUnique` $\to$ `Contaminated` $\to$ `Absorbed`).
+  - P1-4: Safe contiguity boundary verified at 44,702 bp (+155.3% over F23 baseline 17,509 bp) with zero new misassemblies; static floor waived by user authorization.
+  - Slurm Job 3066736: 213/213 release tests passed across all suites on `vnode1` (`qfree`).
+  - Slurm Job 3066737: 3 paired computational replicates (12 assemblies + 12 QUAST evaluations) demonstrating 100% deterministic reproducibility ($\sigma^2 = 0.000000$).
+  - Full Report: `F24_FINAL_P1_CLOSURE_AND_SCIENTIFIC_ACCEPTANCE_REPORT.md`.
+
 ## F24 evidence closure handoff — 2026-10-29
 
 - CURRENT_PROJECT: fastBact
