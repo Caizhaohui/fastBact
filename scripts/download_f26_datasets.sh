@@ -20,11 +20,10 @@
 #     python3 scripts/validate_fastq_pairs.py --fastq-dir "${OUTDIR}" --manifest F26_DATASET_MANIFEST.tsv
 # ==============================================================================
 #SBATCH -p qfree
-#SBATCH -w vnode1
 #SBATCH -J f26_download
 #SBATCH -c 8
 #SBATCH --mem=14G
-#SBATCH -t 08:00:00
+#SBATCH -t 03:00:00
 #SBATCH -o /hpcfs/fhome/caizhh/Desktop/03_Tool_Development/fastBact-phase-f26-robustness-worktree/logs/download_f26_%j.log
 #SBATCH -e /hpcfs/fhome/caizhh/Desktop/03_Tool_Development/fastBact-phase-f26-robustness-worktree/logs/download_f26_%j.err
 
