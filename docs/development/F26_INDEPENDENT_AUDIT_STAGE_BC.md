@@ -1,5 +1,79 @@
 # F26 independent audit of Stages B and C
 
+## F26-AUDIT-002: independent re-audit, 2026-10-30
+
+- Role: independent auditor, Codex Sol assignment; audit-report writer only.
+- Audited source: `a9d73f780a09aba7f90dd6ac023adb1e1dfe6bed`.
+- Branch: `feature/f26-cross-species-robustness`; isolated worktree as recorded below.
+- Resolution commits inspected: `ae6ca39` (BC-02/03), `d6f21b9` (claimed BC-01 closure).
+- Overall verdict: **STAGE_BC_AUDIT_BLOCKED**. The requested `STAGE_BC_AUDIT_PASS` is not supported by the supplied evidence.
+
+| Finding | Re-audit status | Basis |
+|---|---|---|
+| BC-01 / P1 | **OPEN / NOT SATISFACTORILY RESOLVED** | Aggregate sequence claims lack accessible primary counts and contain unsupported set/marker inferences; unaligned-contig attribution is insufficiently constrained. |
+| BC-02 / P1 | **CLOSED / RESOLVED** | Three-hour wrapper matches fresh qfree MaxTime; single-dataset/tool/replicate execution is supported, and oversized default schedules are rejected. |
+| BC-03 / P2 | **CLOSED / RESOLVED** | At least three matching-identity records are required; two cannot pass; fresh self-test returns `SELF_TEST_PASS`, exit 0. |
+
+### BC-01: sequence evidence does not yet justify closure
+
+Inspected `docs/development/evidence/CS_SA01_STRAIN_DISCRIMINATION_EVIDENCE.md` and `F26_DATASET_PROVENANCE_AND_SELECTION.md`. The metadata conflict is now disclosed, and MW2 plus Staph1N is a plausible interpretation of the aliases and experimental attributes. This re-audit does **not** establish MRSA252 as the isolate or reject the possibility of MW2/phage co-culture. It rejects the claim that the supplied evidence conclusively verifies that interpretation.
+
+1. **Primary evidence is not locatable from the report.** Evidence §3.4, line 88, expressly says the documentation worker received aggregate results and the assigning authority retained scripts/intermediate tables outside the repository. It supplies no artifact path, command, count table, job ID, analysis log, or hashes for those artifacts or the additional phage/MRSA252 reference files. The retained F26-AUDIT-001 directory contains metadata, integrity checks and command previews, not this discriminatory analysis. Bounded filename searches of local state and staged F26 data did not locate the missing containment artifacts. An artifact-location clarification was requested during this re-audit. A generic re-derivation outline is not retained empirical evidence.
+
+2. **The stated distinct-set denominator requires reconciliation.** Let R be the set of distinct canonical read 31-mers and P the phage reference set. Using the report's own `|P| = 139,474` and `|R intersect P| / |R| = 0.6074`, one obtains `|R| <= 229,624.63`. Its MW2 fraction then implies at most about `68,657.76` matching distinct MW2 31-mers, or **2.493928%** of the listed 2,752,997-member MW2 reference set. These are conditional mathematical bounds using the published central percentages, not independently measured counts; rounding changes them slightly. They do not substantiate broad chromosome coverage at the claimed approximately 35x depth. If the percentages actually count k-mer **occurrences** or a sampled/filtered universe, the documented distinct-set interpretation and reproducibility specification must be corrected. High phage abundance can dominate occurrence counts without dominating distinct-set cardinality. The re-audit does not call these four percentages mathematically impossible in isolation; it requires their actual numerator, denominator, filtering and coverage evidence.
+
+3. **Aggregate fractions do not prove diagnostic-marker absence.** Evidence §3.3, lines 79–81, infers zero overlap from rounded additivity and a strict subset from 19.12% being less than 29.90%. Neither inference follows: unequal cardinalities do not determine set inclusion, and rounded percentages cannot establish exact intersection size. The 10.78 percentage-point difference is not itself a measured MW2-exclusive count. No explicit `MRSA252 minus MW2` marker-set size, observed marker count, error/count threshold, or reference coverage/breadth is retained to support the statement that diagnostic MRSA252 markers are absent. Absence also needs adequate sensitivity in the bacterial fraction. The depth estimates have no retained mapping or count calculation. Consequently, the BioSample title cannot yet be certified as a submitter labeling error from this evidence.
+
+**Required closure:** supply the original reproducible analysis artifacts, or rerun a discriminatory analysis on qfree with retained commands, exit codes, reference/input hashes, exact counts and denominator definitions. Report both strain-exclusive marker sets and their observed support, shared support, host/phage coverage breadth and depth, and sensitivity limits; distinguish reference-lineage support from exact isolate identity. Correct the unsupported claims in the provenance/evidence documents through their owners. No dataset, reference or frozen scientific contract is changed by this audit.
+
+### BC-01: QUAST protocol is only partially satisfactory
+
+The protocol retains chromosome-only `NC_003923.1`, identical inputs/options across assemblers, and chromosome-aligned misassembly/mismatch/indel signals. Those are appropriate safeguards. Fully unaligned viral contigs need not be classified as chromosome misassemblies merely because they are absent from that reference.
+
+However, evidence §5.2, lines 120–123, classifies approximately 140 kb of unaligned mass with a phage depth signature as expected viral content and makes confirmatory phage alignment optional; provenance §6.1 repeats that rule. **Length, depth and library-level phage presence do not identify each assembled contig or rule out bacterial loss, misassembly, duplication or host–phage chimeras.** Retain raw QUAST outputs and require sequence-supported attribution before exempting particular contigs/segments. Investigate partially aligned and chimeric contigs separately; unresolved sequence remains unresolved.
+
+Also distinguish chromosome-aligned metrics (including NGA50 and genome fraction) from whole-assembly N50, L50, contig count, total length and GC. The latter include unaligned viral sequence and can differ with each assembler's viral recovery. Identical reads make the input comparison controlled; they do not prove that bacterial quality rankings are unaffected by viral assembly differences. The [QUAST 5.2.0 manual](https://raw.githubusercontent.com/ablab/quast/quast_5.2.0/manual.html), sections 3.1.1 and 3.1.3, defines unaligned sequence by its lack of reference alignment and computes NGA statistics from aligned blocks. It provides no viral-identity exemption based on total length. No real assembly/QUAST run was performed in this re-audit, so actual contig composition remains unverified.
+
+### BC-02: wall time and granularity verified
+
+- `scripts/slurm_benchmark_harness.sbatch:25` is exactly `#SBATCH -t 03:00:00`; partition is `qfree`, eight CPUs and 14G.
+- Fresh `scontrol show partition qfree` reports `MaxTime=03:00:00`.
+- Contract §2 and harness defaults agree: assembler 8,100 s plus QUAST 1,500 s equals 9,600 s, leaving 1,200 s within 10,800 s for overhead. This is a configured budget, not a guarantee that every dataset finishes successfully.
+- `--dataset CS-SA01 --tool skesa --replicate 1`, then indices 2 and 3, each executed successfully in dry-run mode into one external output directory. The summary retains three separate indexed rows and the correct MW2 reference; all statuses are `DRY_RUN`.
+- Real-mode CLI probes with `--tool all` and with `--tool skesa --replicates 3` exit **2** before assembly: scheduled timeout sums are respectively 38,400 s and 28,800 s. These probes execute no assembler.
+- Fresh `sbatch --test-only scripts/slurm_benchmark_harness.sbatch --dataset CS-SA01 --tool skesa --replicate 1 --outdir /tmp/f26-audit-002-unused` returns **0**, with a qfree/vnode1 scheduling estimate (identifier 3073724). This is a scheduler test, not an executed benchmark job. `bash -n` also returns 0.
+
+**BC-02 CLOSED / RESOLVED** for configuration and supported job granularity. Actual benchmark completion remains a Stage D obligation. Run shared-output jobs sequentially: summary merging is read/modify/write without a concurrency lock, so concurrent completions could lose summary rows. This operational limitation does not invalidate the supported sequential three-job protocol.
+
+### BC-03: three-replicate gate verified
+
+`MIN_DETERMINISM_REPLICATES = 3` and `determinism_report()` declines certification below that count (`checked=false`, `pass=null`). At or above three, every record must have status PASS, one nonempty identical assembly hash, and exactly matching metrics. Group identity now includes read paths/hashes, reference path/hash, tool-binary hash, git HEAD, threads and memory as well as dataset/tool. `merge_runs()` retains one row per dataset/tool/replicate index, so re-running the same index does not create a third retained replicate.
+
+Executed exactly `python3 scripts/run_competitor_benchmark.py --self-test`: **exit 0, `SELF_TEST_PASS`**. The fresh log explicitly confirms three-identical-replicate PASS, two-replicate non-certification, hash-mismatch FAIL, and no pooling across different read identities, along with schedule-boundary tests. The three actual CLI previews above remain non-certifying (`determinism.pass=false`, non-PASS status and missing assembly hash), as expected.
+
+**BC-03 CLOSED / RESOLVED** for the reported threshold and experiment-identity defects. Synthetic self-tests do not certify empirical F26 assembly determinism.
+
+### Reproducibility, scope and remaining action
+
+Fresh evidence: `/hpcfs/fhome/caizhh/.local/state/f26-audit-002/`.
+
+| Artifact | SHA-256 |
+|---|---|
+| `verify.sh` | `39a3f26758649f12bc2d524af5847790e0085f7923b5b4ac2aad12bc2a8bf227` |
+| `verify.log` | `e5ca0193967a7fc7e86d709884877d85eb2c61bef5f2ece5cef777d1f43c12f7` |
+
+The script ran at `2026-10-30T06:10:06Z`, exit 0, ending `AUDIT_VERIFICATION_PASS`; that marker means its engineering checks and conditional arithmetic completed, **not** that BC-01 or Stage B/C passed. It records the audited HEAD, hashes of all five resolution inputs, exact commands, self-test output, partition state, scheduling test and expected rejection exits. `dry/summary.json` and `.tsv` retain the three previews. The earlier standalone self-test also returned 0. Tests use the contract's login-safe self-test/preview paths; no Rust compilation/tests, assembly pipeline or QUAST was run on a login node or elsewhere during this re-audit.
+
+Only this owned audit report is updated. Historical F26-AUDIT-001 text/evidence below is preserved; its three-finding status is superseded by the table above. BC-04/05 remain historical advisories and were not re-certified. HANDOFF/ACTIVE_TASK were read; their pre-existing F23/history discrepancy is outside this assignment. Protected files are unchanged. No merge, push, release or scientific-contract modification is authorized here.
+
+**Next action:** provenance/scientific owner supplies or regenerates the missing primary sequence evidence and tightens contig-attribution/metric interpretation, then an independent auditor rechecks BC-01. The requested all-three-closed certification and PASS commit wording must wait for that evidence.
+
+**Definitive current verdict: STAGE_BC_AUDIT_BLOCKED; BC-02 and BC-03 CLOSED, BC-01 OPEN.**
+
+---
+
+## Historical F26-AUDIT-001 report (preserved)
+
 - Task: `F26-AUDIT-001`.
 - Role: independent auditor, Codex Sol assignment; no implementation changes.
 - Audit date: 2026-10-30 (UTC).
