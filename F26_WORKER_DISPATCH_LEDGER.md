@@ -56,7 +56,9 @@ Prior to the F26 Hotfix enforcement, the Controller performed the following init
 | **DISP-F26-016** | `F26-BM-006` | `cursor-agent` | `grok-4.7-high` | Stage E Subsample Generation Pipeline & Manifest Builder | `scripts/generate_stage_e_subsamples.py` | **COMPLETED** (Commit `06c1732`, Self-Test PASS) | `logs/disp_f26_016_cursor.log` |
 | **DISP-F26-017** | `F26-EXEC-004`| `slurm` (Job 3075001) | HPC `qfree` | Execute Stage E Subsample Generation & Manifest Generation | `data/f26_cross_species/subsamples/*`, `F26_STAGE_E_MANIFEST.tsv` | **COMPLETED** (Commit `710279f`, Exit 0:0, 32 pairs created) | `logs/f26_stage_e_subsamples_3075001.out` |
 | **DISP-F26-018** | `F26-REP-001`  | `cursor-agent` | `grok-4.7-high` | Author Stage D Cross-Species Baseline Benchmark Report | `docs/development/F26_CROSS_SPECIES_BASELINE_REPORT.md` | **COMPLETED** (Commit `e939a14`) | `logs/disp_f26_018_cursor.log` |
-| **DISP-F26-019** | `F26-BM-007` | `cursor-agent` | `grok-4.7-high` | Implement Stage E & G Batch Benchmark Submitter Script | `scripts/submit_stage_e_benchmarks.sh` | **DISPATCHED** | `logs/disp_f26_019_cursor.log` |
+| **DISP-F26-019** | `F26-BM-007` | `cursor-agent` | `grok-4.7-high` | Implement Stage E & G Batch Benchmark Submitter Script | `scripts/submit_stage_e_benchmarks.sh` | **COMPLETED** (Commit `910a6e7`, Self-Test PASS) | `logs/disp_f26_019_cursor.log` |
+| **DISP-F26-020** | `F26-EXEC-005`| `slurm` (Batch Stage E) | HPC `qfree` | fastBact Stage E Depth Gradient Benchmarks (16 conditions) | `benchmarks/f26_results/raw/*_fastbact_r1` | **DISPATCHED** | Slurm Queue |
+| **DISP-F26-021** | `F26-EXEC-006`| `slurm` (Batch Stage G) | HPC `qfree` | fastBact Stage G Determinism Replicates (Rep 2 & 3, 8 jobs) | `benchmarks/f26_results/raw/*_fastbact_r[23]` | **DISPATCHED** | Slurm Queue |
 
 ---
 
