@@ -2,6 +2,7 @@
 
 **Document ID:** `FASTBACT-F26-BM-CONTRACT-01`  
 **Task:** `F26-BM-001`  
+**Revision:** `F26-BM-002` (2026-10-30) — qfree wall clock is 03:00:00; one job is one dataset and one tool; determinism PASS requires three replicates of the same run identity.  
 **Date:** 2026-10-30  
 **Phase:** F26 — Cross-Species Assembly Benchmarking, Robustness Hardening & Competitive Validation  
 **Harness:** `scripts/run_competitor_benchmark.py`  
@@ -37,9 +38,10 @@ Mode is Illumina paired-end only. No long reads, no `--meta`, no `--careful`, no
 | Threads | 8 | Tool flags plus `OMP_NUM_THREADS=8`, `RAYON_NUM_THREADS=8`, `OPENBLAS_NUM_THREADS=1`, `MKL_NUM_THREADS=1` |
 | Memory | 14 GB | Slurm `--mem=14G` on partition `qfree` (cgroup is the hard cap). SPAdes and SKESA also receive an internal 14 GB cap. |
 | CPUs on node | 16 available, 8 requested | One task, one node (`vnode1`–`vnode4`) |
-| Assembler wall timeout | 28800 s (8 h) default | Harness status `TIMEOUT`, exit code 124. Override with `--timeout-seconds`. |
-| QUAST wall timeout | 3600 s default | Separate from assembler time. Override with `--quast-timeout-seconds`. |
-| Slurm wall clock | 36 h | `#SBATCH --time=36:00:00`. Raise both the Slurm limit and the per-tool timeout together when a run needs longer. |
+| Assembler wall timeout | 8100 s (2 h 15 min) default | One assembler inside one qfree job. Harness status `TIMEOUT`, exit code 124. Override with `--timeout-seconds`. |
+| QUAST wall timeout | 1500 s (25 min) default | Separate from assembler time. Override with `--quast-timeout-seconds`. |
+| Slurm wall clock | 03:00:00 (3 h) | `#SBATCH -t 03:00:00` on partition `qfree`. This matches the partition's advertised MaxTime. Do not request a longer wall clock. |
+| Job granularity | one dataset and one tool | `--dataset` selects one manifest row. `--tool` selects one assembler. Default timeouts fit that pair once and leave 1200 s before the 10800 s qfree limit (8100 + 1500). A real run whose worst-case product `tools × replicates × (assembler timeout + QUAST timeout)` exceeds 10800 s exits 2 before any assembler starts. `--dry-run` prints the same warning and continues. N=3 determinism is three jobs (`--replicate 1`, `--replicate 2`, `--replicate 3`) that share `--outdir`. |
 
 `ulimit -v` is not set. SPAdes reserves a large virtual address space, and a virtual-memory ulimit would abort it before the RSS cap is reached. Peak RSS is the measured memory quantity.
 
@@ -277,13 +279,13 @@ A missing required row other than the NGA50 exception sets status `METRICS_INCOM
 
 `summary.json` schema version is `f26-benchmark-1`. Re-running into the same `--outdir` replaces rows with the same `dataset_id`, `tool`, and `replicate`, and keeps other rows. `--force` deletes only that replicate directory before rerunning. Without `--force`, an existing replicate directory is `EXISTS` and is not overwritten.
 
-`summary.tsv` is the flat table of every retained run. `determinism` is embedded in `summary.json` when `--replicates` is greater than 1.
+`summary.tsv` is the flat table of every retained run. `determinism` is always embedded in `summary.json`. A group can receive `pass=true` only when it has at least three replicates and those replicates share one run identity.
 
 ---
 
 ## 9. Failure behavior
 
-Each tool is isolated. An exception, non-zero exit, timeout, missing input, hash mismatch, version mismatch, or QUAST failure is written into that run's `metrics.json` and into the summary. The harness then continues with the next tool. The process exits 1 if any requested run is not `PASS` or `DRY_RUN`. Usage errors (unknown dataset, bad manifest, missing `--outdir`) exit 2 before any assembler starts.
+Each tool is isolated. An exception, non-zero exit, timeout, missing input, hash mismatch, version mismatch, or QUAST failure is written into that run's `metrics.json` and into the summary. The harness then continues with the next tool. The process exits 1 if any requested run is not `PASS` or `DRY_RUN`. Usage errors (unknown dataset, bad manifest, missing `--outdir`) and a real schedule that exceeds the qfree 10800 s worst-case budget exit 2 before any assembler starts.
 
 | Status | Meaning |
 |---|---|
@@ -311,25 +313,25 @@ Version pins checked before assembly: SPAdes `v4.2.0`, SKESA `2.5.1`, Unicycler 
 Use this protocol for the F26 variance claim. Do not compare wall time or peak RSS.
 
 1. Build fastBact once (`cargo build --release` on `qfree`) and record `sha256sum target/release/fastBact`.
-2. On one node class (partition `qfree`), run three replicates:
+2. On one node class (partition `qfree`), run three replicates as three jobs. Default timeouts fit one tool and one replicate inside the 3-hour limit, so `--replicates 3` in a single job is rejected unless both timeouts are lowered enough that `3 × (assembler timeout + QUAST timeout) ≤ 10800`.
 
 ```text
-python3 scripts/run_competitor_benchmark.py \
+sbatch scripts/slurm_benchmark_harness.sbatch \
   --manifest F26_DATASET_MANIFEST.tsv \
   --dataset {DATASET} \
   --tool {fastbact|spades|skesa|unicycler} \
   --outdir {OUT} \
-  --replicates 3
+  --replicate {1|2|3}
 ```
 
-3. Submit that command through `scripts/slurm_benchmark_harness.sbatch` so the cgroup is 8 CPUs and 14 GB.
-4. Pass condition, all three replicates:
+3. Each job uses `scripts/slurm_benchmark_harness.sbatch`, so the cgroup is 8 CPUs, 14 GB, and `#SBATCH -t 03:00:00`. The three jobs share `{OUT}`. Re-running the same `dataset_id`, `tool`, and `replicate` replaces that row and keeps the other replicates.
+4. Pass condition, all three replicates in one identity group:
    - status `PASS`
    - identical `assembly_sha256`
    - exact equality of every metric in section 7, including null NGA50
 5. `wall_clock_s`, `cpu_time_s`, and `peak_rss_mb` are excluded. They are scheduler measurements, not assembly outputs.
-6. The harness writes `determinism.pass=true` only when those equalities hold, and records `variance_max=0` for numeric metrics. Any hash or metric difference is `pass=false`. Replicates must not be averaged to hide a mismatch.
-7. A determinism rerun that changes the fastBact binary SHA-256, the read files, or the reference SHA-256 is a different experiment and cannot be pooled with the previous replicates.
+6. The harness writes `determinism.pass=true` only when the group has at least three replicates and those equalities hold, and records `variance_max=0` for numeric metrics. Fewer than three replicates yields `checked=false`, `pass=null`, and reason `not enough replicates`. Any hash or metric difference is `pass=false`. Replicates must not be averaged to hide a mismatch.
+7. Replicates pool only when dataset, tool, read paths, read SHA-256, reference path, reference SHA-256, tool-binary SHA-256, git HEAD, threads, and memory all match. A change to the fastBact binary, the read files, or the reference is a different experiment and cannot be pooled with the previous replicates. Read SHA-256 is recorded on real runs and left empty on `--dry-run`.
 
 The F25 oracle statement `σ² = 0` on identical inputs is the same predicate: bitwise assembly identity and exact metric identity.
 
@@ -343,29 +345,30 @@ Self-test (no assembler, safe on a login node):
 python3 scripts/run_competitor_benchmark.py --self-test
 ```
 
-Command preview:
+Command preview of one dataset and one tool:
 
 ```text
 python3 scripts/run_competitor_benchmark.py \
   --manifest F26_DATASET_MANIFEST.tsv \
   --dataset R1-001 \
-  --tool all \
+  --tool spades \
   --outdir /tmp/f26-dry-run \
   --dry-run
 ```
 
-Compute-node job:
+Compute-node job, one dataset and one tool:
 
 ```text
 mkdir -p logs
 sbatch scripts/slurm_benchmark_harness.sbatch \
   --manifest F26_DATASET_MANIFEST.tsv \
   --dataset R1-001 \
-  --tool all \
+  --tool spades \
+  --replicate 1 \
   --outdir benchmarks/f26_results
 ```
 
-The batch script requests partition `qfree`, 8 CPUs, 14 GB, and refuses to start when `SLURM_JOB_ID` is unset.
+Repeat with `--tool fastbact`, `--tool skesa`, and `--tool unicycler`. Repeat `--replicate 2` and `--replicate 3` into the same `--outdir` for the N=3 determinism gate. The batch script requests partition `qfree`, 8 CPUs, 14 GB, wall clock `03:00:00`, and refuses to start when `SLURM_JOB_ID` is unset.
 
 ---
 

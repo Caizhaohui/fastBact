@@ -37,6 +37,32 @@ LINEABACT_BIN = SKESA_BIN.parent
 GNU_TIME = Path("/usr/bin/time")
 
 TOOL_ORDER = ("fastbact", "spades", "skesa", "unicycler")
+
+# Partition qfree advertises MaxTime=03:00:00. Defaults cover one dataset,
+# one tool, and one replicate, and leave 1200 s for read hashing, version
+# probes, and teardown (8100 + 1500 = 9600). A real run whose worst-case
+# product exceeds QFREE_MAX_WALL_S is rejected before any assembler starts.
+QFREE_MAX_WALL_S = 3 * 60 * 60
+DEFAULT_TOOL_TIMEOUT_S = 2 * 60 * 60 + 15 * 60  # 8100
+DEFAULT_QUAST_TIMEOUT_S = 25 * 60  # 1500
+MIN_DETERMINISM_REPLICATES = 3
+
+# Replicates pool only when the experiment identity matches. Missing fields
+# compare as empty so a fixture that omits them still groups with itself.
+DETERMINISM_IDENTITY_FIELDS = (
+    "dataset_id",
+    "tool",
+    "r1",
+    "r2",
+    "reference",
+    "reference_sha256",
+    "r1_sha256",
+    "r2_sha256",
+    "binary_sha256",
+    "git_head",
+    "threads",
+    "memory_gb",
+)
 VERSION_NEEDLES = {
     "spades": "v4.2.0",
     "skesa": "2.5.1",
@@ -801,13 +827,95 @@ def flatten_row(record: Mapping[str, Any]) -> dict[str, Any]:
     return flat
 
 
+def _identity_token(record: Mapping[str, Any], field: str) -> str:
+    value = record.get(field)
+    if value is None:
+        return ""
+    return str(value)
+
+
+def determinism_group_key(record: Mapping[str, Any]) -> tuple[str, ...]:
+    return tuple(_identity_token(record, field) for field in DETERMINISM_IDENTITY_FIELDS)
+
+
+def determinism_identity(record: Mapping[str, Any]) -> dict[str, str]:
+    return {
+        field: _identity_token(record, field)
+        for field in DETERMINISM_IDENTITY_FIELDS
+        if field not in {"dataset_id", "tool"}
+    }
+
+
+def scheduled_wall_seconds(
+    n_tools: int,
+    n_replicates: int,
+    timeout_s: int,
+    quast_timeout_s: int,
+) -> int:
+    return n_tools * n_replicates * (timeout_s + quast_timeout_s)
+
+
+def qfree_schedule_error(
+    n_tools: int,
+    n_replicates: int,
+    timeout_s: int,
+    quast_timeout_s: int,
+) -> Optional[str]:
+    """Return an error when the worst-case schedule cannot finish inside qfree."""
+    budget = scheduled_wall_seconds(n_tools, n_replicates, timeout_s, quast_timeout_s)
+    if budget <= QFREE_MAX_WALL_S:
+        return None
+    return (
+        f"scheduled worst-case wall {budget}s exceeds qfree MaxTime "
+        f"{QFREE_MAX_WALL_S}s ({n_tools} tool(s) x {n_replicates} replicate(s) x "
+        f"({timeout_s}s assembler + {quast_timeout_s}s QUAST)). "
+        "Submit one dataset and one tool per Slurm job. "
+        "Certify N=3 with three jobs that share --outdir and pass "
+        "--replicate 1, --replicate 2, and --replicate 3."
+    )
+
+
+def replicate_indices(args: argparse.Namespace) -> list[int]:
+    if getattr(args, "replicate", None) is not None:
+        return [int(args.replicate)]
+    return list(range(1, int(args.replicates) + 1))
+
+
+def stamp_run_identity(
+    record: dict[str, Any],
+    *,
+    r1: Path,
+    r2: Path,
+    reference: Path,
+    reference_sha256: str,
+    r1_sha256: str,
+    r2_sha256: str,
+    binary_sha256: str,
+    git_head_value: str,
+    threads: int,
+    memory_gb: int,
+) -> None:
+    record["r1"] = str(r1)
+    record["r2"] = str(r2)
+    record["reference"] = str(reference)
+    record["reference_sha256"] = reference_sha256
+    record["r1_sha256"] = r1_sha256
+    record["r2_sha256"] = r2_sha256
+    record["binary_sha256"] = binary_sha256
+    record["git_head"] = git_head_value
+    record["threads"] = threads
+    record["memory_gb"] = memory_gb
+
+
 def determinism_report(records: Sequence[Mapping[str, Any]]) -> list[dict[str, Any]]:
-    grouped: dict[tuple[str, str], list[Mapping[str, Any]]] = {}
+    grouped: dict[tuple[str, ...], list[Mapping[str, Any]]] = {}
     for record in records:
-        grouped.setdefault((str(record["dataset_id"]), str(record["tool"])), []).append(record)
+        grouped.setdefault(determinism_group_key(record), []).append(record)
     reports = []
-    for (dataset_id, tool), group in sorted(grouped.items()):
-        if len(group) < 2:
+    for key, group in sorted(grouped.items()):
+        dataset_id, tool = key[0], key[1]
+        identity = determinism_identity(group[0])
+        if len(group) < MIN_DETERMINISM_REPLICATES:
             reports.append(
                 {
                     "dataset_id": dataset_id,
@@ -815,7 +923,10 @@ def determinism_report(records: Sequence[Mapping[str, Any]]) -> list[dict[str, A
                     "replicates": len(group),
                     "checked": False,
                     "pass": None,
-                    "reason": "fewer than 2 replicates",
+                    "reason": (
+                        f"not enough replicates: {len(group)} < {MIN_DETERMINISM_REPLICATES}"
+                    ),
+                    "identity": identity,
                 }
             )
             continue
@@ -847,6 +958,7 @@ def determinism_report(records: Sequence[Mapping[str, Any]]) -> list[dict[str, A
                 "variance_max": variance_max,
                 "assembly_sha256": hashes[0] if len(set(hashes)) == 1 else None,
                 "mismatches": mismatches,
+                "identity": identity,
             }
         )
     return reports
@@ -899,7 +1011,7 @@ def input_failure(
     *,
     dataset_id: str,
     tools: Sequence[str],
-    replicates: int,
+    replicate_ids: Sequence[int],
     status: str,
     note: str,
     r1: Path,
@@ -911,7 +1023,7 @@ def input_failure(
 ) -> list[dict[str, Any]]:
     records = []
     for tool in tools:
-        for replicate in range(1, replicates + 1):
+        for replicate in replicate_ids:
             command = build_tool_command(
                 tool,
                 r1,
@@ -986,9 +1098,32 @@ def evaluate_dataset(args: argparse.Namespace, row: Mapping[str, str]) -> int:
         )
         print(f"[harness] {context['limit_deviation']}", file=sys.stderr)
 
+    replicate_ids = replicate_indices(args)
+    schedule_error = qfree_schedule_error(
+        len(tools),
+        len(replicate_ids),
+        args.timeout_seconds,
+        args.quast_timeout_seconds,
+    )
+    if schedule_error:
+        print(f"[harness] {schedule_error}", file=sys.stderr)
+        if not args.dry_run:
+            return 2
+
     failure, note = preflight_inputs(row, r1, r2, reference, not args.no_verify_reference_hash and not args.dry_run)
     if args.dry_run:
         failure, note = preflight_inputs(row, r1, r2, reference, not args.no_verify_reference_hash)
+
+    r1_sha256 = ""
+    r2_sha256 = ""
+    if not failure and not args.dry_run:
+        print("[harness] hashing reads for determinism identity", flush=True)
+        r1_sha256 = sha256_file(r1)
+        r2_sha256 = sha256_file(r2)
+    binary_hashes: dict[str, str] = {}
+    for tool in tools:
+        binary = tool_binary(tool, fastbact_bin)
+        binary_hashes[tool] = sha256_file(binary) if binary.is_file() else ""
 
     new_runs: list[dict[str, Any]]
     if failure and not args.dry_run:
@@ -996,7 +1131,7 @@ def evaluate_dataset(args: argparse.Namespace, row: Mapping[str, str]) -> int:
         new_runs = input_failure(
             dataset_id=row["dataset_id"],
             tools=tools,
-            replicates=args.replicates,
+            replicate_ids=replicate_ids,
             status=failure,
             note=note,
             r1=r1,
@@ -1009,7 +1144,7 @@ def evaluate_dataset(args: argparse.Namespace, row: Mapping[str, str]) -> int:
     else:
         new_runs = []
         for tool in tools:
-            for replicate in range(1, args.replicates + 1):
+            for replicate in replicate_ids:
                 run_dir = outdir / row["dataset_id"] / tool / f"rep_{replicate}"
                 print(f"[harness] {row['dataset_id']} {tool} replicate {replicate} -> {run_dir}", flush=True)
                 try:
@@ -1045,6 +1180,22 @@ def evaluate_dataset(args: argparse.Namespace, row: Mapping[str, str]) -> int:
                     record.setdefault("notes", []).append(note)
                 new_runs.append(record)
                 print(f"[harness] status={record['status']} exit={record['exit_code']}", flush=True)
+
+    reference_sha256 = row["reference_raw_sha256"].lower()
+    for record in new_runs:
+        stamp_run_identity(
+            record,
+            r1=r1,
+            r2=r2,
+            reference=reference,
+            reference_sha256=reference_sha256,
+            r1_sha256=r1_sha256,
+            r2_sha256=r2_sha256,
+            binary_sha256=binary_hashes[str(record["tool"])],
+            git_head_value=str(context["git_head"]),
+            threads=args.threads,
+            memory_gb=args.memory_gb,
+        )
 
     merged = merge_runs(load_existing_summary(outdir / "summary.json"), new_runs)
     write_summaries(outdir, merged, context)
@@ -1178,24 +1329,75 @@ def self_test() -> int:
     check(timeout_run["status"] == "TIMEOUT" and timeout_run["exit_code"] == 124, "timeout is recorded")
     check("TIMEOUT" in (tmp / "timeout.err").read_text(encoding="utf-8"), "timeout note written to stderr")
 
-    det = determinism_report(
-        [
-            {"dataset_id": "R1-001", "tool": "fastbact", "status": "PASS", "assembly_sha256": "abc",
-             "metrics": {field: 1 for field in METRIC_FIELDS}},
-            {"dataset_id": "R1-001", "tool": "fastbact", "status": "PASS", "assembly_sha256": "abc",
-             "metrics": {field: 1 for field in METRIC_FIELDS}},
-        ]
+    def one_replicate(**overrides: Any) -> dict[str, Any]:
+        record: dict[str, Any] = {
+            "dataset_id": "R1-001",
+            "tool": "fastbact",
+            "status": "PASS",
+            "assembly_sha256": "abc",
+            "r1": "/reads/R1.fastq.gz",
+            "r2": "/reads/R2.fastq.gz",
+            "reference": "/ref/genome.fasta",
+            "reference_sha256": "refhash",
+            "r1_sha256": "r1hash",
+            "r2_sha256": "r2hash",
+            "binary_sha256": "binhash",
+            "git_head": "abc123",
+            "threads": 8,
+            "memory_gb": 14,
+            "metrics": {field: 1 for field in METRIC_FIELDS},
+        }
+        record.update(overrides)
+        return record
+
+    det = determinism_report([one_replicate() for _ in range(3)])
+    check(
+        len(det) == 1
+        and det[0]["replicates"] == 3
+        and det[0]["checked"] is True
+        and det[0]["pass"] is True
+        and det[0]["variance_max"] == 0.0,
+        "three identical replicates pass determinism",
     )
-    check(det[0]["pass"] is True and det[0]["variance_max"] == 0.0, "identical replicates pass determinism")
+    short = determinism_report([one_replicate() for _ in range(2)])
+    check(
+        short[0]["checked"] is False
+        and short[0]["pass"] is None
+        and short[0]["replicates"] == 2
+        and "not enough replicates" in short[0]["reason"],
+        "two replicates are not a determinism PASS",
+    )
     det_fail = determinism_report(
         [
-            {"dataset_id": "R1-001", "tool": "spades", "status": "PASS", "assembly_sha256": "abc",
-             "metrics": {field: 1 for field in METRIC_FIELDS}},
-            {"dataset_id": "R1-001", "tool": "spades", "status": "PASS", "assembly_sha256": "def",
-             "metrics": {field: 1 for field in METRIC_FIELDS}},
+            one_replicate(tool="spades"),
+            one_replicate(tool="spades"),
+            one_replicate(tool="spades", assembly_sha256="def"),
         ]
     )
-    check(det_fail[0]["pass"] is False, "hash mismatch fails determinism")
+    check(det_fail[0]["checked"] is True and det_fail[0]["pass"] is False, "hash mismatch fails determinism")
+    split = determinism_report(
+        [
+            one_replicate(),
+            one_replicate(),
+            one_replicate(r1="/reads/other_R1.fastq.gz", r1_sha256="other"),
+        ]
+    )
+    check(
+        all(item["pass"] is not True for item in split),
+        "different read identity is not pooled into a determinism PASS",
+    )
+    check(
+        scheduled_wall_seconds(1, 1, DEFAULT_TOOL_TIMEOUT_S, DEFAULT_QUAST_TIMEOUT_S) <= QFREE_MAX_WALL_S,
+        "default one-tool schedule fits qfree",
+    )
+    check(
+        qfree_schedule_error(len(TOOL_ORDER), 1, DEFAULT_TOOL_TIMEOUT_S, DEFAULT_QUAST_TIMEOUT_S) is not None,
+        "default four-tool schedule exceeds qfree",
+    )
+    check(
+        qfree_schedule_error(1, 3, DEFAULT_TOOL_TIMEOUT_S, DEFAULT_QUAST_TIMEOUT_S) is not None,
+        "three default-timeout replicates exceed one qfree job",
+    )
     shutil.rmtree(tmp)
 
     if failures:
@@ -1212,10 +1414,19 @@ def parse_args(argv: Sequence[str]) -> argparse.Namespace:
     parser.add_argument("--tool", choices=[*TOOL_ORDER, "all"], help="Assembler or all")
     parser.add_argument("--outdir", type=Path, help="Directory for logs, QUAST, and summaries")
     parser.add_argument("--replicates", type=int, default=1)
+    parser.add_argument(
+        "--replicate",
+        type=int,
+        default=None,
+        help=(
+            "Run one 1-based replicate index. A qfree job is one dataset and one tool; "
+            "N=3 determinism is three jobs (--replicate 1, 2, and 3) sharing --outdir."
+        ),
+    )
     parser.add_argument("--threads", type=int, default=8)
     parser.add_argument("--memory-gb", type=int, default=14)
-    parser.add_argument("--timeout-seconds", type=int, default=28800)
-    parser.add_argument("--quast-timeout-seconds", type=int, default=3600)
+    parser.add_argument("--timeout-seconds", type=int, default=DEFAULT_TOOL_TIMEOUT_S)
+    parser.add_argument("--quast-timeout-seconds", type=int, default=DEFAULT_QUAST_TIMEOUT_S)
     parser.add_argument("--data-root", type=Path, default=DEFAULT_DATA_ROOT)
     parser.add_argument("--fastbact-bin", default=None)
     parser.add_argument("--dry-run", action="store_true")
@@ -1230,6 +1441,11 @@ def parse_args(argv: Sequence[str]) -> argparse.Namespace:
         parser.error("required unless --self-test: " + ", ".join("--" + name for name in missing))
     if args.replicates < 1:
         parser.error("--replicates must be >= 1")
+    if args.replicate is not None:
+        if args.replicate < 1:
+            parser.error("--replicate must be >= 1")
+        if args.replicates != 1:
+            parser.error("--replicate selects one index; do not combine it with --replicates greater than 1")
     if args.threads < 1 or args.memory_gb < 1:
         parser.error("--threads and --memory-gb must be >= 1")
     if args.timeout_seconds < 1 or args.quast_timeout_seconds < 1:

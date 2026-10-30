@@ -2,12 +2,19 @@
 # F26 unified competitor benchmark — Slurm entry.
 # Protocol: F26_COMPETITOR_BENCHMARK_CONTRACT.md
 #
-# Submit from the worktree (logs/ must exist):
+# Partition qfree advertises MaxTime=03:00:00. One job is one dataset and one
+# tool, so assembler time plus QUAST stays inside that limit. Four assemblers
+# are four jobs. N=3 determinism is three jobs that share --outdir:
+#
 #   sbatch scripts/slurm_benchmark_harness.sbatch \
 #     --manifest F26_DATASET_MANIFEST.tsv \
 #     --dataset R1-001 \
-#     --tool all \
+#     --tool spades \
+#     --replicate 1 \
 #     --outdir benchmarks/f26_results
+#
+# The Python harness rejects a real schedule whose worst-case
+# tools × replicates × (assembler timeout + QUAST timeout) exceeds 10800 s.
 #
 #SBATCH --job-name=f26-competitor-bench
 #SBATCH --partition=qfree
@@ -15,7 +22,7 @@
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=8
 #SBATCH --mem=14G
-#SBATCH --time=36:00:00
+#SBATCH -t 03:00:00
 #SBATCH --output=/hpcfs/fhome/caizhh/Desktop/03_Tool_Development/fastBact-phase-f26-robustness-worktree/logs/f26_benchmark_%j.out
 #SBATCH --error=/hpcfs/fhome/caizhh/Desktop/03_Tool_Development/fastBact-phase-f26-robustness-worktree/logs/f26_benchmark_%j.err
 
