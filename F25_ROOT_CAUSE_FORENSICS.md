@@ -16,6 +16,18 @@
 
 All 5 extensive misassemblies reported by QUAST v5.2.0 in the accepted F24 baseline for dataset R1-001 have been independently analyzed from raw FASTQ reads (`SRR28349173_1.fastq.gz` and `_2.fastq.gz`), through intermediate graph stages (Stage 1 cDBG, Stage 4 Multi-K, Stage 5 exSPAnder, Stage 6 Polish), to final contigs.
 
+### 1.1 Category Accounting (Gate 2 Classification Matrix)
+
+| Metric / Category | Count | Classification Rationale |
+|:---|:---:|:---|
+| **Raw QUAST Extensive Misassemblies** | **5** | Baseline QUAST v5.2.0 output (`--min-contig 200`) |
+| **Evidence-Backed Biological Variation** | **2** | Active e14 prophage Pin DNA inversion (`contig_53` Left & Right boundaries) |
+| **Repeat-Alignment Evaluation Artifacts** | **3** | Safe termination at multi-copy transposon boundaries (`contig_63` IS5, `contig_200`/`contig_222` IS1 stubs) |
+| **Confirmed Assembly Algorithm Defects** | **0** | Zero chimeric joins, zero false repeat traversals |
+| **Unresolved Ambiguities** | **0** | All 5 events fully traced to raw read pairs and known genomic loci |
+
+### 1.2 Event-by-Event Forensic Registry
+
 | Event # | QUAST Contig ID | Event Type | Reference Breakpoints | Inconsistency | Raw Read 70-bp Probe Support | Provenance Origin Stage | Biological & Algorithmic Root Cause | Formal Independent Classification |
 |:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---|:---:|
 | **1** | `contig_53` | Inversion | 1,207,805 / 1,207,806 | N/A | **29 reads** (INV) vs 18 (WT) | Stage 4 (`unitig_4190`) | e14 prophage Pin recombinase (`pinE`) inversion boundary (`pixL` site); biological mixed population | **`EVALUATION_ARTIFACT`** |
@@ -35,10 +47,11 @@ All 5 extensive misassemblies reported by QUAST v5.2.0 in the accepted F24 basel
 
 ### 2.1 Events 1 & 2: Pin Recombinase Inversion (`contig_53`)
 
-- **Contig Geometry**: Length 30,191 bp.
-  - Prefix: 1..15,240 (15,240 bp) $\to$ Ref `NC_000913.3` 1,192,566..1,207,805 (Forward orientation).
-  - Core: 15,241..17,037 (1,797 bp) $\to$ Ref `NC_000913.3` 1,207,806..1,209,602 (Inverted orientation).
-  - Suffix: 17,038..30,191 (13,154 bp) $\to$ Ref `NC_000913.3` 1,209,603..1,222,756 (Forward orientation).
+- **Contig Geometry & Chromosomal Anchor Uniqueness**: Length 30,191 bp.
+  - Prefix (Unique Flank): 1..15,240 (15,240 bp) $\to$ Ref `NC_000913.3` 1,192,566..1,207,805 (Forward orientation). Uniquely anchors into single-copy chromosomal backbone.
+  - Core (Inverted Segment): 15,241..17,037 (1,797 bp) $\to$ Ref `NC_000913.3` 1,207,806..1,209,602 (Inverted orientation). Contains tail fiber genes `tfaP`, `tfaE`, `stfE`.
+  - Suffix (Unique Flank): 17,038..30,191 (13,154 bp) $\to$ Ref `NC_000913.3` 1,209,603..1,222,756 (Forward orientation). Uniquely anchors into the `pinE` locus and downstream chromosome.
+  - **Uniqueness Check**: Both the 15.2 kb left flank and 13.2 kb right flank map to single-copy, unique genomic coordinates flanking the 1.8 kb invertible segment in `NC_000913.3`. The inversion occurs precisely within its native chromosomal context without translocation or chimeric bridging.
 - **Genomic Locus & Biology**:
   - The locus corresponds to the *E. coli* K-12 e14 prophage tail fiber assembly operon (`tfaP`, `tfaE`, `stfE`), immediately adjacent to the `pinE` site-specific recombinase gene (`NC_000913.3:1209684..1210239`).
   - Pin invertase catalyzes reversible DNA inversion of the 1,797 bp P-segment between inverted repeat recognition sites (`pixL` and `pixR`).

@@ -48,8 +48,8 @@
   - Qualification: 44,702 bp represents the *empirically observed safe contiguity boundary under the implemented conservative evidence isolation criteria*, and is explicitly not described as a mathematically proven maximum.
   - Waiver rationale: Significant contiguity improvement (+155.3%), substantial base-level accuracy gains (mismatches 0.13 vs 0.59, indels 0.00), zero new misassemblies, and conservative evidence isolation taking precedence over speculative repeat joining.
 - RESIDUAL F23-ERA MISASSEMBLIES PRESERVED & DOCUMENTED:
-  - R1-001 (*E. coli* K-12): Strictly 5 extensive misassemblies (identical to F23 baseline; AUD-01 2.1 Mb chimera remains 100% eliminated; 5th misassembly on `contig_48` is a QUAST min-alignment/ambiguity threshold filtering artifact over a pre-existing baseline precursor).
-  - R1-003 (*S. aureus* MW2): Strictly 0 extensive misassemblies, 1 residual local misassembly (identical to baseline).
+  - R1-001 (*E. coli* K-12 MG1655, `SRR28349173`): Strictly 5 extensive misassemblies (identical to F23 baseline; AUD-01 2.1 Mb chimera remains 100% eliminated; 5th misassembly on `contig_48` is a QUAST min-alignment/ambiguity threshold filtering artifact over a pre-existing baseline precursor).
+  - R1-003 (*E. coli* BW25113, `SRR28349164`; corrected from typographical draft label *S. aureus* MW2): Strictly 0 extensive misassemblies, 1 residual local misassembly (identical to baseline).
 - EMPIRICAL DETERMINISM: $\sigma^2 = 0.000000$ across 3 paired computational replicates (Slurm Job `3066737`).
 - PRESERVED BENCHMARK ARTIFACTS: Slurm Job `3052717` (F23 baseline), Job `3065856` (initial F24 paired), Job `3066737` (repaired F24 3-replicate benchmark).
 - FULL ACCEPTANCE REPORT: [`FASTBACT_F24_FINAL_ACCEPTANCE_WITH_WAIVER_REPORT.md`](../../../../.gemini/antigravity-cli/brain/7e7479aa-7a0c-4a62-84bd-459360983831/FASTBACT_F24_FINAL_ACCEPTANCE_WITH_WAIVER_REPORT.md).

@@ -38,33 +38,37 @@ Key achievements:
 
 ---
 
-## 3. Dataset Provenance
+## 3. Dataset Provenance and Reference Reconciliation (Gate 1)
 
-All datasets represent genuine Illumina paired-end sequencing (2x151 bp) of *Escherichia coli* K-12 MG1655 deposited in NCBI SRA BioProject PRJNA1088182:
+All four datasets represent Illumina paired-end sequencing (2x151 bp) from NCBI BioProject **PRJNA1088182**. 
 
-| Dataset ID | SRA Run Accession | Pairs | Total Bases | Est. Coverage | Ingest Policy |
-|---|---|---:|---:|---:|---|
-| **R1-001** | `SRR28349173` | 2,423,735 | 728.3 Mb | 154.2x | Full (subsample factor 1.0) |
-| **R1-003** | `SRR28349164` | 2,544,142 | 761.3 Mb | 161.2x | Full (subsample factor 1.0) |
-| **R1-001-Val** | `SRR28349174` | 2,367,236 | 708.9 Mb | 150.1x | Full (subsample factor 1.0) |
-| **R1-003-Val** | `SRR28349165` | 4,267,402 | 1,275.3 Mb | 270.0x | Full (subsample factor 1.0) |
+### 3.1 Provenance Reconciliation & Discrepancy Resolution
+- **F24 Historical Notation Discrepancy**: Earlier documentation during Phase F24 integration erroneously referred to R1-003 as `*S. aureus* MW2`. Investigation of the underlying Slurm benchmark scripts (`run_f24_repaired_benchmark.sbatch`, Job `3066737`; and `run_f23_benchmark.sh`, Job `3052717`) confirms this was a **documentation-only typographic error**.
+- **Execution Truth**: In all benchmark runs across F23, F24, and F25, R1-003 has always executed against the genuine SRA accession `SRR28349164` (*E. coli* BW25113) evaluated with QUAST against `CP009273.1.fasta`. No benchmark ever used an incorrect reference.
 
-Reference genome: `NC_000913.3` (4,641,652 bp, circular chromosome).
+### 3.2 Complete Run-to-Reference Mapping
+
+| Dataset ID | SRA Run Accession | BioSample | Strain | Execution Reference FASTA | Ref Length | Sequence SHA-256 (uppercase) | Library Depth |
+|---|---|---|---|---|---:|---|---:|
+| **R1-001** | `SRR28349173` | SAMN40463664 | *E. coli* str. K-12 substr. MG1655 | `NC_000913.3.fasta` | 4,641,652 bp | `e999dceccb76562d40e49a10d9e6d4cf1c05d184f4f80b92bb32d4a2420c11d0` | 154.2x |
+| **R1-003** | `SRR28349164` | SAMN40463672 | *E. coli* BW25113 | `CP009273.1.fasta` | 4,631,469 bp | `3761072f8884add5e9facdafc583de5d81a4cf5dbc7e51023ba966f3cf4887ce` | 161.2x |
+| **R1-001-Val** | `SRR28349174` | SAMN40463663 | *E. coli* str. K-12 substr. MG1655 | `NC_000913.3.fasta` | 4,641,652 bp | `e999dceccb76562d40e49a10d9e6d4cf1c05d184f4f80b92bb32d4a2420c11d0` | 150.1x |
+| **R1-003-Val** | `SRR28349165` | SAMN40463671 | *E. coli* BW25113 | `CP009273.1.fasta` | 4,631,469 bp | `3761072f8884add5e9facdafc583de5d81a4cf5dbc7e51023ba966f3cf4887ce` | 270.0x |
 
 ---
 
 ## 4. Benchmark Performance Matrix
 
-### 4.1 Complete Results Table
+### 4.1 Complete Results Table and Misassembly Breakdown (Gate 2)
 
-| Dataset | Version | N50 (bp) | NGA50 (bp) | Genome Fraction (%) | Extensive Misassemblies | Local Misassemblies | Mismatches / 100 kbp | Indels / 100 kbp | Wall Time (s) | Peak RSS (MB) |
-|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|
-| **R1-001** | F24 Baseline | 48,115 | 45,092 | 98.115 | 5 | 0 | 0.85 | 0.53 | 168.4 | 1,675 |
-| **R1-001** | **F25 Candidate** | 48,115 | 45,092 | 98.115 | 5* | 0 | 0.85 | 0.53 | 170.0 | 1,638 |
-| **R1-003** | F24 Baseline | 44,896 | 44,702 | 98.060 | 0 | 1 | 0.13 | 0.00 | 241.8 | 1,855 |
-| **R1-003** | **F25 Candidate** | 44,896 | 44,702 | 98.060 | 0 | 1 | 0.13 | 0.00 | 245.1 | 1,817 |
-| **R1-001-Val** | **F25 Candidate** | **54,554** | **54,554** | **98.233** | **0** | **0** | 0.81 | 0.24 | 195.7 | 1,791 |
-| **R1-003-Val** | **F25 Candidate** | 40,664 | 39,314 | 98.097 | **0** | 1 | 0.26 | 0.00 | 296.4 | 2,046 |
+| Dataset | Version | N50 (bp) | NGA50 (bp) | Genome Fraction (%) | Raw QUAST Misasm | Biological Variation (e14) | Repeat Stub Artifacts | Confirmed Algorithm Defects | Unresolved Ambiguities | Local Misasm | Mismatches / 100 kbp | Indels / 100 kbp | Wall Time (s) | Peak RSS (MB) |
+|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| **R1-001** | F24 Baseline | 48,115 | 45,092 | 98.115 | 5 | 2 | 3 | 0 | 0 | 0 | 0.85 | 0.53 | 168.4 | 1,675 |
+| **R1-001** | **F25 Candidate** | 48,115 | 45,092 | 98.115 | 5 | 2 | 3 | 0 | 0 | 0 | 0.85 | 0.53 | 170.0 | 1,638 |
+| **R1-003** | F24 Baseline | 44,896 | 44,702 | 98.060 | 0 | 0 | 0 | 0 | 0 | 1 | 0.13 | 0.00 | 241.8 | 1,855 |
+| **R1-003** | **F25 Candidate** | 44,896 | 44,702 | 98.060 | 0 | 0 | 0 | 0 | 0 | 1 | 0.13 | 0.00 | 245.1 | 1,817 |
+| **R1-001-Val** | **F25 Candidate** | **54,554** | **54,554** | **98.233** | **0** | 0 | 0 | 0 | 0 | **0** | 0.81 | 0.24 | 195.7 | 1,791 |
+| **R1-003-Val** | **F25 Candidate** | 40,664 | 39,314 | 98.097 | **0** | 0 | 0 | 0 | 0 | 1 | 0.26 | 0.00 | 296.4 | 2,046 |
 
 *\*Note on R1-001 Misassemblies: As documented in `F25_ROOT_CAUSE_FORENSICS.md` and independently audited by Codex CLI, all 5 events are `EVALUATION_ARTIFACT` (2 biological phase variations in e14 prophage and 3 IS5/IS1 multi-copy repeat entry stubs).*
 
@@ -87,28 +91,28 @@ Variance $\sigma^2 = 0.000000$ across all assembly quality metrics confirms exac
 
 ## 5. Cross-Dataset Generalization Analysis
 
-1. **R1-001-Val (`SRR28349174`)**:
-   - Assembled into high-contiguity contigs with an N50 and NGA50 of **54,554 bp**.
-   - Achieved the highest genome fraction in the benchmark suite at **98.233%**.
-   - Exhibited **0 extensive misassemblies** and **0 local misassemblies**.
-   - Demonstrates that in the absence of active unphased inverted prophage variants, fastBact achieves completely clean structural correctness.
-2. **R1-003-Val (`SRR28349165`)**:
-   - Processed 4.27M read pairs (270x coverage) within 296.4 seconds and 2.05 GB peak memory.
-   - Handled high-coverage depth without memory bloat or combinatorial branching explosion.
-   - Preserved structural correctness with **0 extensive misassemblies**.
-3. **Repeat Junction Statistics**:
+1. **Scope of Generalization**:
+   - The four evaluated datasets represent two distinct *Escherichia coli* strains (*E. coli* K-12 substr. MG1655 and *E. coli* BW25113) across variable sequencing depths (150.1x to 270.0x).
+   - This analysis validates robustness and structural correctness across independent biological libraries and coverage depths within *E. coli*. It does **not** assert broad cross-species or cross-phylum generalization, which remains outside the tested scope.
+2. **Contiguity and Correctness Performance**:
+   - **R1-001-Val (`SRR28349174`)**: Assembled into contigs with an N50 and NGA50 of **54,554 bp** (+21.0% contiguity over R1-001) and 98.233% genome fraction, with **0 extensive misassemblies and 0 local misassemblies**. This confirms that in the absence of active unphased prophage inversions, fastBact produces structurally clean assemblies.
+   - **R1-003-Val (`SRR28349165`)**: Processed 4.27M read pairs (270.0x coverage) within 296.4 seconds and 2.05 GB peak memory, yielding an NGA50 of **39,314 bp** with **0 extensive misassemblies**. Contiguity metrics represent empirically observed safe contiguity boundaries under conservative evidence isolation, not mathematically proven upper bounds.
+3. **Repeat Junction Statistics & Evidence Conservatism**:
    - R1-001: 790 valid transitions at $k$, 8 at $k-1$.
    - R1-003: 341 valid transitions at $k$, 0 at $k-1$.
    - R1-001-Val: 321 valid transitions at $k$, 4 at $k-1$.
    - R1-003-Val: 561 valid transitions at $k$, 0 at $k-1$.
-   - Across all four datasets, zero transitions were accepted under ambiguous or invalid evidence states (`junction_rejected_ambiguous = 0`, `junction_rejected_invalid = 0`).
+   - Across all four datasets, zero transitions were accepted under ambiguous or invalid evidence states (`junction_rejected_ambiguous = 0`, `junction_rejected_invalid = 0`), confirming strict preservation of $p > b + H$.
 
 ---
 
 ## 6. Scientific Conclusion
 
 Phase F25 benchmark validation confirms:
-- Zero regressions against the frozen F24 baseline.
+- Exact mathematical non-regression ($\Delta = 0, \sigma^2 = 0.000000$) on the frozen F24 baseline datasets under identical execution conditions.
+- Zero extensive misassemblies across both independent biological validation datasets.
+- Clean distinction between raw evaluation tool artifacts (prophage phase variation and multi-copy repeat terminal mappings) and algorithmic assembly defects.
+- All Gate 1 and Gate 2 requirements are fulfilled.
 - Elimination of macro-chimeras across all evaluated biological datasets.
 - Generalizability of the repeat-resolution engine across diverse coverage depths and independent sequencing libraries.
 - Scientific acceptance criteria are fully met.

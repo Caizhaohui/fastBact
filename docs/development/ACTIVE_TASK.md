@@ -42,8 +42,8 @@
 - **P1-1 (R1-003 Base Errors)**: Fully resolved. Polisher grid-sampling artifact in `consensus.rs` eliminated via Pass 2 full sliding-window candidate frequency counting (`seq.windows(k)`).
 - **P1-2 & P1-3**: Fully resolved via strict $p > b + H$ evidence filtering and monotonic 3-state lattice (`CleanUnique` $\to$ `Contaminated` $\to$ `Absorbed`).
 - **Residual F23-Era Misassemblies Preserved**:
-  - `R1-001` (*E. coli* K-12): Strictly 5 extensive misassemblies (identical to F23 baseline; AUD-01 2.1 Mb chimera remains eliminated; 5th misassembly on `contig_48` is a QUAST min-alignment/ambiguity threshold artifact over a pre-existing baseline precursor).
-  - `R1-003` (*S. aureus* MW2): Strictly 0 extensive misassemblies, 1 residual local misassembly (identical to baseline).
+  - `R1-001` (*E. coli* K-12 MG1655, `SRR28349173`): Strictly 5 extensive misassemblies (identical to F23 baseline; AUD-01 2.1 Mb chimera remains eliminated; 5th misassembly on `contig_48` is a QUAST min-alignment/ambiguity threshold artifact over a pre-existing baseline precursor).
+  - `R1-003` (*E. coli* BW25113, `SRR28349164`; corrected from typographical draft label *S. aureus* MW2): Strictly 0 extensive misassemblies, 1 residual local misassembly (identical to baseline).
 - **Integrated Commit SHA**: `cfbd00503b3031853bb41441160717d1e5bc3e69` (tag: `f24-accepted-2026-10-30`).
 - **Post-Integration Verification**: Slurm Job `3072360` on `vnode1` (`qfree`): 213/213 release tests passed, CLI smoke test OK, binary SHA-256 `53998c592cfe2155fca21a57fa1f39b36f5fc5fb1aeb11db970e760a4742b8fd`.
 - **Benchmark Reproducibility**: Slurm Job `3066737`: 3 paired computational replicates (12 assemblies + 12 QUAST evaluations), empirical variance strictly $\sigma^2 = 0.000000$.
@@ -59,8 +59,8 @@
 - **Baseline Release Binary SHA-256**: `97adb3c2ae386d453ba3f50fa61920836fd6c37d83924c0e0bc04d6763caaeb7` (Commit `68b19f06d22537cf199e8fe124ea6b62bb0bb50a`)
 - **Post-Integration Tests**: 213/213 release tests passed (Slurm Job `3072360`), exit `0:0`, CLI smoke test OK.
 - **Real-Data A/B 3-Replicate Benchmark (QUAST v5.2.0, Job `3066737` on `vnode1`)**:
-  - `R1-001` (*E. coli* K-12): NGA50 27,031 $\to$ **45,092 bp** (+66.8%), Misassemblies: strictly **5** (zero new vs F23), Local misassemblies: strictly **0**, Mismatches: 2.24 $\to$ **0.85** (-62.1%), Indels: 1.09 $\to$ **0.53** (-51.4%), Valid k joins: 542 $\to$ **790**.
-  - `R1-003` (*S. aureus* MW2): NGA50 17,509 $\to$ **44,702 bp** (+155.3%), Misassemblies: strictly **0** (zero new), Local misassemblies: strictly **1** (identical to baseline), Mismatches: 0.59 $\to$ **0.13** (-78.0%), Indels: 0.00 $\to$ **0.00**, Valid k joins: 63 $\to$ **341**.
+  - `R1-001` (*E. coli* K-12 MG1655): NGA50 27,031 $\to$ **45,092 bp** (+66.8%), Misassemblies: strictly **5** (zero new vs F23), Local misassemblies: strictly **0**, Mismatches: 2.24 $\to$ **0.85** (-62.1%), Indels: 1.09 $\to$ **0.53** (-51.4%), Valid k joins: 542 $\to$ **790**.
+  - `R1-003` (*E. coli* BW25113, `SRR28349164`; corrected from typographical draft label *S. aureus* MW2): NGA50 17,509 $\to$ **44,702 bp** (+155.3%), Misassemblies: strictly **0** (zero new), Local misassemblies: strictly **1** (identical to baseline), Mismatches: 0.59 $\to$ **0.13** (-78.0%), Indels: 0.00 $\to$ **0.00**, Valid k joins: 63 $\to$ **341**.
 - **Execution Safety**: Contained strictly in feature worktree. Zero merge to main, zero remote push, zero git tags.
 
 ## Frozen F23 acceptance record

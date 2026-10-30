@@ -56,18 +56,25 @@ The branch is scientifically sound, fully audited, regression-free, and prepared
 
 ---
 
-## 3. Four-Dataset Verification Matrix
+## 3. Four-Dataset Verification Matrix & Provenance Reconciliation (Gates 1 & 2)
 
-All evaluations run with QUAST v5.2.0 (`--min-contig 500`) against *E. coli* K-12 MG1655 (`NC_000913.3`):
+### 3.1 Dataset Provenance & Reference Reconciliation
+- **R1-001** (`SRR28349173`) & **R1-001-Val** (`SRR28349174`): *Escherichia coli* str. K-12 substr. MG1655 evaluated against `NC_000913.3.fasta` (4,641,652 bp; SHA-256 `e999dceccb76562d40e49a10d9e6d4cf1c05d184f4f80b92bb32d4a2420c11d0`).
+- **R1-003** (`SRR28349164`) & **R1-003-Val** (`SRR28349165`): *Escherichia coli* BW25113 evaluated against `CP009273.1.fasta` (4,631,469 bp; SHA-256 `3761072f8884add5e9facdafc583de5d81a4cf5dbc7e51023ba966f3cf4887ce`).
+- **Discrepancy Note**: The earlier reference to `*S. aureus* MW2` in F24 notes was a documentation-only typographical error; all benchmark runs in F23, F24, and F25 executed against the exact references listed above matching SRA metadata.
 
-| Dataset | Accession | Pairs | Depth | N50 (bp) | NGA50 (bp) | Genome Fraction | Extensive Misasm | Local Misasm | Mismatches / 100 kb | Indels / 100 kb | Status |
-|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|
-| **R1-001** | `SRR28349173` | 2.42M | 154x | 48,115 | 45,092 | 98.115% | 5* | 0 | 0.85 | 0.53 | **PASS (Identical)** |
-| **R1-003** | `SRR28349164` | 2.54M | 161x | 44,896 | 44,702 | 98.060% | 0 | 1 | 0.13 | 0.00 | **PASS (Identical)** |
-| **R1-001-Val** | `SRR28349174` | 2.37M | 150x | 54,554 | 54,554 | 98.233% | **0** | **0** | 0.81 | 0.24 | **PASS (Clean)** |
-| **R1-003-Val** | `SRR28349165` | 4.27M | 270x | 40,664 | 39,314 | 98.097% | **0** | 1 | 0.26 | 0.00 | **PASS (Clean)** |
+### 3.2 Performance and Misassembly Accounting Matrix
 
-*\*Audited evaluation artifacts (2 e14 prophage inversions + 3 IS5/IS1 multi-copy repeat stubs).*
+Evaluations executed using QUAST v5.2.0 (`--min-contig 200`):
+
+| Dataset | Accession | Read Pairs | Depth | N50 (bp) | NGA50 (bp) | Genome Fraction | Raw QUAST Misasm | Biological Variation (e14) | Repeat Stub Artifacts | Confirmed Assembly Defects | Unresolved Ambiguities | Local Misasm | Mismatches / 100 kb | Indels / 100 kb | Status |
+|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|
+| **R1-001** | `SRR28349173` | 2.42M | 154x | 48,115 | 45,092 | 98.115% | 5 | 2 | 3 | 0 | 0 | 0 | 0.85 | 0.53 | **PASS (Deterministic)** |
+| **R1-003** | `SRR28349164` | 2.54M | 161x | 44,896 | 44,702 | 98.060% | 0 | 0 | 0 | 0 | 0 | 1 | 0.13 | 0.00 | **PASS (Deterministic)** |
+| **R1-001-Val** | `SRR28349174` | 2.37M | 150x | 54,554 | 54,554 | 98.233% | **0** | 0 | 0 | 0 | 0 | **0** | 0.81 | 0.24 | **PASS (Clean Generalization)** |
+| **R1-003-Val** | `SRR28349165` | 4.27M | 270x | 40,664 | 39,314 | 98.097% | **0** | 0 | 0 | 0 | 0 | 1 | 0.26 | 0.00 | **PASS (High-Depth Robust)** |
+
+*Generalization Scope: Validated across two E. coli strains and 150x-270x sequencing depths; broad cross-species extrapolation is explicitly not asserted.*
 
 ---
 
