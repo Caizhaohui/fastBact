@@ -93,17 +93,36 @@ pub fn polish_contigs(
             continue;
         }
 
-        // Sample seeds every 25 bp
+        // Sample candidate seeds every 25 bp
         let mut i = 0;
         while i + k <= seq.len() {
             let h = nthash_canonical(&seq[i..i + k]);
-            *seed_counts.entry(h).or_insert(0) += 1;
             seed_index.insert(h, (id, i));
+            seed_counts.insert(h, 0);
             i += 25;
         }
     }
 
-    // Keep unique seeds
+    // Pass 2: count occurrences of candidate seeds across ALL sliding k-mers in active contigs
+    // to strictly filter out multi-copy repeat seeds (e.g. tRNA/rRNA clusters) that happen to be
+    // sampled in only one copy due to grid phase alignment.
+    for id in 0..n as u32 {
+        if !output_eligible(&graph.nodes[id as usize], min_output_len) {
+            continue;
+        }
+        let seq = graph.get_unitig_seq(id);
+        if seq.len() < k {
+            continue;
+        }
+        for w in seq.windows(k) {
+            let h = nthash_canonical(w);
+            if let Some(c) = seed_counts.get_mut(&h) {
+                *c = c.saturating_add(1);
+            }
+        }
+    }
+
+    // Keep truly unique seeds (exact count == 1 across the full contig set)
     seed_index.retain(|h, _| *seed_counts.get(h).unwrap_or(&0) == 1);
 
     // 2. Pre-extract active contig sequences and initialize pileups

@@ -7,8 +7,7 @@ use crate::graph::cdbg::{CdbgGraph, DirUnitigId, GraphEdge, ResolverLifecycleSta
 use crate::resolve::mapper::{InsertSizeDist, PairLinkMatrix, ReadPairEvidence};
 use hashbrown::HashSet;
 use smallvec::SmallVec;
-use std::cmp::Reverse;
-use std::collections::{BinaryHeap, VecDeque};
+use std::collections::VecDeque;
 
 /// Configuration parameters for exSPAnder repeat resolution.
 #[derive(Clone, Copy, Debug)]
@@ -98,6 +97,24 @@ pub struct NodeProvenanceMeta {
     pub bci_downstream_fwd: bool,
     /// BCI downstream: same, for reverse-complement orientation.
     pub bci_downstream_rev: bool,
+    /// Maximum 5' entry-shadow reach in forward orientation (coordinate b).
+    /// Evidence-source read starts p must satisfy p > b + H (i.e. dist_u1_exit < seq_len - (b + H)).
+    pub entry_shadow_reach_fwd: u32,
+    /// Maximum 5' entry-shadow reach in reverse-complement orientation.
+    pub entry_shadow_reach_rev: u32,
+    /// Exit isolation (R-I): the 3' exit of this node in forward orientation
+    /// is physically separated from any upstream multi-context confluence (> max_insert).
+    pub exit_isolated_fwd: bool,
+    /// Exit isolation (R-I): same, for reverse-complement orientation.
+    pub exit_isolated_rev: bool,
+    /// Structural in-degree in forward orientation at analysis snapshot time.
+    pub structural_in_degree_fwd: u16,
+    /// Structural in-degree in reverse-complement orientation at analysis snapshot time.
+    pub structural_in_degree_rev: u16,
+    /// Structural out-degree in forward orientation at analysis snapshot time.
+    pub structural_out_degree_fwd: u16,
+    /// Structural out-degree in reverse-complement orientation at analysis snapshot time.
+    pub structural_out_degree_rev: u16,
     /// PB: for composite unitigs, the spliced 5'-offset at which the sequence
     /// shifts from a unique-locus prefix to a pooled-locus suffix
     /// (`None` = uniformly classified). Merge contract MR-1. A read at
@@ -138,6 +155,46 @@ impl NodeProvenanceMeta {
         }
     }
 
+    /// Exit isolation flag in the given walk direction.
+    #[inline]
+    pub fn exit_isolated(&self, is_rc: bool) -> bool {
+        if is_rc {
+            self.exit_isolated_rev
+        } else {
+            self.exit_isolated_fwd
+        }
+    }
+
+    /// Maximum 5' entry-shadow reach in the given walk direction (coordinate b).
+    #[inline]
+    pub fn entry_shadow_reach(&self, is_rc: bool) -> u32 {
+        if is_rc {
+            self.entry_shadow_reach_rev
+        } else {
+            self.entry_shadow_reach_fwd
+        }
+    }
+
+    /// Structural in-degree at analysis snapshot time in the given walk direction.
+    #[inline]
+    pub fn structural_in_degree(&self, is_rc: bool) -> u16 {
+        if is_rc {
+            self.structural_in_degree_rev
+        } else {
+            self.structural_in_degree_fwd
+        }
+    }
+
+    /// Structural out-degree at analysis snapshot time in the given walk direction.
+    #[inline]
+    pub fn structural_out_degree(&self, is_rc: bool) -> u16 {
+        if is_rc {
+            self.structural_out_degree_rev
+        } else {
+            self.structural_out_degree_fwd
+        }
+    }
+
     /// True when this orientation of the node is a pooled (multi-context) locus.
     #[inline]
     pub fn is_multi_context(&self, is_rc: bool) -> bool {
@@ -152,72 +209,11 @@ impl NodeProvenanceMeta {
     }
 }
 
-fn ctx_insert(set: &mut SmallVec<[u32; 2]>, id: u32) {
-    if set.len() < 2 && !set.contains(&id) {
-        set.push(id);
-    }
-}
-
-/// Union of capped context sets. Capping at 2 distinct identities preserves
-/// the only property the gates need — whether at least two independent
-/// external lineages reach a node — through arbitrary merge orders.
-fn ctx_merge(dst: &mut SmallVec<[u32; 2]>, src: &SmallVec<[u32; 2]>) {
-    for &id in src {
-        if dst.len() >= 2 {
-            return;
-        }
-        if !dst.contains(&id) {
-            dst.push(id);
-        }
-    }
-}
-
 /// Side table of [`NodeProvenanceMeta`], one entry per graph node (including
 /// composite unitigs pushed during resolution).
 #[derive(Clone, Debug, Default)]
 pub struct ProvenanceTable {
     metas: Vec<NodeProvenanceMeta>,
-}
-
-/// Traces an incoming branch backwards along unique predecessor chains to identify
-/// its upstream origin locus. A node is an origin if it is a long unitig (>= 500 bp),
-/// a graph source root (in-degree == 0), or a branching junction (in-degree > 1).
-/// Branches originating from the same upstream node (e.g. bubble alternatives)
-/// return the same origin, distinguishing bubbles from multi-locus repeats.
-fn find_branch_origin(
-    graph: &CdbgGraph,
-    in_off: &[u32],
-    in_adj: &[(u32, u8)],
-    start_v: u32,
-) -> Option<u32> {
-    let mut curr = start_v;
-    let mut dist = 0usize;
-    let mut visited: SmallVec<[u32; 16]> = SmallVec::new();
-    loop {
-        if graph.nodes[(curr >> 1) as usize].seq_len >= 500 {
-            return Some(curr);
-        }
-        let in_start = in_off[curr as usize];
-        let in_end = in_off[curr as usize + 1];
-        let deg = in_end - in_start;
-        if deg == 0 {
-            return Some(curr);
-        }
-        if deg > 1 {
-            return Some(curr);
-        }
-        let (p, ov) = in_adj[in_start as usize];
-        let c_len = graph.nodes[(curr >> 1) as usize].seq_len as usize;
-        dist += c_len.saturating_sub(ov as usize);
-        if dist > 2000 {
-            return Some(curr);
-        }
-        if visited.contains(&p) {
-            return Some(curr);
-        }
-        visited.push(p);
-        curr = p;
-    }
 }
 
 impl ProvenanceTable {
@@ -368,109 +364,312 @@ impl ProvenanceTable {
             scc_nodes[scc[v] as usize].push(v as u32);
         }
 
-        let mut scc_ctx = vec![1u8; scc_count as usize];
-        for s in 0..scc_count {
-            let su = s as usize;
-            let mut distinct_origins: SmallVec<[u32; 4]> = SmallVec::new();
-
-            for &v in &scc_nodes[su] {
-                for ei in in_off[v as usize]..in_off[v as usize + 1] {
-                    let (p, _) = in_adj[ei as usize];
-                    let sp = scc[p as usize] as usize;
-                    if sp != su {
-                        if let Some(orig) = find_branch_origin(graph, &in_off, &in_adj, p) {
-                            if !distinct_origins.contains(&orig) {
-                                distinct_origins.push(orig);
-                            }
-                        }
-                    }
+        // Invariant F24-I08 & Audit Verification:
+        // Condensation graph is a DAG where directed edges between distinct SCCs (u -> v)
+        // must satisfy scc[u] > scc[v], guaranteeing that descending SCC iteration
+        // (scc_count - 1 down to 0) strictly visits predecessors before successors.
+        #[cfg(debug_assertions)]
+        for from in 0..nv {
+            let su = scc[from] as usize;
+            for ei in out_off[from]..out_off[from + 1] {
+                let (to, _) = out_adj[ei as usize];
+                let sv = scc[to as usize] as usize;
+                if su != sv {
+                    debug_assert!(
+                        su > sv,
+                        "Condensation DAG topological ordering invariant violated: edge {} -> {} with scc {} -> {}",
+                        from, to, su, sv
+                    );
                 }
-            }
-
-            if distinct_origins.len() >= 2 {
-                scc_ctx[su] = 2;
-            } else {
-                scc_ctx[su] = 1;
             }
         }
 
-        let mut ctx_count = vec![1u8; nv];
+        // Astra DCC (§1 Precise distinction rule & §2 Shared-context trigger, Sol Round 8):
+        // Single-pass topological origin propagation in strictly O(V + E) time.
+        // Replaces quadratic predecessor search: an unbranched predecessor chain
+        // inherits its root origin in O(1) per node.
+        let mut origin = vec![0u32; nv];
+        let mut origin_dist = vec![0u32; nv];
+        for s in (0..scc_count).rev() {
+            let su = s as usize;
+            for &v in &scc_nodes[su] {
+                let vu = v as usize;
+                let v_len = graph.nodes[vu >> 1].seq_len;
+                let in_start = in_off[vu];
+                let in_end = in_off[vu + 1];
+                let deg = in_end - in_start;
+                if v_len >= 500 || deg != 1 {
+                    origin[vu] = v;
+                    origin_dist[vu] = 0;
+                    continue;
+                }
+                let (p, ov) = in_adj[in_start as usize];
+                let pu = p as usize;
+                let p_len = graph.nodes[pu >> 1].seq_len;
+                let p_in_deg = in_off[pu + 1] - in_off[pu];
+                if p_len >= 500 || p_in_deg != 1 {
+                    origin[vu] = p;
+                    origin_dist[vu] = (v_len as usize).saturating_sub(ov as usize) as u32;
+                } else {
+                    let step_dist = (v_len as usize).saturating_sub(ov as usize) as u32;
+                    let tot_dist = origin_dist[pu].saturating_add(step_dist);
+                    if tot_dist > 2000 {
+                        origin[vu] = v;
+                        origin_dist[vu] = 0;
+                    } else {
+                        origin[vu] = origin[pu];
+                        origin_dist[vu] = tot_dist;
+                    }
+                }
+            }
+        }
+
+        // Provenance Attribution Lattice (Astra §3.1 & Ruling):
+        // 0 = Unknown (Empty/ungrounded)
+        // 1 = Single(lineage_id)
+        // 2 = Shared (Many / absorbing)
+        // Evaluated across condensation DAG in topological order (0..scc_count).rev().
+        // For an in-degree d junction, processing takes O(d) time with O(1) state per edge.
+        #[derive(Clone, Copy, PartialEq, Eq)]
+        enum LineageAcc {
+            Empty,
+            One(u32),
+            Many,
+        }
+
+        let mut scc_ctx = vec![0u8; scc_count as usize];
+        let mut scc_lineage = vec![u32::MAX; scc_count as usize];
+
+        for s in (0..scc_count).rev() {
+            let su = s as usize;
+            let mut acc = LineageAcc::Empty;
+            let mut has_external_in = false;
+
+            for &v in &scc_nodes[su] {
+                let vu = v as usize;
+                for ei in in_off[vu]..in_off[vu + 1] {
+                    let (p, _) = in_adj[ei as usize];
+                    let sp = scc[p as usize] as usize;
+                    if sp != su {
+                        has_external_in = true;
+                        let p_ctx = scc_ctx[sp];
+                        if p_ctx >= 2 {
+                            acc = LineageAcc::Many;
+                            break;
+                        } else if p_ctx == 1 {
+                            let orig = origin[p as usize];
+                            match acc {
+                                LineageAcc::Empty => acc = LineageAcc::One(orig),
+                                LineageAcc::One(prev) => {
+                                    if prev != orig {
+                                        acc = LineageAcc::Many;
+                                        break;
+                                    }
+                                }
+                                LineageAcc::Many => break,
+                            }
+                        } else {
+                            // Predecessor is Unknown (0). Unknown cannot certify Single.
+                            acc = LineageAcc::Many;
+                            break;
+                        }
+                    }
+                }
+                if acc == LineageAcc::Many {
+                    break;
+                }
+            }
+
+            if !has_external_in {
+                // Root component: if any node in SCC has length >= 500 bp, it defines its own unique Single lineage.
+                // If all nodes are short without external entry, it has no witness -> Unknown (0).
+                let long_node = scc_nodes[su].iter().find(|&&v| graph.nodes[(v as usize) >> 1].seq_len >= 500);
+                if let Some(&root_v) = long_node {
+                    acc = LineageAcc::One(root_v);
+                } else {
+                    acc = LineageAcc::Empty;
+                }
+            }
+
+            match acc {
+                LineageAcc::Empty => {
+                    scc_ctx[su] = 0;
+                    scc_lineage[su] = u32::MAX - 1;
+                }
+                LineageAcc::One(orig) => {
+                    scc_ctx[su] = 1;
+                    scc_lineage[su] = orig;
+                }
+                LineageAcc::Many => {
+                    scc_ctx[su] = 2;
+                    scc_lineage[su] = u32::MAX;
+                }
+            }
+
+            for &v in &scc_nodes[su] {
+                origin[v as usize] = scc_lineage[su];
+            }
+        }
+
+        let mut ctx_count = vec![0u8; nv];
         for v in 0..nv {
             ctx_count[v] = scc_ctx[scc[v] as usize];
         }
 
-        // BCI: bounded reverse Dijkstra from all multi-context vertices.
+        // BCI: linear reverse reach propagation from all multi-context vertices.
+        // Sol Round 8/9: Topological DAG dynamic programming over reversed condensation graph.
+        // Processes SCCs in reverse topological order (0..scc_count).
+        // Cyclic components (scc_nodes > 1) are conservatively collapsed to minimum reach;
+        // only inter-SCC edges across condensation DAG are relaxed, strictly O(V + E).
         let budget = max_insert as i64;
         let mut bci = vec![false; nv];
         if budget > 0 {
             let mut best = vec![u64::MAX; nv];
-            let mut heap: BinaryHeap<Reverse<(u64, u32)>> = BinaryHeap::new();
             for v in 0..nv {
                 if ctx_count[v] >= 2 {
                     best[v] = 0;
                     bci[v] = true;
-                    heap.push(Reverse((0u64, v as u32)));
                 }
             }
-            while let Some(Reverse((d, v))) = heap.pop() {
-                if d > best[v as usize] {
-                    continue;
-                }
-                // Peeling vertex v off the path costs v.len - overlap, the
-                // same quantity the forward walk adds to `anchor_gap`.
-                let v_len = graph.nodes[(v as usize) >> 1].seq_len as i64;
-                for ei in in_off[v as usize]..in_off[v as usize + 1] {
-                    let (p, ov) = in_adj[ei as usize];
-                    let pu = p as usize;
-                    let nd = d + (v_len - ov as i64).max(0) as u64;
-                    if nd as i64 > budget {
+
+            for s in 0..scc_count {
+                let su = s as usize;
+                let is_cyclic = scc_nodes[su].len() > 1 || {
+                    let v = scc_nodes[su][0] as usize;
+                    out_adj[out_off[v] as usize..out_off[v + 1] as usize]
+                        .iter()
+                        .any(|&(to, _)| to == scc_nodes[su][0])
+                };
+                let comp_d = if is_cyclic {
+                    let mut min_d = u64::MAX;
+                    for &v in &scc_nodes[su] {
+                        min_d = min_d.min(best[v as usize]);
+                    }
+                    if min_d <= budget as u64 {
+                        for &v in &scc_nodes[su] {
+                            best[v as usize] = min_d;
+                            bci[v as usize] = true;
+                        }
+                    }
+                    min_d
+                } else {
+                    best[scc_nodes[su][0] as usize]
+                };
+
+                for &v in &scc_nodes[su] {
+                    let vu = v as usize;
+                    let d = comp_d;
+                    if d == u64::MAX {
                         continue;
                     }
-                    // Anchor absorption (Q8): a long single-context
-                    // predecessor is a valid unique anchor; the pooled zone
-                    // ahead of it does not flag it or anything behind it.
-                    if ctx_count[pu] <= 1 && graph.nodes[pu >> 1].seq_len >= 500 {
-                        continue;
-                    }
-                    if nd < best[pu] {
-                        best[pu] = nd;
-                        bci[pu] = true;
-                        heap.push(Reverse((nd, p)));
+                    let v_len = graph.nodes[vu >> 1].seq_len as i64;
+                    for ei in in_off[vu]..in_off[vu + 1] {
+                        let (p, ov) = in_adj[ei as usize];
+                        let pu = p as usize;
+                        if scc[pu] as usize == su {
+                            // Intra-SCC edge: handled by conservative cyclic component collapse above.
+                            continue;
+                        }
+                        let nd = d + (v_len - ov as i64).max(0) as u64;
+                        if nd as i64 > budget {
+                            continue;
+                        }
+                        // Anchor absorption (Q8): a long single-context
+                        // predecessor is a valid unique anchor; the pooled zone
+                        // ahead of it does not flag it or anything behind it.
+                        // Unknown (0) does NOT absorb; only Single (1) absorbs.
+                        if ctx_count[pu] == 1 && graph.nodes[pu >> 1].seq_len >= 500 {
+                            continue;
+                        }
+                        if nd < best[pu] {
+                            best[pu] = nd;
+                            bci[pu] = true;
+                        }
                     }
                 }
             }
         }
 
-        // BCI downstream: bounded forward Dijkstra from all multi-context vertices.
-        // A node within max_insert downstream of a multi-context confluence is
-        // in its shadow and cannot establish uniqueness (e.g. F4).
+        // Linear forward shadow reach propagation (O(V + E), Astra §1/§3.2-§3.3):
+        // Sol Round 5/8/9: Topological DAG dynamic programming over condensation graph.
+        // Guarantees shortest distance (maximum conservative shadow reach) in strictly linear time.
+        // Cyclic components (scc_nodes > 1) are conservatively collapsed to maximum reach;
+        // only inter-SCC edges across condensation DAG are relaxed, strictly O(V + E).
         let mut bci_downstream = vec![false; nv];
+        let mut exit_isolated = vec![false; nv];
+        let mut entry_shadow_reach = vec![0u32; nv];
         if budget > 0 {
             let mut best_fwd = vec![u64::MAX; nv];
-            let mut heap_fwd: BinaryHeap<Reverse<(u64, u32)>> = BinaryHeap::new();
             for v in 0..nv {
                 if ctx_count[v] >= 2 {
                     best_fwd[v] = 0;
                     bci_downstream[v] = true;
-                    heap_fwd.push(Reverse((0u64, v as u32)));
+                    entry_shadow_reach[v] = budget as u32;
                 }
             }
-            while let Some(Reverse((d, v))) = heap_fwd.pop() {
-                if d > best_fwd[v as usize] {
-                    continue;
-                }
-                let v_len = graph.nodes[(v as usize) >> 1].seq_len as i64;
-                for ei in out_off[v as usize]..out_off[v as usize + 1] {
-                    let (w, ov) = out_adj[ei as usize];
-                    let wu = w as usize;
-                    let nd = d + (v_len - ov as i64).max(0) as u64;
-                    if nd as i64 > budget {
+
+            // Iterate SCC condensation in topological order (scc_count - 1 down to 0).
+            // Each vertex is processed exactly once; each directed inter-SCC edge is relaxed exactly once.
+            for s in (0..scc_count).rev() {
+                let su = s as usize;
+                let is_cyclic = scc_nodes[su].len() > 1 || {
+                    let v = scc_nodes[su][0] as usize;
+                    out_adj[out_off[v] as usize..out_off[v + 1] as usize]
+                        .iter()
+                        .any(|&(to, _)| to == scc_nodes[su][0])
+                };
+                let comp_d = if is_cyclic {
+                    let mut min_d = u64::MAX;
+                    for &v in &scc_nodes[su] {
+                        min_d = min_d.min(best_fwd[v as usize]);
+                    }
+                    if min_d <= budget as u64 {
+                        let reach = (budget - min_d as i64).max(0) as u32;
+                        for &v in &scc_nodes[su] {
+                            best_fwd[v as usize] = min_d;
+                            bci_downstream[v as usize] = true;
+                            entry_shadow_reach[v as usize] = entry_shadow_reach[v as usize].max(reach);
+                        }
+                    }
+                    min_d
+                } else {
+                    best_fwd[scc_nodes[su][0] as usize]
+                };
+
+                for &v in &scc_nodes[su] {
+                    let vu = v as usize;
+                    let d = comp_d;
+                    if d == u64::MAX {
                         continue;
                     }
-                    if nd < best_fwd[wu] {
-                        best_fwd[wu] = nd;
-                        bci_downstream[wu] = true;
-                        heap_fwd.push(Reverse((nd, w)));
+                    let reach = (budget - d as i64).max(0) as u32;
+                    entry_shadow_reach[vu] = entry_shadow_reach[vu].max(reach);
+                    bci_downstream[vu] = true;
+
+                    let v_len = graph.nodes[vu >> 1].seq_len as u64;
+                    if ctx_count[vu] == 1 && v_len > (reach as u64 + max_insert as u64) {
+                        // Forward anchor absorption (R-I, Astra §3.2-§3.3):
+                        // 3' exit of v is certified physically isolated (> max_insert beyond reach b).
+                        exit_isolated[vu] = true;
+                        // Do not propagate entry shadow downstream of v's isolated exit.
+                        continue;
+                    }
+
+                    for ei in out_off[vu]..out_off[vu + 1] {
+                        let (w, ov) = out_adj[ei as usize];
+                        let wu = w as usize;
+                        if scc[wu] as usize == su {
+                            // Intra-SCC edge: handled by conservative cyclic component collapse above.
+                            continue;
+                        }
+                        let nd = d + (v_len as i64 - ov as i64).max(0) as u64;
+                        if nd as i64 > budget {
+                            continue;
+                        }
+                        if nd < best_fwd[wu] {
+                            best_fwd[wu] = nd;
+                            bci_downstream[wu] = true;
+                        }
                     }
                 }
             }
@@ -485,6 +684,14 @@ impl ProvenanceTable {
                 bci_rev: bci[id * 2 + 1],
                 bci_downstream_fwd: bci_downstream[id * 2],
                 bci_downstream_rev: bci_downstream[id * 2 + 1],
+                entry_shadow_reach_fwd: entry_shadow_reach[id * 2],
+                entry_shadow_reach_rev: entry_shadow_reach[id * 2 + 1],
+                exit_isolated_fwd: exit_isolated[id * 2],
+                exit_isolated_rev: exit_isolated[id * 2 + 1],
+                structural_in_degree_fwd: in_deg[id * 2].min(u16::MAX as u32) as u16,
+                structural_in_degree_rev: in_deg[id * 2 + 1].min(u16::MAX as u32) as u16,
+                structural_out_degree_fwd: out_deg[id * 2].min(u16::MAX as u32) as u16,
+                structural_out_degree_rev: out_deg[id * 2 + 1].min(u16::MAX as u32) as u16,
                 provenance_boundary: None,
             });
         }
@@ -520,14 +727,15 @@ impl ProvenanceTable {
     /// Provenance cleanliness of a directed node in its walk direction:
     /// exactly one established external lineage (DCC strict: count == 1,
     /// originated either from a 0-in-degree root or an entry source SCC in
-    /// the condensation graph) and no bounded contamination ahead (BCI).
+    /// the condensation graph) and no bounded contamination ahead (BCI),
+    /// with entry shadow either absent or physically absorbed at an isolated exit (R-I).
     /// Count >= 2 indicates a multi-context pooled locus.
     #[inline]
     pub fn anchor_clean(&self, d: DirUnitigId) -> bool {
         let m = self.meta(d.id());
         m.external_context_count(d.is_rc()) == 1
             && !m.bci(d.is_rc())
-            && !m.bci_downstream(d.is_rc())
+            && (!m.bci_downstream(d.is_rc()) || m.exit_isolated(d.is_rc()))
     }
 
     /// Appends metadata for a newly pushed composite unitig, keeping the
@@ -555,8 +763,9 @@ fn anchor_reset_eligible(
 
 /// SI-1/SI-2 (Seed Integrity gate): a walk may originate from `seed` only if it
 /// is a long unique locus (>= 500 bp), carries exactly one established incoming
-/// context (external_context_count == 1), and is not in the downstream shadow of
-/// an upstream multi-context confluence (!bci_downstream).
+/// context (external_context_count == 1), and is either free of upstream confluence
+/// shadows (!bci_downstream) or has its exit physically isolated from all upstream
+/// confluences (exit_isolated, R-I).
 #[inline]
 fn seed_anchor_eligible(
     graph: &CdbgGraph,
@@ -566,7 +775,7 @@ fn seed_anchor_eligible(
     let m = prov.meta(node.id());
     graph.nodes[node.id() as usize].seq_len >= 500
         && m.external_context_count(node.is_rc()) == 1
-        && !m.bci_downstream(node.is_rc())
+        && (!m.bci_downstream(node.is_rc()) || m.exit_isolated(node.is_rc()))
 }
 
 /// PAG withhold with no attributable anchor covering the fork: everything the
@@ -700,24 +909,24 @@ pub fn score_candidate_path(
     path_separation: i64,
 ) -> (u32, f64) {
     match matrix.get_evidence(u1, u2) {
-        Some(evidences) => score_evidence_rows(evidences, dist, path_separation, None),
+        Some(evidences) => score_evidence_rows(evidences, dist, path_separation, None, 0, 0),
         None => (0, 0.0),
     }
 }
 
 /// Kernel scoring over evidence rows, optionally restricted by a composite
-/// unitig's provenance boundary (PB / MR-2). `pooled_suffix_exit` is the
-/// boundary already converted into exit coordinates (`u1_len - boundary`):
-/// `dist_u1_exit` is the distance from the read to u1's 3' exit, so a read
-/// at 5'-offset `p` has `dist_u1_exit = u1_len - p` and belongs to the
-/// unique-locus prefix `[0, boundary)` iff `dist_u1_exit > u1_len -
-/// boundary`. Rows with `dist_u1_exit <= pooled_suffix_exit` originate from
-/// the pooled-locus suffix and are inadmissible as unique-locus evidence.
+/// unitig's provenance boundary (PB / MR-2) and 5' entry-shadow reach (Sol R1-F2, R2-F1).
+/// `pooled_suffix_exit` is the PB boundary in exit coordinates (`u1_len - boundary`).
+/// `entry_shadow_reach` is the maximum 5' entry reach b from upstream confluences.
+/// The read's start coordinate p = u1_len - dist_u1_exit must lie strictly beyond the
+/// shadow interval [0, entry_shadow_reach]: p > entry_shadow_reach.
 fn score_evidence_rows(
     evidences: &[ReadPairEvidence],
     dist: &InsertSizeDist,
     path_separation: i64,
     pooled_suffix_exit: Option<u32>,
+    u1_len: u32,
+    entry_shadow_reach: u32,
 ) -> (u32, f64) {
     let mut valid_count = 0u32;
     let mut total_weight = 0.0f64;
@@ -729,6 +938,15 @@ fn score_evidence_rows(
     for ev in evidences {
         if let Some(suffix_exit) = pooled_suffix_exit {
             if (ev.dist_u1_exit as u64) <= suffix_exit as u64 {
+                continue;
+            }
+        }
+        if entry_shadow_reach > 0 {
+            // Coordinate-faithful start p = u1_len - dist_u1_exit (Sol R2-F1).
+            // Under Contract §3.2 & Astra ruling: p must strictly satisfy p > b + H,
+            // where b = entry_shadow_reach and H = dist.max_insert.
+            let p = u1_len.saturating_sub(ev.dist_u1_exit);
+            if (p as u64) <= (entry_shadow_reach as u64 + dist.max_insert as u64) {
                 continue;
             }
         }
@@ -750,9 +968,9 @@ fn score_evidence_rows(
 /// PB-aware scoring used by the resolver: converts the evidence-source
 /// composite's provenance boundary (a 5'-offset) into the exit-coordinate
 /// cutoff `u1_len - boundary` before kernel scoring (PAG attribution, §3.6
-/// rule 3). A read at 5'-offset `p` lies in the unique-locus prefix
-/// `[0, boundary)` iff `dist_u1_exit = u1_len - p > u1_len - boundary`.
-fn score_candidate_path_prov(
+/// rule 3). Also enforces multi-context zero-weight (Sol R1-F3) and
+/// entry-shadow reach exclusion (Sol R1-F2, R2-F1).
+pub fn score_candidate_path_prov(
     matrix: &PairLinkMatrix,
     graph: &CdbgGraph,
     prov: &ProvenanceTable,
@@ -761,12 +979,19 @@ fn score_candidate_path_prov(
     u2: DirUnitigId,
     path_separation: i64,
 ) -> (u32, f64) {
-    let boundary = prov
-        .meta(u1.id())
+    let m = prov.meta(u1.id());
+    // Astra Ruling: Reject Unknown (0) and Shared (>=2) in deciding-source paths.
+    // Only Single (1) may decide forks.
+    if m.external_context_count(u1.is_rc()) != 1 {
+        return (0, 0.0);
+    }
+    let u1_len = graph.nodes[u1.id() as usize].seq_len;
+    let boundary = m
         .provenance_boundary
-        .map(|b| graph.nodes[u1.id() as usize].seq_len.saturating_sub(b));
+        .map(|b| u1_len.saturating_sub(b));
+    let reach = m.entry_shadow_reach(u1.is_rc());
     match matrix.get_evidence(u1, u2) {
-        Some(evidences) => score_evidence_rows(evidences, dist, path_separation, boundary),
+        Some(evidences) => score_evidence_rows(evidences, dist, path_separation, boundary, u1_len, reach),
         None => (0, 0.0),
     }
 }
@@ -1347,6 +1572,8 @@ fn in_window_pair_weights(
     node: DirUnitigId,
     path_separation: i64,
     pooled_suffix_exit: Option<u32>,
+    anchor_len: u32,
+    entry_shadow_reach: u32,
 ) -> SmallVec<[(u32, f64); 8]> {
     let mut out: SmallVec<[(u32, f64); 8]> = SmallVec::new();
     let Some(evidences) = matrix.get_evidence(evidence_anchor, node) else {
@@ -1357,6 +1584,15 @@ fn in_window_pair_weights(
     for ev in evidences {
         if let Some(suffix_exit) = pooled_suffix_exit {
             if (ev.dist_u1_exit as u64) <= suffix_exit as u64 {
+                continue;
+            }
+        }
+        if entry_shadow_reach > 0 {
+            // Coordinate-faithful start p = anchor_len - dist_u1_exit (Sol R2-F1).
+            // Under Contract §3.2 & Astra ruling: p must strictly satisfy p > b + H,
+            // where b = entry_shadow_reach and H = dist.max_insert.
+            let p = anchor_len.saturating_sub(ev.dist_u1_exit);
+            if (p as u64) <= (entry_shadow_reach as u64 + dist.max_insert as u64) {
                 continue;
             }
         }
@@ -1386,6 +1622,8 @@ fn in_window_pair_weights(
 /// Rows are PB-restricted at `evidence_anchor` (MR-2): when the anchor is a
 /// composite carrying a provenance boundary, rows keyed inside its
 /// pooled-locus suffix are inadmissible attributable evidence.
+/// Sol R1-F3: An evidence anchor that is multi-context has zero deciding weight.
+/// Sol R1-F2, R2-F1: Entry-shadow reach excludes rows originating within [0, reach].
 fn candidate_pair_weights(
     matrix: &PairLinkMatrix,
     graph: &CdbgGraph,
@@ -1395,10 +1633,17 @@ fn candidate_pair_weights(
     sep_offset: i64,
     candidate: &CandidatePath,
 ) -> SmallVec<[(u32, f64); 8]> {
-    let pooled_suffix_exit = prov
-        .meta(evidence_anchor.id())
+    let m = prov.meta(evidence_anchor.id());
+    // Astra Ruling: Reject Unknown (0) and Shared (>=2) in deciding-source paths.
+    // Only Single (1) may decide forks.
+    if m.external_context_count(evidence_anchor.is_rc()) != 1 {
+        return SmallVec::new();
+    }
+    let anc_len = graph.nodes[evidence_anchor.id() as usize].seq_len;
+    let pooled_suffix_exit = m
         .provenance_boundary
-        .map(|b| graph.nodes[evidence_anchor.id() as usize].seq_len.saturating_sub(b));
+        .map(|b| anc_len.saturating_sub(b));
+    let reach = m.entry_shadow_reach(evidence_anchor.is_rc());
     let mut acc: SmallVec<[(u32, f64); 8]> = SmallVec::new();
     let mut absorb = |rows: SmallVec<[(u32, f64); 8]>| {
         for (pid, w) in rows {
@@ -1419,6 +1664,8 @@ fn candidate_pair_weights(
         candidate.endpoint,
         sep_offset + candidate.separation,
         pooled_suffix_exit,
+        anc_len,
+        reach,
     ));
     for (&(node, _), &sep) in candidate.steps.iter().zip(candidate.step_seps.iter()) {
         absorb(in_window_pair_weights(
@@ -1428,6 +1675,8 @@ fn candidate_pair_weights(
             node,
             sep_offset + sep,
             pooled_suffix_exit,
+            anc_len,
+            reach,
         ));
     }
     acc
@@ -1582,22 +1831,21 @@ fn extend_one_direction(
     // seed with no outgoing edge in this direction had nothing to withhold
     // (pre-SI-2 walks terminated immediately there), so the rejection is
     // counted only when an unanchored walk could otherwise have committed.
-    if !seed_anchor_eligible(graph, prov, curr_dir) {
-        if !graph.nodes[curr_dir.id() as usize]
-            .edges(curr_dir.is_rc())
-            .is_empty()
-        {
-            stats.withheld_no_unique_anchor += 1;
-            stats.withheld_si2_seed += 1;
-        }
-        return ext;
-    }
-    let mut unique_anchor: Option<DirUnitigId> = Some(curr_dir);
+    // SI-1/SI-2 / F24 R-S:
+    // A seed anchors the walk (unique_anchor = Some(curr_dir)) only if it is
+    // ARG-eligible in the walk direction (single-context, established lineage,
+    // and BCI-clean).
+    // An unanchored seed (shared or shadowed) cannot decide forks (unique_anchor = None),
+    // but may traverse verified unbranched 1-out/1-in structural corridors (R-S, Astra §1/§3.5).
+    let (mut unique_anchor, mut contaminated) = if seed_anchor_eligible(graph, prov, curr_dir) {
+        (Some(curr_dir), false)
+    } else {
+        (None, true)
+    };
     // Number of ext steps (inclusive) that end at the current anchor;
     // 0 means the anchor is the seed itself.
     let mut anchor_steps = 0usize;
     let mut anchor_gap = 0i64;
-    let mut contaminated = false;
     // Node ids this call newly registered in `used_unique`, so a PAG rollback
     // can undo exactly its own registrations.
     let mut inserted_now: Vec<u32> = Vec::new();
@@ -1664,6 +1912,25 @@ fn extend_one_direction(
             let target_node = &graph.nodes[target.id() as usize];
             if target_node.is_deleted || target_node.is_circular {
                 break;
+            }
+
+            let target_in_deg = graph.nodes[target.id() as usize]
+                .edges(target.twin().is_rc())
+                .len();
+            if unique_anchor.is_none() {
+                let curr_m = prov.meta(curr_dir.id());
+                let target_m = prov.meta(target.id());
+                if curr_m.structural_out_degree(curr_dir.is_rc()) != 1
+                    || target_m.structural_in_degree(target.is_rc()) != 1
+                    || outgoing.len() != 1
+                    || target_in_deg != 1
+                {
+                    // Structural corridor traversal (R-S, Astra §1/§3.5, Sol R7 finding):
+                    // Unanchored walk requires strict 1-out/1-in corridor both structurally in the
+                    // immutable analysis snapshot and dynamically in the live graph.
+                    cleanup_protected_nodes.insert(target.id());
+                    break;
+                }
             }
 
             let next_outgoing = target_node.edges(target.is_rc()).clone();
@@ -1832,6 +2099,16 @@ fn extend_one_direction(
                     // only the single-candidate quality bar applies (average
                     // weight >= 0.05, Z <= 2.45, rejects tail outliers).
                     (best.total_weight / best.support_count as f64) >= 0.05
+                } else if prov.meta(evidence_anchor.id()).bci_downstream(evidence_anchor.is_rc())
+                    && divergent_rivals.iter().any(|r| r.support_count >= params.min_support)
+                {
+                    // F24 Invariant F24-I04 & N01: An evidence anchor carrying an upstream
+                    // confluence shadow (bci_downstream) cannot decide between divergent rivals
+                    // when multiple exits carry substantial evidence: competing evidence indicates
+                    // pooled/homologous repeat reads rather than authentic locus-specific support.
+                    stats.withheld_no_unique_anchor += 1;
+                    stats.withheld_no_attributable_anchor += 1;
+                    false
                 } else {
                     // F6b: pairs admissible for both rivals (e.g. rows that
                     // bridge a whole same-length bubble into the shared
@@ -1950,6 +2227,10 @@ fn extend_one_direction(
                     unique_anchor = Some(target);
                     anchor_steps = ext.len();
                     anchor_gap = 0;
+                } else if unique_anchor.is_none() {
+                    // Structural corridor traversal (R-S, Astra §1/§3.5):
+                    // Advance anchor_steps so verified 1-out/1-in structural steps are preserved.
+                    anchor_steps = ext.len();
                 }
                 curr_dir = target;
                 continue;
@@ -2084,6 +2365,16 @@ fn extend_one_direction(
             // the single-candidate quality bar applies (average weight
             // >= 0.05, Z <= 2.45, rejects tail outliers).
             (best.total_weight / best.support_count as f64) >= 0.05
+        } else if prov.meta(evidence_anchor.id()).bci_downstream(evidence_anchor.is_rc())
+            && divergent_rivals.iter().any(|r| r.support_count >= params.min_support)
+        {
+            // F24 Invariant F24-I04 & N01: An evidence anchor carrying an upstream
+            // confluence shadow (bci_downstream) cannot decide between divergent rivals
+            // when multiple exits carry substantial evidence: competing evidence indicates
+            // pooled/homologous repeat reads rather than authentic locus-specific support.
+            stats.withheld_no_unique_anchor += 1;
+            stats.withheld_no_attributable_anchor += 1;
+            false
         } else {
             // F6b: pairs admissible for both rivals (e.g. rows that bridge a
             // whole same-length bubble into the shared endpoint) carry no
@@ -2394,12 +2685,16 @@ fn composite_provenance(
     for (idx, step) in full_path.iter().enumerate() {
         let node = &graph.nodes[step.dir.id() as usize];
         let m = prov.meta(step.dir.id());
-        let (fwd_cnt, rev_cnt, bci_fwd, bci_rev) = if step.dir.is_rc() {
+        let (fwd_cnt, rev_cnt, bci_fwd, bci_rev, bci_downstream_fwd, bci_downstream_rev, exit_iso_fwd, exit_iso_rev) = if step.dir.is_rc() {
             (
                 m.external_context_count_rev,
                 m.external_context_count_fwd,
                 m.bci_rev,
                 m.bci_fwd,
+                m.bci_downstream_rev,
+                m.bci_downstream_fwd,
+                m.exit_isolated_rev,
+                m.exit_isolated_fwd,
             )
         } else {
             (
@@ -2407,12 +2702,26 @@ fn composite_provenance(
                 m.external_context_count_rev,
                 m.bci_fwd,
                 m.bci_rev,
+                m.bci_downstream_fwd,
+                m.bci_downstream_rev,
+                m.exit_isolated_fwd,
+                m.exit_isolated_rev,
             )
         };
         meta.external_context_count_fwd = meta.external_context_count_fwd.max(fwd_cnt);
         meta.external_context_count_rev = meta.external_context_count_rev.max(rev_cnt);
         meta.bci_fwd |= bci_fwd;
         meta.bci_rev |= bci_rev;
+        if idx == 0 {
+            meta.bci_downstream_fwd = bci_downstream_fwd;
+            meta.exit_isolated_rev = exit_iso_rev;
+            meta.entry_shadow_reach_fwd = m.entry_shadow_reach(step.dir.is_rc());
+        }
+        if idx + 1 == full_path.len() {
+            meta.bci_downstream_rev = bci_downstream_rev;
+            meta.exit_isolated_fwd = exit_iso_fwd;
+            meta.entry_shadow_reach_rev = m.entry_shadow_reach(step.dir.is_rc());
+        }
 
         let step_start_offset = if idx == 0 {
             0
@@ -2441,6 +2750,22 @@ fn composite_provenance(
         } else {
             assembled_len = step_start_offset + node.seq_len;
         }
+    }
+    if let Some(first_step) = full_path.first() {
+        meta.structural_in_degree_fwd = prov
+            .meta(first_step.dir.id())
+            .structural_in_degree(first_step.dir.is_rc());
+        meta.structural_out_degree_rev = prov
+            .meta(first_step.dir.id())
+            .structural_out_degree(first_step.dir.twin().is_rc());
+    }
+    if let Some(last_step) = full_path.last() {
+        meta.structural_out_degree_fwd = prov
+            .meta(last_step.dir.id())
+            .structural_out_degree(last_step.dir.is_rc());
+        meta.structural_in_degree_rev = prov
+            .meta(last_step.dir.id())
+            .structural_in_degree(last_step.dir.twin().is_rc());
     }
     meta
 }
@@ -2965,9 +3290,15 @@ mod tests {
         let mut prov = ProvenanceTable::default();
         prov.push_composite(NodeProvenanceMeta {
             provenance_boundary: Some(300),
+            external_context_count_fwd: 1,
+            external_context_count_rev: 1,
             ..NodeProvenanceMeta::default()
         });
-        prov.push_composite(NodeProvenanceMeta::default());
+        prov.push_composite(NodeProvenanceMeta {
+            external_context_count_fwd: 1,
+            external_context_count_rev: 1,
+            ..NodeProvenanceMeta::default()
+        });
 
         let mut matrix = PairLinkMatrix::new();
         // Both spans (620 and 320) are inside the default [250, 700] window,
@@ -3010,8 +3341,16 @@ mod tests {
 
         // Without a boundary both rows are admissible (control orientation).
         let mut unbounded = ProvenanceTable::default();
-        unbounded.push_composite(NodeProvenanceMeta::default());
-        unbounded.push_composite(NodeProvenanceMeta::default());
+        unbounded.push_composite(NodeProvenanceMeta {
+            external_context_count_fwd: 1,
+            external_context_count_rev: 1,
+            ..NodeProvenanceMeta::default()
+        });
+        unbounded.push_composite(NodeProvenanceMeta {
+            external_context_count_fwd: 1,
+            external_context_count_rev: 1,
+            ..NodeProvenanceMeta::default()
+        });
         let (count, weight) =
             score_candidate_path_prov(&matrix, &graph, &unbounded, &dist, u1, u2, 100);
         assert_eq!(count, 2);
