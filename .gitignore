@@ -8,3 +8,5 @@ logs/
 gemini-*.md
 __pycache__/
 *.pyc
+data/
+benchmarks/
