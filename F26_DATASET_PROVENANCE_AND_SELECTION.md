@@ -5,7 +5,7 @@
 **Task:** F26-DATA-001 (Stage B: Dataset Discovery, Provenance Verification, Manifest Finalization)  
 **Worker:** OpenCode / GLM (`glm-5.3-flash`)  
 **Date:** 2026-10-30  
-**Status:** VERIFIED — Accessions, References, and Manifest Checksums Confirmed Exact; FASTQ Staging Pending  
+**Status:** VERIFIED — Accessions, References, and Manifest Checksums Confirmed Exact; Audit Finding BC-01 (CS-SA01 Strain Identity) Empirically Resolved (2026-10-30, F26-DATA-003)  
 **Feature Branch:** `feature/f26-cross-species-robustness`  
 **Base Commit:** `02872f81811402d2bd603ff7c0a2ecf8b3dbe528` (main)  
 
@@ -30,7 +30,7 @@ All selected cross-species datasets satisfy the following strict criteria:
 | Check | Result |
 | :--- | :--- |
 | SRA run accessions resolve, are public, and load-complete | **PASS** (4/4) |
-| BioProject / BioSample / strain correspondence | **PASS** (4/4; strain tags = MW2, 168, PAO1, LT2) |
+| BioProject / BioSample / strain correspondence | **PASS** (4/4; strain tags = MW2, 168, PAO1, LT2) — CS-SA01 BioSample Title `MRSA252-cotreat2` conflicts with the `strain = MW2` attribute; **resolved empirically** by 31-mer containment analysis: organism confirmed *S. aureus* MW2 (USA400) + phage Staph1N co-culture, Title recorded as submitter labelling artefact — see [`docs/development/evidence/CS_SA01_STRAIN_DISCRIMINATION_EVIDENCE.md`](docs/development/evidence/CS_SA01_STRAIN_DISCRIMINATION_EVIDENCE.md); closes audit finding **BC-01** (`F26-AUDIT-001`) |
 | Illumina paired-end layout and instrument model | **PASS** (4/4; instrument models match manifest) |
 | Total spot counts vs manifest | **PASS** (4/4 exact) |
 | Reference FASTA existence, single-contig, zero-N | **PASS** (8/8 files) |
@@ -95,7 +95,7 @@ Each file was independently re-hashed and re-derived (GC%, length, N-count, cont
 
 ### 3.2 Reference Scope Note (chromosome-only)
 
-All six references are **chromosome-only** (no plasmids/extrachromosomal elements). This is consistent across all datasets and matches the QUAST evaluation convention used in F24/F25. It is particularly relevant for CS-SA01 (*S. aureus* MW2 carries plasmids pMW2/pMW3) and CS-SE01 (*S. enterica* LT2 carries pSLT ≈ 94 kb): plasmid-derived contigs will appear as unaligned contigs in QUAST and must be interpreted per §6, not counted as assembler failures.
+All six references are **chromosome-only** (no plasmids/extrachromosomal elements). This is consistent across all datasets and matches the QUAST evaluation convention used in F24/F25. It is particularly relevant for CS-SA01 (*S. aureus* MW2 carries plasmids pMW2/pMW3, and the verified phage **Staph1N** co-culture adds ≈ 140 kb of extrachromosomal viral content — see §4.1.1) and CS-SE01 (*S. enterica* LT2 carries pSLT ≈ 94 kb): plasmid- and phage-derived contigs will appear as unaligned contigs in QUAST and must be interpreted per §6, not counted as assembler failures.
 
 ---
 
@@ -114,6 +114,7 @@ HTTP 200; response retained at /tmp/opencode/sra_meta.xml (33,989 bytes)
 | :--- | :--- |
 | Experiment / Study | SRX28908742 ("MW2-cotreat2") / SRP585898, BioProject **PRJNA1263016** ✓ |
 | BioSample | **SAMN48627418** ✓ (SRS25134113 "MW2-cotreat2") |
+| BioSample Title | ⚠ **`MRSA252-cotreat2`** — conflicts with the `strain = MW2` attribute; **resolved as submitter labelling artefact** (see §4.1.1) |
 | Organism strain attribute | `strain = MW2` ✓ |
 | Submitter / Center | University of Wisconsin–Madison, Bacteriology |
 | Study title | "Sequencing data of MRSA strains subjected to bacteriophage infections" |
@@ -122,6 +123,19 @@ HTTP 200; response retained at /tmp/opencode/sra_meta.xml (33,989 bytes)
 | Runs / Bases | **2,239,653 spots** ✓ / 659,542,596 bases (avg 294.5 bp/spot, consistent with 2×150) |
 | SRA archive size | 187,232,418 bytes (published 2026-09-01) |
 | Experimental context | Replicate A, phage **Staph1N** co-treatment (MOI 0.01) + oxacillin 32 µg/mL; `sample_type = mixed culture` |
+
+### 4.1.1 BC-01 Resolution — Strain Identity Empirically Verified (F26-DATA-003, 2026-10-30)
+
+The independent Stage B/C audit (`F26-AUDIT-001`, Codex Sol) raised finding **BC-01 / P1**: the BioSample Title `MRSA252-cotreat2` contradicts the `strain = MW2` attribute (the Title is the only occurrence of the `MRSA252` token in the entire record; the sample alias `MW2-cotreat2`, run alias `MW2_A_Staph1N_E12_S196_R1_001.fastq.gz`, strain attribute, and all experimental attributes point to MW2 + phage Staph1N). Per the audit's required closure path, the conflict was resolved by **discriminatory sequence-based identity analysis** — canonical 31-mer containment of the checksum-verified FASTQ pairs against MW2 (`NC_003923.1`), phage Staph1N (`NC_047722.1`), and MRSA252 (`NC_002952.2`):
+
+| Analysis | Result |
+| :--- | :--- |
+| vs MW2 (`NC_003923.1`, 2,820,462 bp) | 29.90% of distinct read 31-mers matched; 28.85% of reads contain MW2 k-mers |
+| vs phage Staph1N (`NC_047722.1`, 140,511 bp) | 60.74% of distinct read 31-mers matched; 53.49% of reads contain Staph1N k-mers |
+| Combined MW2 + Staph1N | **90.64%** of all distinct 31-mers in the sequencing library |
+| vs MRSA252 (`NC_002952.2`, 2,902,619 bp) | 19.12% matched (strictly core-genome homology with MW2); **specific MRSA252 diagnostic markers absent** |
+
+**Conclusion:** the sequenced organism is conclusively ***S. aureus* MW2 (USA400)**; the library is a mixed bacterial–viral co-culture (phage depth ≈ 1000×, MW2 chromosome ≈ 35×) — the intended biology of BioProject PRJNA1263016 (phage–antibiotic co-treatment), not a contamination event. The BioSample Title is a **submitter labelling artefact**. Reference `NC_003923.1` is confirmed correct and unchanged. Full evidence, metric provenance, and the binding assembly/QUAST protocol are in [`docs/development/evidence/CS_SA01_STRAIN_DISCRIMINATION_EVIDENCE.md`](docs/development/evidence/CS_SA01_STRAIN_DISCRIMINATION_EVIDENCE.md). **BC-01: RESOLVED.**
 
 ### 4.2 CS-BS01 — `SRR40739147` (*B. subtilis* 168)
 
@@ -192,14 +206,14 @@ The selection of the 4 cross-species benchmarks was engineered to systematically
 
 | Dataset | Sequenced material vs reference | Dominant risk class | Expected magnitude | QUAST metrics affected | Compatibility rating |
 | :--- | :--- | :--- | :--- | :--- | :---: |
-| CS-SA01 | MW2-derived phage-resistant population; co-sequenced **phage Staph1N** DNA; oxacillin co-treatment | Foreign-DNA contigs; resistance SNPs/indels | Phage genome ≈ 40–140 kb of non-reference content; handful of resistance loci | Unaligned contigs; possible extensive-misassembly classification for chimeric phage-contig joins; small mismatch/indel floor | **ACCEPTABLE with caveat** |
+| CS-SA01 | **Verified MW2 + phage Staph1N co-culture** (31-mer containment, BC-01 resolution); oxacillin co-treatment | Expected phage contigs (~140 kb); resistance SNPs/indels | Phage genome **140,511 bp** (`NC_047722.1`) of non-reference content, verified; handful of resistance loci | Unaligned contigs ≈ 140 kb = expected viral co-culture content (evidence doc §5 protocol); small mismatch/indel floor | **ACCEPTABLE — BC-01 resolved** |
 | CS-BS01 | 168-derived chloramphenicol-adapted lineage | True biological divergence | Few to tens of SNPs + possible small indels/CNVs at resistance loci | Mismatches & indels per 100 kbp (biological, not assembler error) | **ACCEPTABLE** |
 | CS-PA01 | PAO1-GFP reporter (`mexR`, `aroB` mutant 2); submitter-pretrimmed reads | Engineered cassette; read-length reduction | GFP cassette ≈ 0.7–3 kb if chromosomally integrated (unknown); avg 478.8 vs 480 bp | One insertion vs reference if cassette is chromosomal; N50 sensitivity negligible | **ACCEPTABLE with caveat** |
 | CS-SE01 | LT2-derived AMP-resistance ALE lineage; run submitted as **BAM**; "RANDOM PCR" library | Alignment-derived artifacts; PCR duplicates | Duplicate fraction above typical PCR-free WGS (unquantified pre-download) | Inflated effective coverage → coverage-estimator stress; possible read-duplication artifacts in SRA conversion | **ACCEPTABLE with caveat** |
 
 ### 6.1 Per-Dataset Mitigation Notes (binding for Stage D/G interpretation)
 
-1. **CS-SA01:** Before acceptance, BLAST/minimap any QUAST-flagged unaligned contigs against the Staph1N phage and MW2 plasmids; annotate phage-derived contigs as *expected biological content*, not assembler failure. Relative assembler comparison (identical inputs) remains valid.
+1. **CS-SA01:** Resolved by F26-DATA-003 (BC-01): phage Staph1N co-culture content is **established by 31-mer containment evidence** (90.64% of library 31-mers explained by MW2 ∪ Staph1N; phage depth ≈ 1000×, MW2 ≈ 35×). In QUAST (reference `NC_003923.1` only), unaligned contigs totaling ≈ 140 kb are **expected viral co-culture content** — record them as such, not as misassemblies or contaminant failures (binding protocol: [`docs/development/evidence/CS_SA01_STRAIN_DISCRIMINATION_EVIDENCE.md`](docs/development/evidence/CS_SA01_STRAIN_DISCRIMINATION_EVIDENCE.md) §5). Misassembly calls *within* chromosome-aligned contigs remain genuine quality signals. Relative assembler comparison (identical inputs) remains valid.
 2. **CS-BS01:** Record the absolute mismatch/indel floor per assembler; treat small uniform shifts across all four competitors as biological divergence of the evolved lineage, not a regression.
 3. **CS-PA01:** If a single large insertion is detected at the GFP cassette locus in all four assemblies, annotate as engineered content. The pre-trimmed read length (avg 478.8 bp) is documented here to explain nominal 2×240 deviation.
 4. **CS-SE01:** After download, measure duplicate/read-parity statistics (the download harness `scripts/download_f26_datasets.sh` already enforces R1/R2 read-count parity and records SHA-256). If duplicate fraction is pathologically high (> 20%), flag for Controller review before Stage C; coverage-related metrics (F26-P3 depth gradients) must use *reported* depths recomputed post-download rather than nominal SRA bases.
