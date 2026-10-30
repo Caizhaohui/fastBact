@@ -54,6 +54,7 @@ Prior to the F26 Hotfix enforcement, the Controller performed the following init
 | **DISP-F26-014** | `F26-EXEC-003`| `slurm` (Jobs 3074516-3074527) | HPC `qfree` | Competitor Stage D Replicate 1 Benchmarks (SKESA, SPAdes, Unicycler) | `benchmarks/f26_results/raw/*` | **RUNNING** | Slurm Queue (Jobs 3074516-3074527) |
 | **DISP-F26-015** | `F26-BM-005` | `cursor-agent` | `grok-4.7-high` | Stage E Deterministic FASTQ Pair Subsampling Utility | `scripts/subsample_fastq_pairs.py` | **COMPLETED** (Commit `8ecfac7`, Self-Test PASS) | `logs/disp_f26_015_cursor.log` |
 | **DISP-F26-016** | `F26-BM-006` | `cursor-agent` | `grok-4.7-high` | Stage E Subsample Generation Pipeline & Manifest Builder | `scripts/generate_stage_e_subsamples.py` | **COMPLETED** (Commit `06c1732`, Self-Test PASS) | `logs/disp_f26_016_cursor.log` |
+| **DISP-F26-017** | `F26-EXEC-004`| `slurm` (Job 3075001) | HPC `qfree` | Execute Stage E Subsample Generation & Manifest Generation | `data/f26_cross_species/subsamples/*`, `F26_STAGE_E_MANIFEST.tsv` | **QUEUED** | `logs/f26_stage_e_subsamples_3075001.out` |
 
 ---
 
