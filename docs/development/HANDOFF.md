@@ -1,5 +1,37 @@
 # fastBact Development Handoff
 
+## F25 assembly correctness, forensics, and cross-dataset validation handoff — 2026-10-30
+
+- CURRENT_PROJECT: fastBact
+- CURRENT_MILESTONE: F25 — Assembly Correctness, Residual Misassembly Forensics, and Cross-Dataset Robustness
+- CURRENT_STATUS: `F25_READY_FOR_USER_ACCEPTANCE`; technical completion achieved, independent audit passed by Codex Sol, determinism verified, and 4-dataset biological validation complete.
+- USER_DECISION: Awaiting user decision as `FINAL_AUTHORIZATION_AUTHORITY` for final merge to `main`.
+- FEATURE_BRANCH: `feature/f25-assembly-correctness`
+- ACTIVE_WORKTREE: `/hpcfs/fhome/caizhh/Desktop/03_Tool_Development/fastBact-phase-f25-correctness-worktree`
+- BASELINE_SHA: `92be30a38b5779c1da73f27f05c31718ef5dc059` (peeled tag `f24-accepted-2026-10-30`)
+- RELEASE_BINARY_SHA256: `7c70e3572996ec777b62b8be0080cd8a0a1528ab01f03d0d4b9f3f56640a8112` (Slurm Job `3072530`)
+- TEST_SUITE: 213/213 release tests passed (`cargo test --release`, Slurm Job `3072530`), CLI smoke test OK.
+- INDEPENDENT_ACCEPTANCE_AUDITOR: Codex CLI / `gpt-6.1-sol` (Medium Reasoning, session `01a18a77-...`, Audit `AUD-F25-03`).
+- SCIENTIFIC_FINDINGS_SUMMARY:
+  - F25-P1 (Forensics): Traced all 5 residual extensive misassemblies in R1-001. All 5 are confirmed `EVALUATION_ARTIFACT`:
+    - 2 events (`contig_53` Left/Right): Biological phase variation (Pin-mediated DNA inversion in e14 prophage) confirmed with physical raw read pairs for both isoforms (29/37 inverted vs 18/14 reference).
+    - 3 events (`contig_63`, `contig_200`, `contig_222`): Multi-copy transposon repeat entries (IS5 with 10 copies, IS1 with 6 copies) terminating at repeat boundaries; QUAST arbitrarily maps terminal stubs to distant loci.
+    - Zero chimeric joins introduced by exSPAnder; AUD-01 2.1 Mb chimera remains 100% eliminated.
+  - F25-P2 (Safety Invariants): $p > b + H$ evidence filtering and monotonic loop protections preserved without regression.
+  - F25-P3 (Cross-Dataset Robustness, Slurm Job `3072539` on `vnode1`):
+    - R1-001 & R1-003: 100% mathematical determinism ($\Delta = 0, \sigma^2 = 0.000000$) against accepted F24 baseline.
+    - R1-001-Val (`SRR28349174`): N50/NGA50 **54,554 bp** (+21.0% vs R1-001), 98.233% genome fraction, **0 extensive misassemblies**, **0 local misassemblies**.
+    - R1-003-Val (`SRR28349165`, 270x coverage, 4.27M read pairs): **0 extensive misassemblies**, NGA50 39,314 bp, wall time 296.4s, peak RSS 2.05 GB.
+- CORE_DELIVERABLES:
+  - Contract: [`F25_ARCHITECTURE_AND_ACCEPTANCE_CONTRACT.md`](file:///hpcfs/fhome/caizhh/Desktop/03_Tool_Development/fastBact-phase-f25-correctness-worktree/F25_ARCHITECTURE_AND_ACCEPTANCE_CONTRACT.md)
+  - Forensics: [`F25_ROOT_CAUSE_FORENSICS.md`](file:///hpcfs/fhome/caizhh/Desktop/03_Tool_Development/fastBact-phase-f25-correctness-worktree/F25_ROOT_CAUSE_FORENSICS.md)
+  - Implementation & Review: [`F25_IMPLEMENTATION_AND_REVIEW_REPORT.md`](file:///hpcfs/fhome/caizhh/Desktop/03_Tool_Development/fastBact-phase-f25-correctness-worktree/F25_IMPLEMENTATION_AND_REVIEW_REPORT.md)
+  - Benchmark & Regression: [`F25_BENCHMARK_AND_REGRESSION_REPORT.md`](file:///hpcfs/fhome/caizhh/Desktop/03_Tool_Development/fastBact-phase-f25-correctness-worktree/F25_BENCHMARK_AND_REGRESSION_REPORT.md)
+  - Final Acceptance: [`F25_FINAL_SCIENTIFIC_ACCEPTANCE_REPORT.md`](file:///hpcfs/fhome/caizhh/Desktop/03_Tool_Development/fastBact-phase-f25-correctness-worktree/F25_FINAL_SCIENTIFIC_ACCEPTANCE_REPORT.md)
+- NEXT_ACTION: Standing boundary enforced. User merge authorization required to integrate `feature/f25-assembly-correctness` into `main`.
+
+---
+
 ## F24 final technical acceptance and integration handoff — 2026-10-30
 
 - CURRENT_PROJECT: fastBact

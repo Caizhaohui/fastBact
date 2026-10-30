@@ -1,3 +1,34 @@
+# ACTIVE TASK: fastBact F25 — Assembly Correctness, Residual Misassembly Forensics, and Cross-Dataset Robustness
+
+**F25 Status (2026-10-30):** Phase F25 has achieved technical completion, independent audit pass by Codex Sol, full deterministic verification (213/213 release tests), and four-dataset benchmark validation.
+- **Disposition:** **`F25_READY_FOR_USER_ACCEPTANCE`**
+- **Feature Branch:** `feature/f25-assembly-correctness` (Worktree: `/hpcfs/fhome/caizhh/Desktop/03_Tool_Development/fastBact-phase-f25-correctness-worktree`)
+- **Base Commit:** `92be30a38b5779c1da73f27f05c31718ef5dc059`
+- **Release Binary Checksum:** `target/release/fastBact` SHA-256 `7c70e3572996ec777b62b8be0080cd8a0a1528ab01f03d0d4b9f3f56640a8112`
+- **Autonomous Controller:** Antigravity CLI / Gemini 3.8 Flash Medium
+- **Independent Acceptance Auditor:** Codex CLI / `gpt-6.1-sol` (Medium Reasoning, Audit `AUD-F25-03`)
+- **Key Scientific Achievements:**
+  1. **F25-P1 (Forensic Trace & Classification)**: The five residual extensive misassemblies in R1-001 were conclusively proven to be `EVALUATION_ARTIFACT`:
+     - Two events (`contig_53` Left/Right) are active biological phase variations in the e14 prophage (Pin recombinase DNA inversion), confirmed by raw read-pair support for both isoforms in `SRR28349173` (29 and 37 reads for inverted vs 18 and 14 for reference).
+     - Three events (`contig_63`, `contig_200`, `contig_222`) are multi-copy repeat entries (IS5 and IS1) that terminate safely at the repeat boundary without false joins; QUAST arbitrarily aligns the terminal stubs to distant genomic copies.
+     - Zero of the five events represent chimeric joins or assembly defects.
+  2. **Independent Audit Pass**: Codex Sol verified read support directly on compute node `vnode2`, endorsed all five classifications, and verified all corrections in [`F25_ROOT_CAUSE_FORENSICS.md`](file:///hpcfs/fhome/caizhh/Desktop/03_Tool_Development/fastBact-phase-f25-correctness-worktree/F25_ROOT_CAUSE_FORENSICS.md).
+  3. **F25-P2 (Safety Invariants)**: Conservative evidence isolation ($p > b + H$) and loop re-entrancy protections remain intact.
+  4. **F25-P3 (Cross-Dataset Robustness & Benchmark)**: Evaluated on Slurm node `vnode1` (`qfree`, Job `3072539`):
+     - R1-001 & R1-003: 100% mathematical determinism ($\Delta = 0, \sigma^2 = 0.000000$) against accepted F24 baseline.
+     - R1-001-Val (`SRR28349174`): N50/NGA50 **54,554 bp** (+21.0% vs R1-001), 98.233% genome fraction, **0 extensive misassemblies**, **0 local misassemblies**.
+     - R1-003-Val (`SRR28349165`, 270x coverage, 4.27M read pairs): **0 extensive misassemblies**, NGA50 39,314 bp in 296.4s wall time.
+- **Verification Gates**: Slurm Job `3072530` passed 213/213 release tests (`cargo test --release`).
+- **Core Deliverables Produced**:
+  - [`F25_ARCHITECTURE_AND_ACCEPTANCE_CONTRACT.md`](file:///hpcfs/fhome/caizhh/Desktop/03_Tool_Development/fastBact-phase-f25-correctness-worktree/F25_ARCHITECTURE_AND_ACCEPTANCE_CONTRACT.md)
+  - [`F25_ROOT_CAUSE_FORENSICS.md`](file:///hpcfs/fhome/caizhh/Desktop/03_Tool_Development/fastBact-phase-f25-correctness-worktree/F25_ROOT_CAUSE_FORENSICS.md)
+  - [`F25_IMPLEMENTATION_AND_REVIEW_REPORT.md`](file:///hpcfs/fhome/caizhh/Desktop/03_Tool_Development/fastBact-phase-f25-correctness-worktree/F25_IMPLEMENTATION_AND_REVIEW_REPORT.md)
+  - [`F25_BENCHMARK_AND_REGRESSION_REPORT.md`](file:///hpcfs/fhome/caizhh/Desktop/03_Tool_Development/fastBact-phase-f25-correctness-worktree/F25_BENCHMARK_AND_REGRESSION_REPORT.md)
+  - [`F25_FINAL_SCIENTIFIC_ACCEPTANCE_REPORT.md`](file:///hpcfs/fhome/caizhh/Desktop/03_Tool_Development/fastBact-phase-f25-correctness-worktree/F25_FINAL_SCIENTIFIC_ACCEPTANCE_REPORT.md)
+- **Next Action**: Awaiting user decision as `FINAL_AUTHORIZATION_AUTHORITY` for final merge to `main`.
+
+---
+
 # ACTIVE TASK: fastBact F24 — Final Technical Acceptance (F24_ACCEPTED_WITH_P1-4_WAIVER)
 
 **F24 Status (2026-10-30):** Phase F24 Provenance-Safe Contiguity Recovery has achieved formal technical and scientific acceptance under User Authorization: **`F24_ACCEPTED_WITH_P1-4_WAIVER`**.
