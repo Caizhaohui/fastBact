@@ -43,7 +43,10 @@ Prior to the F26 Hotfix enforcement, the Controller performed the following init
 | **DISP-F26-003** | `F26-DATA-002` | `opencode` | `glm-5.3-flash` | Robust SRA Download & Checksum Validation Pipeline | `scripts/download_f26_datasets.sh`, `scripts/validate_fastq_pairs.py` | **COMPLETED** (Commit `a2a50c1`) | `logs/disp_f26_003_opencode.log` |
 | **DISP-F26-004** | `F26-EXEC-001`| `slurm` (Job 3073557) | HPC `vnode1` | Execute Cross-Species FASTQ Downloads (`scripts/download_f26_datasets.sh`) | `data/f26_cross_species/fastq/*` | **COMPLETED** (Slurm 0:0, 100% spots) | `logs/download_f26_3073557.log` |
 | **DISP-F26-005** | `F26-VAL-001` | `scripts/validate_fastq_pairs.py` | Local execution | Post-Download Pair Synchronization & Checksum Audit | `data/f26_cross_species/fastq/validation_report.json` | **COMPLETED** (4/4 PASS, 0 mismatches) | `data/f26_cross_species/fastq/validation_report.json` |
-| **DISP-F26-006** | `F26-AUDIT-001`| `codex` | `gpt-6.1-sol` | Independent Audit of F26 Contracts, Datasets & Pipelines | `docs/development/F26_INDEPENDENT_AUDIT_STAGE_BC.md` | QUEUED | Ready for Stage C Audit |
+| **DISP-F26-006** | `F26-AUDIT-001`| `codex` | `gpt-6.1-sol` | Independent Audit of F26 Contracts, Datasets & Pipelines | `docs/development/F26_INDEPENDENT_AUDIT_STAGE_BC.md` | **COMPLETED** (Commit `cd332b5`, Verdict: BLOCKED) | `docs/development/F26_INDEPENDENT_AUDIT_STAGE_BC.md` |
+| **DISP-F26-007** | `F26-BM-002` | `cursor-agent` | `grok-4.7-high` | Repair Harness Findings BC-02 (Wall-time) & BC-03 (Determinism) | `scripts/run_competitor_benchmark.py`, `scripts/slurm_benchmark_harness.sbatch`, `F26_COMPETITOR_BENCHMARK_CONTRACT.md` | **COMPLETED** (Commit `ae6ca39`, Self-Test PASS) | `logs/disp_f26_007_cursor.log` |
+| **DISP-F26-008** | `F26-DATA-003` | `opencode` | `glm-5.3-flash` | Resolve Finding BC-01 via Empirical 31-mer Containment Evidence | `F26_DATASET_PROVENANCE_AND_SELECTION.md`, `docs/development/evidence/CS_SA01_STRAIN_DISCRIMINATION_EVIDENCE.md` | **COMPLETED** (Commit `d6f21b9`, BC-01 Resolved) | `logs/disp_f26_008_opencode.log` |
+| **DISP-F26-009** | `F26-AUDIT-002`| `codex` | `gpt-6.1-sol` | Stage B-C Re-Audit and Verification of BC-01, BC-02, BC-03 | `docs/development/F26_INDEPENDENT_AUDIT_STAGE_BC.md` | DISPATCHED | `logs/disp_f26_009_codex.log` |
 
 ---
 
