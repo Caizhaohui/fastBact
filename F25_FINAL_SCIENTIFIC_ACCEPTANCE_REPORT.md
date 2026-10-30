@@ -22,7 +22,7 @@ All required stage gates and scientific criteria have been comprehensively fulfi
    - Three events (`contig_63`, `contig_200`, `contig_222`) represent contigs correctly entering multi-copy insertion sequence elements (IS5 and IS1) and safely terminating at the repeat boundary. QUAST arbitrarily aligns the terminal repeat stubs to distant reference copies, triggering artifactual extensive relocation calls.
 2. **Independent Acceptance Audit**: Codex CLI (`gpt-6.1-sol`) independently reviewed the forensics, confirmed the read support on compute node `vnode2`, endorsed all five artifact classifications, and validated that the repeat-resolution engine operates within conservative safety boundaries.
 3. **F25-P2 (Safety Invariants)**: Conservative evidence isolation ($p > b + H$) and loop re-entrancy protections remain strictly intact.
-4. **F25-P3 (Cross-Dataset Robustness)**: Validated across four biological Illumina sequencing datasets of *E. coli* K-12 MG1655:
+4. **F25-P3 (Cross-Dataset Robustness)**: Validated across four biological Illumina sequencing datasets of *E. coli* (MG1655 and BW25113):
    - R1-001 and R1-003 achieved 100% mathematical determinism ($\Delta = 0$) against the frozen F24 baseline.
    - Independent dataset R1-001-Val (`SRR28349174`) achieved an NGA50 of **54,554 bp** (+21.0%) with **0 extensive misassemblies and 0 local misassemblies**.
    - High-depth dataset R1-003-Val (`SRR28349165`, 270x coverage) achieved **0 extensive misassemblies** in under 5 minutes wall time.
