@@ -675,6 +675,8 @@ def execute_tool(
     if run_dir.exists() and force:
         shutil.rmtree(run_dir)
     run_dir.mkdir(parents=True, exist_ok=True)
+    # SKESA opens --contigs_out directly and does not create its parent directory.
+    tool_out.mkdir(parents=True, exist_ok=True)
     (run_dir / "command.txt").write_text(" ".join(command) + "\n", encoding="utf-8")
 
     binary = tool_binary(tool, fastbact_bin)
