@@ -1,12 +1,38 @@
+# Rust build artifacts
 target/
+
+# Local testing, benchmarks and data
+data/
 benchmark-results/
 benchmark/
+benchmarks/
+scripts/
 shovill/
 shovill-master/
 logs/
 *.log
-gemini-*.md
 __pycache__/
 *.pyc
-data/
-benchmarks/
+.zcode/
+
+# Slurm output and local runner scripts
+*.sbatch
+*.out
+*.err
+.run_*
+.test_*
+tests/*.py
+
+# Internal multi-agent collaboration, task planning, and evidence ledgers
+AGENTS.md
+ACTIVE_TASK.md
+PLAN.md
+BENCHMARK_PLAN.md
+FB_B2_*.md
+GITHUB_INITIAL_PUSH_REPORT.md
+F2[0-9]_*.md
+F2[0-9]_*.tsv
+C0_*.md
+C0_*.tsv
+docs/
+gemini-*.md

@@ -3,6 +3,9 @@ name = "fastBact"
 version = "0.1.0"
 edition = "2021"
 description = "Ultra-fast Rust bacterial short-read genome assembler fusing Shovill and SPAdes"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/Caizhaohui/fastBact"
+readme = "README.md"
 
 [[bin]]
 name = "fastBact"

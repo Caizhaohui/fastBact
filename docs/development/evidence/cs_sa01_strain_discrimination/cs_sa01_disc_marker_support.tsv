@@ -1,5 +1,0 @@
-alignment	marker_set	bp	mean_depth_q0	breadth_ge1x_q0	mean_depth_q20	breadth_ge1x_q20	overlapping_reads_q0	overlapping_reads_q20
-MW2_align	PVL_lukS-lukF_MW2_EXCLUSIVE	388	51.03	1.0000	50.81	1.0000	209	206
-MW2_align	SCCmecIV_MW2_EXCLUSIVE	9650	70.13	1.0000	69.02	1.0000	4971	4811
-M252_align	SCCmecII_MRSA252_EXCLUSIVE	36904	0.55	0.0140	0.32	0.0093	629	360
-M252_align	SCCmecII_MRSA252_SHARED	14506	77.42	0.9959	74.29	0.9740	8395	7655
