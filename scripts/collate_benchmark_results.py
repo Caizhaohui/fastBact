@@ -6,6 +6,13 @@ Each Stage D Slurm job writes its own directory
 read-modify-write the same summary.json. This script finds every metrics.json
 under --raw-dir and rebuilds summary.json and summary.tsv with the harness
 schema (merge_runs, flatten_row, write_summaries).
+
+F26-H01: run records must carry complete determinism identity before they may
+be pooled. load_record verifies every DETERMINISM_IDENTITY_FIELDS entry; a
+legacy metrics.json written before the harness stamped identity to disk is
+backfilled in memory from the nearest ancestor job summary.json (frozen run
+artifacts are never rewritten), and collation fails closed when identity stays
+incomplete instead of pooling unknown identity as equal.
 """
 
 from __future__ import annotations
@@ -35,6 +42,70 @@ def discover_metrics(raw_dir: Path) -> list[Path]:
     return sorted(path for path in raw_dir.rglob("metrics.json") if path.is_file())
 
 
+def _summary_backfill(
+    path: Path,
+    record: Mapping[str, Any],
+    missing: Sequence[str],
+) -> tuple[Optional[Path], dict[str, Any]]:
+    """Find identity stamps for this run in the nearest ancestor summary.json.
+
+    The F26 harness wrote run_dir/metrics.json before stamp_run_identity
+    propagated to disk, while the per-job summary.json carries the stamped
+    identity. Search outward from the metrics.json and return the first
+    ancestor summary that contains the matching (dataset_id, tool, replicate)
+    run, plus the non-empty stamps it can supply.
+    """
+    for ancestor in path.parents:
+        candidate = ancestor / "summary.json"
+        if not candidate.is_file():
+            continue
+        try:
+            payload = json.loads(candidate.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            continue
+        runs = payload.get("runs") if isinstance(payload, dict) else None
+        if not isinstance(runs, list):
+            continue
+        for run in runs:
+            if not isinstance(run, dict):
+                continue
+            try:
+                matches = (
+                    str(run.get("dataset_id")) == str(record["dataset_id"])
+                    and str(run.get("tool")) == str(record["tool"])
+                    and int(run.get("replicate")) == int(record["replicate"])
+                )
+            except (TypeError, ValueError):
+                continue
+            if matches:
+                return candidate, harness.identity_stamps(run, missing)
+    return None, {}
+
+
+def backfill_identity(path: Path, record: dict[str, Any]) -> None:
+    """Complete missing determinism identity or fail closed.
+
+    Backfill is in-memory only: frozen run evidence on disk is never rewritten.
+    """
+    missing = harness.incomplete_identity_fields(record)
+    if not missing:
+        return
+    source, stamps = _summary_backfill(path, record, missing)
+    if stamps:
+        record.update(stamps)
+        record["identity_backfill_source"] = str(source)
+        record.setdefault("notes", []).append(
+            f"determinism identity backfilled from {source}"
+        )
+        missing = harness.incomplete_identity_fields(record)
+    if missing:
+        raise CollationError(
+            f"{path} has incomplete determinism identity "
+            f"(missing or empty: {', '.join(missing)}); collation fails closed "
+            "rather than pooling unknown identity"
+        )
+
+
 def load_record(path: Path) -> dict[str, Any]:
     try:
         payload = json.loads(path.read_text(encoding="utf-8"))
@@ -51,6 +122,7 @@ def load_record(path: Path) -> dict[str, Any]:
         raise CollationError(f"{path} replicate is not an integer") from exc
     record = dict(payload)
     record["replicate"] = replicate
+    backfill_identity(path, record)
     return record
 
 
@@ -246,6 +318,71 @@ def self_test() -> int:
         (broken / "run" / "metrics.json").write_text("{", encoding="utf-8")
         broken_code = main(["--raw-dir", str(broken), "--outdir", str(tmp / "broken-out")])
         check(broken_code == 2, "invalid JSON is rejected")
+
+        # F26-H01: a legacy metrics.json without identity backfills in memory
+        # from the per-job summary.json written by the harness.
+        backfill_raw = tmp / "backfill-raw"
+        job = backfill_raw / "CS-BS02_fastbact_r2"
+        stamped_run = _fixture("CS-BS02", "fastbact", 2, assembly_sha256="bs2")
+        harness.write_summaries(job, [stamped_run], {"producer": "collate-self-test"})
+        identity_fields = {
+            "r1",
+            "r2",
+            "reference",
+            "reference_sha256",
+            "r1_sha256",
+            "r2_sha256",
+            "binary_sha256",
+            "git_head",
+            "threads",
+            "memory_gb",
+        }
+        legacy = {key: value for key, value in stamped_run.items() if key not in identity_fields}
+        _write_metrics(job / "CS-BS02" / "fastbact" / "rep_2" / "metrics.json", legacy)
+        backfill_out = tmp / "backfill-out"
+        backfill_code = main(["--raw-dir", str(backfill_raw), "--outdir", str(backfill_out)])
+        check(backfill_code == 0, f"backfilled collate exit {backfill_code}")
+        backfill_summary = json.loads((backfill_out / "summary.json").read_text(encoding="utf-8"))
+        check(len(backfill_summary["runs"]) == 1, "backfilled run collated once")
+        backfilled = backfill_summary["runs"][0]
+        check(
+            harness.incomplete_identity_fields(backfilled) == [],
+            "backfilled record carries complete determinism identity",
+        )
+        check(
+            backfilled["git_head"] == stamped_run["git_head"]
+            and backfilled["binary_sha256"] == stamped_run["binary_sha256"]
+            and backfilled["r1_sha256"] == stamped_run["r1_sha256"],
+            "backfilled identity values match the job summary",
+        )
+        check(
+            str(backfilled.get("identity_backfill_source", "")).endswith("summary.json"),
+            f"backfill provenance recorded ({backfilled.get('identity_backfill_source')})",
+        )
+        check(
+            backfill_summary["determinism"]
+            and all(str(token) != "" for token in backfill_summary["determinism"][0]["identity"].values()),
+            "backfilled determinism identity tokens are non-empty",
+        )
+        on_disk = json.loads(
+            (job / "CS-BS02" / "fastbact" / "rep_2" / "metrics.json").read_text(encoding="utf-8")
+        )
+        check("git_head" not in on_disk, "backfill never rewrites frozen run artifacts")
+
+        # F26-H01: incomplete identity with no job summary to backfill from
+        # must fail closed instead of pooling unknown identity.
+        orphan_raw = tmp / "orphan-raw"
+        orphan = {
+            key: value
+            for key, value in _fixture("CS-BS03", "fastbact", 1).items()
+            if key not in identity_fields
+        }
+        _write_metrics(orphan_raw / "CS-BS03" / "fastbact" / "rep_1" / "metrics.json", orphan)
+        orphan_code = main(["--raw-dir", str(orphan_raw), "--outdir", str(tmp / "orphan-out")])
+        check(
+            orphan_code == 2 and not (tmp / "orphan-out").exists(),
+            "incomplete identity without a job summary fails closed",
+        )
 
     try:
         parse_args([])

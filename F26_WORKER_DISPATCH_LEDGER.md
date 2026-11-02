@@ -57,8 +57,10 @@ Prior to the F26 Hotfix enforcement, the Controller performed the following init
 | **DISP-F26-017** | `F26-EXEC-004`| `slurm` (Job 3075001) | HPC `qfree` | Execute Stage E Subsample Generation & Manifest Generation | `data/f26_cross_species/subsamples/*`, `F26_STAGE_E_MANIFEST.tsv` | **COMPLETED** (Commit `710279f`, Exit 0:0, 32 pairs created) | `logs/f26_stage_e_subsamples_3075001.out` |
 | **DISP-F26-018** | `F26-REP-001`  | `cursor-agent` | `grok-4.7-high` | Author Stage D Cross-Species Baseline Benchmark Report | `docs/development/F26_CROSS_SPECIES_BASELINE_REPORT.md` | **COMPLETED** (Commit `e939a14`) | `logs/disp_f26_018_cursor.log` |
 | **DISP-F26-019** | `F26-BM-007` | `cursor-agent` | `grok-4.7-high` | Implement Stage E & G Batch Benchmark Submitter Script | `scripts/submit_stage_e_benchmarks.sh` | **COMPLETED** (Commit `910a6e7`, Self-Test PASS) | `logs/disp_f26_019_cursor.log` |
-| **DISP-F26-020** | `F26-EXEC-005`| `slurm` (Batch Stage E) | HPC `qfree` | fastBact Stage E Depth Gradient Benchmarks (16 conditions) | `benchmarks/f26_results/raw/*_fastbact_r1` | **DISPATCHED** | Slurm Queue |
-| **DISP-F26-021** | `F26-EXEC-006`| `slurm` (Batch Stage G) | HPC `qfree` | fastBact Stage G Determinism Replicates (Rep 2 & 3, 8 jobs) | `benchmarks/f26_results/raw/*_fastbact_r[23]` | **DISPATCHED** | Slurm Queue |
+| **DISP-F26-020** | `F26-EXEC-005`| `slurm` (Batch Stage E) | HPC `qfree` | fastBact Stage E Depth Gradient Benchmarks (16 conditions) | `benchmarks/f26_results/raw/*_fastbact_r1` | **COMPLETED** (Jobs 3076128..43, Exit 0:0) | `benchmarks/f26_results/summary.json` |
+| **DISP-F26-021** | `F26-EXEC-006`| `slurm` (Batch Stage G) | HPC `qfree` | fastBact Stage G Determinism Replicates (Rep 2 & 3, 8 jobs) | `benchmarks/f26_results/raw/*_fastbact_r[23]` | **COMPLETED** (Jobs 3076145..53, Exit 0:0) | `benchmarks/f26_results/summary.json` |
+| **DISP-F26-022** | `F26-AUDIT-004`| `codex` | `gpt-6.1-sol` | Stage H Independent Scientific Acceptance Audit | `docs/development/F26_FINAL_SCIENTIFIC_ACCEPTANCE_REPORT.md` | **COMPLETED** (Commit `22ea17b`, PARTIALLY_VALIDATED / F26-H01, H02) | `docs/development/F26_FINAL_SCIENTIFIC_ACCEPTANCE_REPORT.md` |
+| **DISP-F26-023** | `F26-BM-008` | `opencode` | `glm-5.3-flash` | Repair Collator Identity Propagation for Finding F26-H01 | `scripts/run_competitor_benchmark.py`, `scripts/collate_benchmark_results.py` | **RUNNING** | `logs/disp_f26_023_opencode.log` |
 
 ---
 

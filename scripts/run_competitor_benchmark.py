@@ -47,8 +47,9 @@ DEFAULT_TOOL_TIMEOUT_S = 2 * 60 * 60 + 15 * 60  # 8100
 DEFAULT_QUAST_TIMEOUT_S = 25 * 60  # 1500
 MIN_DETERMINISM_REPLICATES = 3
 
-# Replicates pool only when the experiment identity matches. Missing fields
-# compare as empty so a fixture that omits them still groups with itself.
+# Replicates pool only when the experiment identity matches. A record whose
+# identity is missing or empty must never be pooled: determinism_report fails
+# closed on it instead of treating unknown identity as equal (F26-H01).
 DETERMINISM_IDENTITY_FIELDS = (
     "dataset_id",
     "tool",
@@ -836,6 +837,20 @@ def _identity_token(record: Mapping[str, Any], field: str) -> str:
     return str(value)
 
 
+def incomplete_identity_fields(record: Mapping[str, Any]) -> list[str]:
+    """Return identity fields that are absent, null, or empty on the record."""
+    return [field for field in DETERMINISM_IDENTITY_FIELDS if not _identity_token(record, field)]
+
+
+def identity_stamps(record: Mapping[str, Any], fields: Sequence[str]) -> dict[str, Any]:
+    """Return the subset of fields the record carries with a non-empty token."""
+    return {
+        field: record[field]
+        for field in fields
+        if field in record and _identity_token(record, field) != ""
+    }
+
+
 def determinism_group_key(record: Mapping[str, Any]) -> tuple[str, ...]:
     return tuple(_identity_token(record, field) for field in DETERMINISM_IDENTITY_FIELDS)
 
@@ -896,17 +911,43 @@ def stamp_run_identity(
     git_head_value: str,
     threads: int,
     memory_gb: int,
+    metrics_path: Optional[Path] = None,
 ) -> None:
-    record["r1"] = str(r1)
-    record["r2"] = str(r2)
-    record["reference"] = str(reference)
-    record["reference_sha256"] = reference_sha256
-    record["r1_sha256"] = r1_sha256
-    record["r2_sha256"] = r2_sha256
-    record["binary_sha256"] = binary_sha256
-    record["git_head"] = git_head_value
-    record["threads"] = threads
-    record["memory_gb"] = memory_gb
+    """Stamp identity onto the record and propagate it to its metrics.json.
+
+    execute_tool writes run_dir/metrics.json before the identity is known, so
+    stamping must rewrite that file too; otherwise the on-disk run record keeps
+    empty identity fields and the collator cannot certify replicate pooling
+    (F26-H01). The file is updated in place: an existing metrics.json keeps its
+    run payload and only gains the identity stamps. Pass metrics_path=None for
+    records without a run directory (dry runs and synthetic input failures).
+    """
+    stamps: dict[str, Any] = {
+        "r1": str(r1),
+        "r2": str(r2),
+        "reference": str(reference),
+        "reference_sha256": reference_sha256,
+        "r1_sha256": r1_sha256,
+        "r2_sha256": r2_sha256,
+        "binary_sha256": binary_sha256,
+        "git_head": git_head_value,
+        "threads": threads,
+        "memory_gb": memory_gb,
+    }
+    record.update(stamps)
+    if metrics_path is None:
+        return
+    payload: dict[str, Any]
+    if metrics_path.is_file():
+        try:
+            loaded = json.loads(metrics_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            loaded = None
+        payload = dict(loaded) if isinstance(loaded, dict) else dict(record)
+    else:
+        payload = dict(record)
+    payload.update(stamps)
+    _write_json(metrics_path, payload)
 
 
 def determinism_report(records: Sequence[Mapping[str, Any]]) -> list[dict[str, Any]]:
@@ -917,6 +958,28 @@ def determinism_report(records: Sequence[Mapping[str, Any]]) -> list[dict[str, A
     for key, group in sorted(grouped.items()):
         dataset_id, tool = key[0], key[1]
         identity = determinism_identity(group[0])
+        # Fail closed (F26-H01): a replicate with missing or empty identity
+        # must never be pooled into a determinism PASS, because unknown
+        # identity is not the same as equal known identity.
+        missing = sorted(
+            {field for record in group for field in incomplete_identity_fields(record)}
+        )
+        if missing:
+            reports.append(
+                {
+                    "dataset_id": dataset_id,
+                    "tool": tool,
+                    "replicates": len(group),
+                    "checked": False,
+                    "pass": False,
+                    "reason": (
+                        "incomplete determinism identity: missing or empty "
+                        + ", ".join(missing)
+                    ),
+                    "identity": identity,
+                }
+            )
+            continue
         if len(group) < MIN_DETERMINISM_REPLICATES:
             reports.append(
                 {
@@ -1127,6 +1190,24 @@ def evaluate_dataset(args: argparse.Namespace, row: Mapping[str, str]) -> int:
         binary = tool_binary(tool, fastbact_bin)
         binary_hashes[tool] = sha256_file(binary) if binary.is_file() else ""
 
+    reference_sha256 = row["reference_raw_sha256"].lower()
+
+    def stamp(record: dict[str, Any], *, metrics_path: Optional[Path]) -> None:
+        stamp_run_identity(
+            record,
+            r1=r1,
+            r2=r2,
+            reference=reference,
+            reference_sha256=reference_sha256,
+            r1_sha256=r1_sha256,
+            r2_sha256=r2_sha256,
+            binary_sha256=binary_hashes[str(record["tool"])],
+            git_head_value=str(context["git_head"]),
+            threads=args.threads,
+            memory_gb=args.memory_gb,
+            metrics_path=metrics_path,
+        )
+
     new_runs: list[dict[str, Any]]
     if failure and not args.dry_run:
         print(f"[harness] {failure}: {note}", file=sys.stderr)
@@ -1143,6 +1224,8 @@ def evaluate_dataset(args: argparse.Namespace, row: Mapping[str, str]) -> int:
             threads=args.threads,
             memory_gb=args.memory_gb,
         )
+        for record in new_runs:
+            stamp(record, metrics_path=None)
     else:
         new_runs = []
         for tool in tools:
@@ -1180,24 +1263,14 @@ def evaluate_dataset(args: argparse.Namespace, row: Mapping[str, str]) -> int:
                 if failure and args.dry_run:
                     record["status"] = failure
                     record.setdefault("notes", []).append(note)
+                # Stamp while run_dir is known so the identity reaches
+                # run_dir/metrics.json on disk, not just summary.json (F26-H01).
+                stamp(
+                    record,
+                    metrics_path=None if args.dry_run else run_dir / "metrics.json",
+                )
                 new_runs.append(record)
                 print(f"[harness] status={record['status']} exit={record['exit_code']}", flush=True)
-
-    reference_sha256 = row["reference_raw_sha256"].lower()
-    for record in new_runs:
-        stamp_run_identity(
-            record,
-            r1=r1,
-            r2=r2,
-            reference=reference,
-            reference_sha256=reference_sha256,
-            r1_sha256=r1_sha256,
-            r2_sha256=r2_sha256,
-            binary_sha256=binary_hashes[str(record["tool"])],
-            git_head_value=str(context["git_head"]),
-            threads=args.threads,
-            memory_gb=args.memory_gb,
-        )
 
     merged = merge_runs(load_existing_summary(outdir / "summary.json"), new_runs)
     write_summaries(outdir, merged, context)
@@ -1400,6 +1473,91 @@ def self_test() -> int:
         qfree_schedule_error(1, 3, DEFAULT_TOOL_TIMEOUT_S, DEFAULT_QUAST_TIMEOUT_S) is not None,
         "three default-timeout replicates exceed one qfree job",
     )
+
+    # F26-H01: stamp_run_identity must propagate identity to metrics.json.
+    metrics_path = tmp / "stamp-target" / "metrics.json"
+    _write_json(
+        metrics_path,
+        {
+            "schema_version": SCHEMA_VERSION,
+            "dataset_id": "R1-001",
+            "tool": "fastbact",
+            "replicate": 1,
+            "status": "PASS",
+            "metrics": {field: 2 for field in METRIC_FIELDS},
+        },
+    )
+    stamped: dict[str, Any] = {
+        "schema_version": SCHEMA_VERSION,
+        "dataset_id": "R1-001",
+        "tool": "fastbact",
+        "replicate": 1,
+        "status": "PASS",
+        "metrics": {field: 2 for field in METRIC_FIELDS},
+    }
+    stamp_run_identity(
+        stamped,
+        r1=Path("/reads/R1.fastq.gz"),
+        r2=Path("/reads/R2.fastq.gz"),
+        reference=Path("/ref/genome.fasta"),
+        reference_sha256="refhash",
+        r1_sha256="r1hash",
+        r2_sha256="r2hash",
+        binary_sha256="binhash",
+        git_head_value="abc123",
+        threads=8,
+        memory_gb=14,
+        metrics_path=metrics_path,
+    )
+    persisted = json.loads(metrics_path.read_text(encoding="utf-8"))
+    check(
+        incomplete_identity_fields(persisted) == [],
+        "stamped metrics.json on disk carries complete identity",
+    )
+    check(
+        persisted["status"] == "PASS" and persisted["metrics"]["n50"] == 2,
+        "stamped metrics.json keeps the run payload",
+    )
+    fresh_path = tmp / "fresh-run" / "metrics.json"
+    stamp_run_identity(
+        {"schema_version": SCHEMA_VERSION, "dataset_id": "R1-001", "tool": "skesa", "replicate": 2, "status": "PASS"},
+        r1=Path("/reads/R1.fastq.gz"),
+        r2=Path("/reads/R2.fastq.gz"),
+        reference=Path("/ref/genome.fasta"),
+        reference_sha256="refhash",
+        r1_sha256="r1hash",
+        r2_sha256="r2hash",
+        binary_sha256="binhash",
+        git_head_value="abc123",
+        threads=8,
+        memory_gb=14,
+        metrics_path=fresh_path,
+    )
+    check(
+        fresh_path.is_file()
+        and incomplete_identity_fields(json.loads(fresh_path.read_text(encoding="utf-8"))) == [],
+        "stamping a run without metrics.json writes one",
+    )
+
+    # F26-H01: empty or missing identity fields fail determinism closed.
+    no_git = determinism_report([one_replicate(), one_replicate(), one_replicate(git_head="")])
+    check(
+        no_git[0]["checked"] is False
+        and no_git[0]["pass"] is False
+        and "incomplete determinism identity" in no_git[0]["reason"]
+        and "git_head" in no_git[0]["reason"],
+        "empty identity field fails determinism closed",
+    )
+    dropped = one_replicate()
+    del dropped["binary_sha256"]
+    absent = determinism_report([one_replicate(), one_replicate(), dropped])
+    check(
+        absent[0]["checked"] is False
+        and absent[0]["pass"] is False
+        and "binary_sha256" in absent[0]["reason"],
+        "absent identity field fails determinism closed",
+    )
+
     shutil.rmtree(tmp)
 
     if failures:
