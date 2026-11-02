@@ -63,6 +63,7 @@ Prior to the F26 Hotfix enforcement, the Controller performed the following init
 | **DISP-F26-023** | `F26-BM-008` | `opencode` | `glm-5.3-flash` | Repair Collator Identity Propagation for Finding F26-H01 | `scripts/run_competitor_benchmark.py`, `scripts/collate_benchmark_results.py` | **COMPLETED** (Commit `8d3a65f`, Self-Test PASS) | `logs/disp_f26_023_opencode.log` |
 | **DISP-F26-024** | `F26-BM-009` | `opencode` | `glm-5.3-flash` | Create Remedy Benchmark Submitter (Historical Oracles + Uniform Stage G) | `scripts/submit_f26_remedy_benchmarks.sh` | **COMPLETED** (Commit `aeb1bb6`, Self-Test PASS 39 checks) | `logs/disp_f26_024_opencode.log` |
 | **DISP-F26-025** | `F26-BM-010` | `opencode` | `glm-5.3-flash` | Add --force Flag Forwarding to Remedy Submitter | `scripts/submit_f26_remedy_benchmarks.sh` | **COMPLETED** (Commit `3dba7be`, Self-Test PASS 42 checks) | `logs/disp_f26_025_opencode.log` |
+| **DISP-F26-026** | `F26-AUDIT-005`| `codex` | `gpt-6.1-sol` | Stage H Final Scientific Acceptance Audit & Remedy Verification | `docs/development/F26_FINAL_SCIENTIFIC_ACCEPTANCE_REPORT.md` | **RUNNING** | `logs/disp_f26_026_codex.log` |
 
 ---
 
