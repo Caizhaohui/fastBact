@@ -21,6 +21,11 @@
 #   bash scripts/submit_f26_remedy_benchmarks.sh --dry-run
 #   bash scripts/submit_f26_remedy_benchmarks.sh --oracles-only
 #   bash scripts/submit_f26_remedy_benchmarks.sh --stage-g-only
+#
+# --force (DISP-F26-025 / F26-BM-010) forwards the harness --force flag so
+# Part 2 can overwrite outdirs left by historical runs instead of exiting
+# with status=EXISTS:
+#   bash scripts/submit_f26_remedy_benchmarks.sh --stage-g-only --force
 
 set -euo pipefail
 
@@ -42,6 +47,7 @@ STAGE_G_REPLICATES=(1 2 3)
 DRY_RUN=0
 ORACLES_ONLY=0
 STAGE_G_ONLY=0
+FORCE=0
 
 LOADED_IDS=()
 TARGETS=()
@@ -61,6 +67,9 @@ CS-PA01, CS-SE01 with fastbact at replicates 1, 2, and 3.
   --manifest PATH    Dataset manifest. Default: F26_DATASET_MANIFEST.tsv
   --oracles-only     Submit only Part 1 (F26-H02 oracle replay).
   --stage-g-only     Submit only Part 2 (F26-H01 Stage G determinism).
+  --force            Forward --force to run_competitor_benchmark.py so an
+                     existing outdir is overwritten instead of failing with
+                     status=EXISTS.
   --dry-run          Print sbatch commands and the status table; do not submit.
   --self-test        Run built-in option, command, and manifest target tests.
   -h, --help         Show this help.
@@ -72,6 +81,7 @@ Each job runs scripts/slurm_benchmark_harness.sbatch on partition qfree
 with 8 CPUs, 14G memory, and a 03:00:00 wall clock. The harness arguments
 are --manifest, --dataset, --tool fastbact, --replicate, and
 --outdir benchmarks/f26_results/raw/${dataset}_fastbact_r${replicate}.
+With --force the harness also receives --force.
 
 The status table columns are:
   status  dataset  tool  replicate  job_id  outdir
@@ -224,6 +234,9 @@ build_sbatch_cmd() {
     --replicate "${replicate}"
     --outdir "${outdir}"
   )
+  if [[ "${FORCE}" -eq 1 ]]; then
+    SBATCH_CMD+=(--force)
+  fi
 }
 
 submit_selected() {
@@ -302,6 +315,10 @@ parse_args() {
         DRY_RUN=1
         shift
         ;;
+      --force)
+        FORCE=1
+        shift
+        ;;
       -h|--help)
         usage
         exit 0
@@ -331,7 +348,7 @@ self_test() {
   local checks=0
   local failures=0
   local tmp fixture fixture_missing fixture_dup fixture_bad bindir out status expected
-  local rows order tools submitted_rows submitted_ids failed_rows header_rows
+  local rows order tools submitted_rows submitted_ids failed_rows header_rows force_cmds
   tmp="$(mktemp -d)"
   trap 'rm -rf "${tmp}"' EXIT
   fixture="${tmp}/manifest.tsv"
@@ -382,6 +399,7 @@ EOF
 
   # --- option handling ---
   run_expect "unknown argument" 2 bash "${BASH_SOURCE[0]}" --not-a-flag
+  run_expect "force does not accept a value" 2 bash "${BASH_SOURCE[0]}" --force=x --dry-run
   run_expect "stray positional" 2 bash "${BASH_SOURCE[0]}" oracles
   run_expect "manifest needs a value" 2 bash "${BASH_SOURCE[0]}" --manifest
   run_expect "empty manifest value" 2 bash "${BASH_SOURCE[0]}" --manifest= --dry-run
@@ -404,7 +422,8 @@ EOF
     bash "${BASH_SOURCE[0]}" --manifest "${fixture_bad}" --dry-run
   run_expect "help" 0 bash "${BASH_SOURCE[0]}" --help
   if [[ "${out}" != *"--self-test"* || "${out}" != *"--oracles-only"* \
-    || "${out}" != *"--stage-g-only"* || "${out}" != *"qfree"* ]]; then
+    || "${out}" != *"--stage-g-only"* || "${out}" != *"--force"* \
+    || "${out}" != *"qfree"* ]]; then
     fail "help text is missing required options"
   else
     pass
@@ -527,10 +546,25 @@ EOF
     && "${order}" == "CS-SA01:1,CS-SA01:2,CS-SA01:3,CS-BS01:1,CS-BS01:2,CS-BS01:3,CS-PA01:1,CS-PA01:2,CS-PA01:3,CS-SE01:1,CS-SE01:2,CS-SE01:3" \
     && "${out}" == *"--dataset CS-SE01 --tool fastbact --replicate 3 --outdir ${expected}"* \
     && "${out}" == *"--job-name=f26remedy_CS-BS01_r2"* \
+    && "${out}" != *"--force"* \
     && "${out}" != *"R1-001"* ]]; then
     pass
   else
     fail "stage-g-only dry-run: ${out}"
+  fi
+
+  run_expect "stage-g-only dry-run forwards --force" 0 \
+    env PATH="${bindir}:/usr/bin:/bin" \
+    bash "${BASH_SOURCE[0]}" --manifest "${fixture}" --stage-g-only --force --dry-run
+  rows="$(printf '%s\n' "${out}" | awk -F'\t' '$1=="DRY_RUN"{c++} END{print c+0}')"
+  force_cmds="$(printf '%s\n' "${out}" | grep -Ec -- '--outdir [^ ]+ --force$' || true)"
+  expected="${ROOT}/benchmarks/f26_results/raw/CS-SA01_fastbact_r1"
+  if [[ "${rows}" -eq 12 && "${force_cmds}" -eq 12 \
+    && "${out}" == *"--dataset CS-SA01 --tool fastbact --replicate 1 --outdir ${expected} --force"* \
+    && "${out}" == *"--job-name=f26remedy_CS-SE01_r3"* ]]; then
+    pass
+  else
+    fail "stage-g-only --force dry-run: ${out}"
   fi
 
   run_expect "full dry-run covers both parts" 0 \
