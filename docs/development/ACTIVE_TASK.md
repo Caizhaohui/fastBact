@@ -1,12 +1,13 @@
-# ACTIVE TASK: fastBact F26 — Cross-Species Assembly Benchmarking, Robustness Hardening & Competitive Validation (F26_SCIENTIFICALLY_VALIDATED / READY_FOR_USER_ACCEPTANCE)
+# ACTIVE TASK: fastBact F26 — Cross-Species Assembly Benchmarking, Robustness Hardening & Competitive Validation (F26_ACCEPTED_AND_LOCALLY_INTEGRATED)
 
-**F26 Status (2026-11-02):** Phase F26 has completed full cross-species benchmark matrix execution (16/16 Stage D runs vs SPAdes, SKESA, Unicycler), depth sensitivity gradient (16/16 Stage E runs at 30x, 50x, 100x, 150x), Stage F robustness hardening evaluation (zero speculative code edits required), full-depth N=3 replicate determinism runs (12 uniform Stage G runs), and full-depth historical *E. coli* oracle replays (4 runs). Total 44/44 benchmark runs verified on Slurm `qfree` with 100% PASS. Independent scientific acceptance audit completed and certified by Codex Sol (`F26-AUDIT-005` / `DISP-F26-026`).
-- **Disposition:** **`F26_SCIENTIFICALLY_VALIDATED / READY_FOR_USER_ACCEPTANCE`** (Findings `F26-H01` and `F26-H02` verified CLOSED by Codex Sol in `F26_AUDIT_CLOSURE_ADDENDUM.md`).
+**F26 Status (2026-11-02):** Phase F26 has completed full cross-species benchmark matrix execution (16/16 Stage D runs vs SPAdes, SKESA, Unicycler), depth sensitivity gradient (16/16 Stage E runs at 30x, 50x, 100x, 150x), Stage F robustness hardening evaluation (zero speculative code edits required), full-depth N=3 replicate determinism runs (12 uniform Stage G runs), and full-depth historical *E. coli* oracle replays (4 runs). Total 44/44 benchmark runs verified on Slurm `qfree` with 100% PASS. Independent scientific acceptance audit completed and certified by Codex Sol (`F26-AUDIT-005` / `DISP-F26-026`). Local integration into `main` authorized by user and executed via clean fast-forward merge. Post-integration verification (Slurm Job `3095594` on `qfree`) confirmed 213/213 release tests passed, release binary SHA-256 verified, and CLI smoke test OK.
+- **Disposition:** **`F26_ACCEPTED_AND_LOCALLY_INTEGRATED`**
+- **Integrated Commit SHA:** `cd0f8c885a5572721c985a665e3c7ebe67480a8f`
+- **Recoverable Pre-Integration Reference:** `backup/pre-f26-integration-02872f8` (`02872f81811402d2bd603ff7c0a2ecf8b3dbe528`)
 - **Feature Branch:** `feature/f26-cross-species-robustness`
-- **Frozen Baseline Reference:** `02872f81811402d2bd603ff7c0a2ecf8b3dbe528` (local `main`)
 - **Source Code Integrity:** `git diff 02872f81811402d2bd603ff7c0a2ecf8b3dbe528 -- src/` is strictly empty (0 lines changed).
 - **Release Binary SHA-256:** `517402653fcefc625cb79912ade7e7e382b0d05343bbeb483d7c82dd807947d1`
-- **Release Test Suite:** Slurm Job `3076232` on `qfree`: 213/213 release tests passed, 0 failed, 0 ignored.
+- **Post-Integration Verification:** Slurm Job `3095594` on `vnode1` (`qfree`): 213/213 release tests passed, release binary SHA-256 verified, CLI smoke test OK.
 - **Stage D Benchmark Matrix (16/16 PASS)**:
   - 4 cross-species taxa: *B. subtilis* 168 (43.5% GC), *P. aeruginosa* PAO1 (66.6% GC), *S. aureus* MW2 (32.8% GC), *S. enterica* LT2 (52.2% GC).
   - 4 assemblers: fastBact 0.1.0, SPAdes v4.2.0, SKESA v2.5.1, Unicycler v0.5.1.

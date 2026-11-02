@@ -4,13 +4,15 @@
 
 - CURRENT_PROJECT: fastBact
 - CURRENT_MILESTONE: F26 — Cross-Species Assembly Benchmarking, Robustness Hardening & Competitive Validation
-- CURRENT_STATUS: `F26_SCIENTIFICALLY_VALIDATED / READY_FOR_USER_ACCEPTANCE` (independent audit completed and certified by Codex Sol; findings `F26-H01` and `F26-H02` closed with zero contract waiver).
+- CURRENT_STATUS: `F26_ACCEPTED_AND_LOCALLY_INTEGRATED` (independent audit passed and certified by Codex Sol; findings `F26-H01` and `F26-H02` closed; user authorized local integration into `main`).
 - ACTIVE_WORKTREE: `/hpcfs/fhome/caizhh/Desktop/03_Tool_Development/fastBact-phase-f26-robustness-worktree`
+- INTEGRATED_MAIN_SHA: `cd0f8c885a5572721c985a665e3c7ebe67480a8f`
+- PRE_INTEGRATION_RECOVERABLE_REF: `backup/pre-f26-integration-02872f8` (`02872f81811402d2bd603ff7c0a2ecf8b3dbe528`)
 - FEATURE_BRANCH: `feature/f26-cross-species-robustness`
-- FROZEN_BASELINE: `02872f81811402d2bd603ff7c0a2ecf8b3dbe528`
 - SOURCE_SHA_DIFF: `git diff 02872f81811402d2bd603ff7c0a2ecf8b3dbe528 -- src/` is strictly empty (0 lines modified).
 - RELEASE_BINARY_SHA256: `517402653fcefc625cb79912ade7e7e382b0d05343bbeb483d7c82dd807947d1`
-- TEST_SUITE: Slurm Job `3076232` on `qfree`: 213/213 release tests passed, 0 failures, 0 ignored.
+- POST_INTEGRATION_TESTS: Slurm Job `3095594` on `vnode1` (`qfree`): 213/213 release tests passed, release binary SHA-256 verified, CLI smoke test OK.
+- INTEGRATION_REPORT: [`F26_FINAL_INTEGRATION_REPORT.md`](../../F26_FINAL_INTEGRATION_REPORT.md)
 - BENCHMARK_EVIDENCE:
   - 44 total runs in `benchmarks/f26_results/summary.json` (SHA-256 `f43c73552428430de90b96077ef1a88b50c878a865fa9873a52713674c02fa56`):
     - Stage D: 16 runs (4 species x 4 tools) -> fastBact 1.33x–19.5x faster than SPAdes/Unicycler, bounded RAM, competitive contiguity.
@@ -24,9 +26,10 @@
   - `F26-H03` (P2): Documented and accepted (nominal depth vs bacterial chromosome depth qualifications).
   - `F26-H04` (P2): Documented and accepted (biological attribution vs raw QUAST misassemblies qualified).
 - GIT_SAFETY_CONFIRMATION:
-  - Local `main` is NOT merged (`02872f8` untouched).
+  - Local `main` fast-forwarded to `cd0f8c885a5572721c985a665e3c7ebe67480a8f`.
   - Remote repository is NOT pushed.
-- NEXT_ACTION: Present final certification to user for local integration authorization (`FINAL_AUTHORIZATION_AUTHORITY`).
+  - Release tagging is NOT created.
+- NEXT_ACTION: F26 fully concluded. Ready for future roadmap milestones upon user directive.
 
 ---
 
