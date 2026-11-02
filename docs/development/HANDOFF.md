@@ -1,32 +1,32 @@
 # fastBact Development Handoff
 
-## F26 cross-species robustness and competitive validation handoff — 2026-10-30
+## F26 cross-species robustness and competitive validation handoff — 2026-11-02
 
 - CURRENT_PROJECT: fastBact
 - CURRENT_MILESTONE: F26 — Cross-Species Assembly Benchmarking, Robustness Hardening & Competitive Validation
-- CURRENT_STATUS: `PARTIALLY_VALIDATED / F26_ACCEPTANCE_WITHHELD` (independent audit completed by Codex Sol; acceptance withheld pending user adjudication of F26-H01 and F26-H02).
+- CURRENT_STATUS: `F26_SCIENTIFICALLY_VALIDATED / READY_FOR_USER_ACCEPTANCE` (independent audit completed and certified by Codex Sol; findings `F26-H01` and `F26-H02` closed with zero contract waiver).
 - ACTIVE_WORKTREE: `/hpcfs/fhome/caizhh/Desktop/03_Tool_Development/fastBact-phase-f26-robustness-worktree`
 - FEATURE_BRANCH: `feature/f26-cross-species-robustness`
-- AUDITED_HEAD: `22ea17b`
 - FROZEN_BASELINE: `02872f81811402d2bd603ff7c0a2ecf8b3dbe528`
-- SOURCE_SHA_DIFF: `git diff 02872f81811402d2bd603ff7c0a2ecf8b3dbe528 -- src/` is empty (0 lines modified).
+- SOURCE_SHA_DIFF: `git diff 02872f81811402d2bd603ff7c0a2ecf8b3dbe528 -- src/` is strictly empty (0 lines modified).
 - RELEASE_BINARY_SHA256: `517402653fcefc625cb79912ade7e7e382b0d05343bbeb483d7c82dd807947d1`
 - TEST_SUITE: Slurm Job `3076232` on `qfree`: 213/213 release tests passed, 0 failures, 0 ignored.
 - BENCHMARK_EVIDENCE:
-  - 40 total runs in `benchmarks/f26_results/summary.json` (SHA-256 `c00ba3c41697bc4d13cc435c3390fa7769ea6be64ed08bd471369b97388a0f9c`):
+  - 44 total runs in `benchmarks/f26_results/summary.json` (SHA-256 `f43c73552428430de90b96077ef1a88b50c878a865fa9873a52713674c02fa56`):
     - Stage D: 16 runs (4 species x 4 tools) -> fastBact 1.33x–19.5x faster than SPAdes/Unicycler, bounded RAM, competitive contiguity.
     - Stage E: 16 depth-gradient runs (30x, 50x, 100x, 150x) -> robust scaling across GC 32.8% to 66.6%.
-    - Stage G: 8 replicate runs -> 100% bit-for-bit identical contig FASTA SHA-256 hashes across all 3 replicates for all 4 species.
-- INDEPENDENT_AUDIT: Codex CLI / `gpt-6.1-sol` (Report: [`docs/development/F26_FINAL_SCIENTIFIC_ACCEPTANCE_REPORT.md`](docs/development/F26_FINAL_SCIENTIFIC_ACCEPTANCE_REPORT.md), Verdict: `PARTIALLY_VALIDATED / F26_ACCEPTANCE_WITHHELD`).
-- OPEN_FINDINGS_FOR_USER_DECISION:
-  - `F26-H01` (P1): Stage G replicate pooling identity mismatch in collator (Replicate 1 git HEAD differed from Replicates 2-3 despite identical binary, inputs, and outputs).
-  - `F26-H02` (P1): Historical F25 full-depth *E. coli* oracle non-regression was not newly reassembled in this 40-run execution batch.
-  - `F26-H03` (P2): Nominal depth vs bacterial chromosome depth qualifications (MW2 phage co-culture, PAO1 150x clamp).
-  - `F26-H04` (P2): Biological attribution vs raw QUAST misassemblies qualified.
+    - Stage G: 12 uniform replicate runs (Jobs `3095492..3095503`) -> 100% bit-for-bit identical contig FASTA SHA-256 hashes across all 3 replicates for all 4 species under uniform Git HEAD `640fd0b9...` and release binary `51740265...`.
+    - Historical Oracles: 4 full-depth *E. coli* replays (Jobs `3095417..3095420`) -> zero metric regression against F25 frozen baseline.
+- INDEPENDENT_AUDIT: Codex CLI / `gpt-6.1-sol` (Report: [`docs/development/F26_FINAL_SCIENTIFIC_ACCEPTANCE_REPORT.md`](docs/development/F26_FINAL_SCIENTIFIC_ACCEPTANCE_REPORT.md), Addendum: [`docs/development/F26_AUDIT_CLOSURE_ADDENDUM.md`](docs/development/F26_AUDIT_CLOSURE_ADDENDUM.md), Verdict: `PASS: F26_SCIENTIFICALLY_VALIDATED / READY_FOR_USER_ACCEPTANCE`).
+- FINDINGS_STATUS:
+  - `F26-H01` (P1): **CLOSED** (12/12 fresh qfree runs under uniform Git HEAD `640fd0b9...` and binary `51740265...`; 3-replicate bitwise identity certified for all 4 taxa).
+  - `F26-H02` (P1): **CLOSED** (4/4 historical E. coli full-depth replays on qfree show 0 delta across all 13 QUAST fields against F25 baseline).
+  - `F26-H03` (P2): Documented and accepted (nominal depth vs bacterial chromosome depth qualifications).
+  - `F26-H04` (P2): Documented and accepted (biological attribution vs raw QUAST misassemblies qualified).
 - GIT_SAFETY_CONFIRMATION:
   - Local `main` is NOT merged (`02872f8` untouched).
   - Remote repository is NOT pushed.
-- NEXT_ACTION: Escalate to user for decision on `F26-H01` (replicate pooling adjudication) and `F26-H02` (E. coli oracle replay requirement vs frozen baseline verification).
+- NEXT_ACTION: Present final certification to user for local integration authorization (`FINAL_AUTHORIZATION_AUTHORITY`).
 
 ---
 

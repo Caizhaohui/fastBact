@@ -6,7 +6,10 @@
 **Audited worktree:** `/hpcfs/fhome/caizhh/Desktop/03_Tool_Development/fastBact-phase-f26-robustness-worktree`  
 **Audited HEAD:** `998948fb25f535249ac7603ecfe7d7d24ee2275b`  
 **Frozen comparator:** `02872f81811402d2bd603ff7c0a2ecf8b3dbe528`  
-**Disposition:** `PARTIALLY_VALIDATED / F26_ACCEPTANCE_WITHHELD`
+**Original disposition (2026-10-30):** `PARTIALLY_VALIDATED / F26_ACCEPTANCE_WITHHELD`
+**Current disposition (2026-11-02, F26-AUDIT-005 / DISP-F26-026):** **`F26_SCIENTIFICALLY_VALIDATED / READY_FOR_USER_ACCEPTANCE`**
+
+> **Closure notice, 2026-11-02:** Independent remedy audit closes F26-H01 and F26-H02. See the [closure addendum](F26_AUDIT_CLOSURE_ADDENDUM.md) for the current 44-record evidence snapshot, complete digests and certification. Sections 1–8 below retain the original 2026-10-30 observations and withheld decision as history; their 40-run counts, timings and open-findings language do not describe the replacement remedy snapshot. Section 9 states the current verdict. F26-H03/H04 qualifications remain applicable.
 
 ## 1. Executive Summary & Audit Mandate
 
@@ -215,25 +218,26 @@ The older F23 blocked text in AGENTS.md conflicts with later accepted historical
 
 ## 9. Final Scientific Acceptance Determination
 
-**Official verdict: `PARTIALLY_VALIDATED / F26_ACCEPTANCE_WITHHELD`.**
+**Current official verdict (2026-11-02, F26-AUDIT-005 / DISP-F26-026): PASS, `F26_SCIENTIFICALLY_VALIDATED / READY_FOR_USER_ACCEPTANCE`.**
 
-| Audit area | Determination |
+The independent [closure addendum](F26_AUDIT_CLOSURE_ADDENDUM.md) supersedes the original withheld determination. No contract waiver was required.
+
+| Audit area | Current determination |
 | --- | --- |
-| Dataset diversity, archived accession provenance, present reference/input integrity | Verified, with lineage/co-culture limitations |
-| Stage D 16-run comparative measurements | Verified; speed, memory and contiguity tradeoffs qualified |
-| Stage E 16-run library-fraction response | Verified within nominal-depth scope; not true 150× PAO1 or a causal GC threshold |
-| Stage F preservation / no speculative algorithm changes | Supported; no universal invariant proof claimed |
-| Stage G bitwise assembly and exact metric equality | Observed on all four triplets |
-| Stage G frozen same-identity N=3 certification | **Not satisfied: F26-H01** |
-| Zero `src/` diff and 213/213 release tests | Independently verified |
-| Frozen F25 full-depth oracle replay / zero metric deltas | **Not demonstrated: F26-H02** |
-| Whole-phase `F26_SCIENTIFICALLY_VALIDATED / READY_FOR_USER_ACCEPTANCE` | **Withheld pending closure or authorized contract adjudication** |
+| Stages B–F scientific evidence | Original qualified audit retained |
+| F26-H01: Stage G same-identity N=3 | **CLOSED:** four valid triplets; complete on-disk identity, identical FASTAs and all 13 metrics |
+| F26-H02: frozen historical oracle replay | **CLOSED:** four qfree replays; all seven ledger deltas zero, all four FASTAs bitwise equal to retained F25 products, all 13 QUAST metrics equal |
+| Remedy execution | 16/16 Slurm jobs COMPLETED, qfree, exit 0:0 |
+| Present aggregate integrity | 44 FASTA hashes, 572 QUAST cells and all 44 TSV rows independently verified |
+| Source and release regression | Zero source diff; same release binary; retained 213/213 release-test evidence verified |
+| F26-H03/H04 | Interpretation limitations retained; no biological or depth exemption granted |
+| Whole-phase disposition | **Scientifically validated within the documented panel; ready for final user acceptance** |
 
-The requested positive verdict is retained here as an **unachieved target**, not granted merely because it appears in the report brief. Empirical results are not invalidated by the acceptance gaps, and the gaps must not be concealed to obtain the target label.
+The current aggregate SHA-256 is `f43c73552428430de90b96077ef1a88b50c878a865fa9873a52713674c02fa56`; TSV is `d90fcf3169c6b224d18c964e4ed5daf36408b2b40a8103b43ad3ae22008e7605`. The audit HEAD is `444f95ba460a914ced2eb6b2058e7b9e47f7b6e2`. Execution HEADs and the complete remedy artifact manifest are recorded in the addendum.
 
-**Local main is NOT merged with F26 and the F26 branch is NOT pushed.** Read-only `git show-ref`/`git worktree list` show local `main` at **`02872f81811402d2bd603ff7c0a2ecf8b3dbe528`** while the F26 branch remains at the audited HEAD. Fresh `git ls-remote --heads origin` also returns that baseline for remote main and lists no F26 branch. This audit creates no Git commit, merge, push, tag or release. Human authorization remains required for scientific-contract changes and any later merge, push or release; no such operation is authorized by this report.
+**Final user acceptance, merge, push and release remain reserved to the user.** This audit modifies only the two authorized reports, performs no Git mutation and does not query current remote state. Local main remains `02872f81811402d2bd603ff7c0a2ecf8b3dbe528`. Controller synchronization of HANDOFF/ACTIVE_TASK remains outside this dispatch's write scope.
 
-### Audit evidence fingerprint
+### Historical audit evidence fingerprint (2026-10-30)
 
 Primary raw evidence is under `benchmarks/f26_results/raw/`, including each run's `metrics.json`, enriched per-job `summary.json`, `contigs.fa`, `quast/report.tsv`, command/version files and GNU Time logs. All 40 source records match the collated values and all TSV cells. The following digests freeze the inspected contract/manifest/summary snapshots:
 

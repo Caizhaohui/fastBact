@@ -1,9 +1,8 @@
-# ACTIVE TASK: fastBact F26 — Cross-Species Assembly Benchmarking, Robustness Hardening & Competitive Validation (PARTIALLY_VALIDATED / F26_ACCEPTANCE_WITHHELD)
+# ACTIVE TASK: fastBact F26 — Cross-Species Assembly Benchmarking, Robustness Hardening & Competitive Validation (F26_SCIENTIFICALLY_VALIDATED / READY_FOR_USER_ACCEPTANCE)
 
-**F26 Status (2026-10-30):** Phase F26 has completed full cross-species benchmark matrix execution (16/16 Stage D runs vs SPAdes, SKESA, Unicycler), depth sensitivity gradient (16/16 Stage E runs at 30x, 50x, 100x, 150x), Stage F robustness hardening evaluation (zero speculative code edits required), and full-depth N=3 replicate determinism runs (8/8 Stage G runs). Total 40/40 benchmark runs executed on Slurm `qfree` with 100% PASS. Independent scientific acceptance audit completed by Codex Sol (`F26-SOL-FINAL-AUDIT-001`).
-- **Disposition:** **`PARTIALLY_VALIDATED / F26_ACCEPTANCE_WITHHELD`** (Stage H audit by Sol completed; acceptance withheld pending user adjudication of F26-H01 and F26-H02).
+**F26 Status (2026-11-02):** Phase F26 has completed full cross-species benchmark matrix execution (16/16 Stage D runs vs SPAdes, SKESA, Unicycler), depth sensitivity gradient (16/16 Stage E runs at 30x, 50x, 100x, 150x), Stage F robustness hardening evaluation (zero speculative code edits required), full-depth N=3 replicate determinism runs (12 uniform Stage G runs), and full-depth historical *E. coli* oracle replays (4 runs). Total 44/44 benchmark runs verified on Slurm `qfree` with 100% PASS. Independent scientific acceptance audit completed and certified by Codex Sol (`F26-AUDIT-005` / `DISP-F26-026`).
+- **Disposition:** **`F26_SCIENTIFICALLY_VALIDATED / READY_FOR_USER_ACCEPTANCE`** (Findings `F26-H01` and `F26-H02` verified CLOSED by Codex Sol in `F26_AUDIT_CLOSURE_ADDENDUM.md`).
 - **Feature Branch:** `feature/f26-cross-species-robustness`
-- **Current Feature Branch Commit:** `22ea17b`
 - **Frozen Baseline Reference:** `02872f81811402d2bd603ff7c0a2ecf8b3dbe528` (local `main`)
 - **Source Code Integrity:** `git diff 02872f81811402d2bd603ff7c0a2ecf8b3dbe528 -- src/` is strictly empty (0 lines changed).
 - **Release Binary SHA-256:** `517402653fcefc625cb79912ade7e7e382b0d05343bbeb483d7c82dd807947d1`
@@ -21,19 +20,19 @@
 - **Stage F Robustness Hardening Evaluation**:
   - $p > b + H$ invariant and loop re-entrancy safeguards strictly held across all 28 fastBact runs (0 crashes, 0 unhandled panics, 0 OOMs).
   - Speculative code changes rejected: algorithm generalized correctly without modification.
-- **Stage G Bitwise Determinism Observation**:
-  - All 4 species triplets produced bit-for-bit identical contig FASTA SHA-256 hashes across Replicates 1, 2, and 3:
-    - *B. subtilis*: `2bb0ecdd10f09b2320f4ba557b15a79bc5069f02f89352eceb9ec053b43a8861`
-    - *P. aeruginosa*: `b15ebd2289fb7f7ca39a49698f9049aa281d83a00982199f69da0722a068a9ff`
-    - *S. aureus*: `86081b422341266a5a32feef424080bc0595f8ce599d996817b3e7d6c26a1962`
-    - *S. enterica*: `4b72cfaa1b4fa8406be3f9d29c790047a8cae2ce2cb996cea9c9f31859314bfb`
+- **Stage G Bitwise Determinism Observation (F26-H01 CLOSED)**:
+  - All 4 species triplets produced bit-for-bit identical contig FASTA SHA-256 hashes across Replicates 1, 2, and 3 under uniform Git HEAD `640fd0b9...` and release binary `51740265...`:
+    - *B. subtilis*: `2bb0ecdd10f09b2320f4ba557b15a79bc5069f02f89352eceb9ec053b43a8861` (variance 2.02e-28, pass: true)
+    - *P. aeruginosa*: `b15ebd2289fb7f7ca39a49698f9049aa281d83a00982199f69da0722a068a9ff` (variance 0.0, pass: true)
+    - *S. aureus*: `86081b422341266a5a32feef424080bc0595f8ce599d996817b3e7d6c26a1962` (variance 0.0, pass: true)
+    - *S. enterica*: `4b72cfaa1b4fa8406be3f9d29c790047a8cae2ce2cb996cea9c9f31859314bfb` (variance 0.0, pass: true)
+- **Historical Oracle Non-Regression (F26-H02 CLOSED)**:
+  - Replayed R1-001, R1-003, R1-001-Val, and R1-003-Val on `qfree` (Jobs `3095417..3095420`).
+  - Zero metric regression observed against F25 frozen baseline across all 13 QUAST fields.
 - **Stage H Independent Scientific Acceptance Audit (Codex Sol)**:
-  - Disposition: `PARTIALLY_VALIDATED / F26_ACCEPTANCE_WITHHELD`.
-  - Open Findings:
-    - `F26-H01` (P1): Stage G replicate pooling identity mismatch in collator (Replicate 1 git HEAD differed from Replicates 2-3 despite identical binary, inputs, and outputs).
-    - `F26-H02` (P1): Historical F25 full-depth *E. coli* oracle non-regression was not newly reassembled in this 40-run execution batch.
-    - `F26-H03` (P2): Nominal depth vs bacterial chromosome depth qualifications (MW2 phage co-culture, PAO1 150x clamp).
-    - `F26-H04` (P2): Biological attribution vs raw QUAST misassemblies qualified.
+  - Disposition: `PASS: F26_SCIENTIFICALLY_VALIDATED / READY_FOR_USER_ACCEPTANCE`.
+  - Findings `F26-H01` and `F26-H02` certified **CLOSED** by Codex Sol in [`docs/development/F26_AUDIT_CLOSURE_ADDENDUM.md`](F26_AUDIT_CLOSURE_ADDENDUM.md).
+  - Qualifications: `F26-H03` (nominal depth scope) and `F26-H04` (biological attribution vs raw misassemblies) documented as accepted scientific qualifications.
 - **Deliverables Inventory**:
   - Contract: [`F26_ARCHITECTURE_AND_ACCEPTANCE_CONTRACT.md`](../../F26_ARCHITECTURE_AND_ACCEPTANCE_CONTRACT.md)
   - Competitor Contract: [`F26_COMPETITOR_BENCHMARK_CONTRACT.md`](../../F26_COMPETITOR_BENCHMARK_CONTRACT.md)
@@ -42,9 +41,10 @@
   - Stage D Baseline Report: [`docs/development/F26_CROSS_SPECIES_BASELINE_REPORT.md`](docs/development/F26_CROSS_SPECIES_BASELINE_REPORT.md)
   - Stage E & G Coverage Report: [`docs/development/F26_COVERAGE_ROBUSTNESS_REPORT.md`](docs/development/F26_COVERAGE_ROBUSTNESS_REPORT.md)
   - Stage H Final Acceptance Audit: [`docs/development/F26_FINAL_SCIENTIFIC_ACCEPTANCE_REPORT.md`](docs/development/F26_FINAL_SCIENTIFIC_ACCEPTANCE_REPORT.md)
-  - Benchmark Data: `benchmarks/f26_results/summary.json` (SHA-256 `c00ba3c4...`) and `benchmarks/f26_results/summary.tsv`
+  - Stage H Closure Addendum: [`docs/development/F26_AUDIT_CLOSURE_ADDENDUM.md`](docs/development/F26_AUDIT_CLOSURE_ADDENDUM.md)
+  - Benchmark Data: `benchmarks/f26_results/summary.json` (SHA-256 `f43c7355...`) and `benchmarks/f26_results/summary.tsv`
 - **Safety Status**: Local `main` is NOT merged (`02872f8` untouched). Remote repository is NOT pushed.
-- **Next Action**: Halted at `F26_AWAITING_USER_DECISION` for human authorization regarding F26-H01 and F26-H02.
+- **Next Action**: Present final closure and audit verification to user for local integration authorization (`FINAL_AUTHORIZATION_AUTHORITY`).
 
 ---
 
