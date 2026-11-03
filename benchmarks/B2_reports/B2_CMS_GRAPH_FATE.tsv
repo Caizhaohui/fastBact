@@ -1,0 +1,5 @@
+dataset_id	raw_depth	total_distinct_31mers	true_genomic_solids	recurrent_error_solids	cms_collision_fps	raw_cdbg_nodes	raw_cdbg_error_nodes	raw_cdbg_edges	raw_cdbg_error_edges	tips_clipped_count	bubbles_popped_count	simplified_nodes	simplified_error_nodes	final_contig_total_kmers	final_contig_ref_kmers	final_contig_error_kmers	final_contig_accuracy_pct	to_u64_folding_collisions
+S1-COV-001	15.0	541637	199779	2610	66	56	3	24	3	0	0	51	3	199400	199368	32	99.9840	0
+S1-COV-002	60.0	1535512	199963	42102	11188	136	71	256	64	42	9	84	20	200200	200010	190	99.9051	0
+S1-COV-150X	150.0	3387366	199959	245556	277766	1905	990	3688	930	587	84	1232	319	204841	201028	3813	98.1386	0
+S1-COV-003	300.0	6112064	199969	874908	1744662	12396	6447	24868	6416	3819	292	8274	2331	242559	207528	35031	85.5577	0

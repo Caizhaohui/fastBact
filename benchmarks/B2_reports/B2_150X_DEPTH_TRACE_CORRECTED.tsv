@@ -1,0 +1,31 @@
+dataset_id	seed	pipeline_mode	subsample_factor	min_raw_fastq_depth	min_readbank_depth	min_subsampled_bank_depth	pos_53371_subsampled_depth	passes_t_solid_min	passes_t_solid_53371	k31_unitigs	k31_has_branching	k63_unitigs	k63_has_branching	k127_unitigs	final_contigs_count	final_n50_bp	breakpoint_observed	root_cause_diagnosis
+S1-COV-150X	0	PRODUCTION_UPGRADE_MULTIK	0.8257	5	5	2	2	false	false	719	true	10	true	2	2	146614	YES (Break at 53497 bp)	Poisson dip minimum depth fell below t_solid=4
+S1-COV-150X	1	PRODUCTION_UPGRADE_MULTIK	0.8257	5	5	3	4	false	true	722	true	8	false	8	8	146575	YES (Branching/Gap)	Graph fragmented across unresolved regions
+S1-COV-150X	42	PRODUCTION_UPGRADE_MULTIK	0.8257	5	5	3	4	false	true	736	true	4	false	4	4	199981	YES (Branching/Gap)	Graph fragmented across unresolved regions
+S1-COV-150X	100	PRODUCTION_UPGRADE_MULTIK	0.8257	5	5	5	5	true	true	669	true	8	true	2	2	155512	YES (Break at 53497 bp)	k127 edge deficit at adjacent transition
+S1-COV-150X	2026	PRODUCTION_UPGRADE_MULTIK	0.8257	5	5	3	3	false	false	721	true	10	true	1	1	199983	NO (Single Contig)	Complete assembly; junction maintained through multik stages
+S1-COV-150X	777	PRODUCTION_UPGRADE_MULTIK	0.8257	5	5	4	4	true	true	713	true	7	false	7	7	146575	YES (Branching/Gap)	Graph fragmented across unresolved regions
+S1-COV-150X	9999	PRODUCTION_UPGRADE_MULTIK	0.8257	5	5	4	4	true	true	691	true	7	false	7	7	146575	YES (Branching/Gap)	Graph fragmented across unresolved regions
+S1-COV-150X	12345	PRODUCTION_UPGRADE_MULTIK	0.8257	5	5	5	5	true	true	708	true	8	true	1	1	199983	NO (Single Contig)	Complete assembly; junction maintained through multik stages
+S1-COV-150X	54321	PRODUCTION_UPGRADE_MULTIK	0.8257	5	5	4	4	true	true	687	true	7	false	7	7	146575	YES (Branching/Gap)	Graph fragmented across unresolved regions
+S1-COV-150X	987654321	PRODUCTION_UPGRADE_MULTIK	0.8257	5	5	4	4	true	true	688	true	8	true	1	1	199983	NO (Single Contig)	Complete assembly; junction maintained through multik stages
+S1-COV-150X	0	EXPLICIT_GENOME_SIZE_PASS	0.8257	5	5	2	2	false	false	719	true	10	true	2	2	146614	YES (Break at 53497 bp)	Poisson dip minimum depth fell below t_solid=4
+S1-COV-150X	1	EXPLICIT_GENOME_SIZE_PASS	0.8257	5	5	3	4	false	true	722	true	8	false	2	2	146614	YES (Break at 53497 bp)	Poisson dip minimum depth fell below t_solid=4
+S1-COV-150X	42	EXPLICIT_GENOME_SIZE_PASS	0.8257	5	5	3	4	false	true	736	true	4	false	1	1	199981	NO (Single Contig)	Complete assembly; junction maintained through multik stages
+S1-COV-150X	100	EXPLICIT_GENOME_SIZE_PASS	0.8257	5	5	5	5	true	true	669	true	8	true	2	2	155512	YES (Break at 53497 bp)	k127 edge deficit at adjacent transition
+S1-COV-150X	2026	EXPLICIT_GENOME_SIZE_PASS	0.8257	5	5	3	3	false	false	721	true	10	true	1	1	199983	NO (Single Contig)	Complete assembly; junction maintained through multik stages
+S1-COV-150X	777	EXPLICIT_GENOME_SIZE_PASS	0.8257	5	5	4	4	true	true	713	true	7	false	1	1	199983	NO (Single Contig)	Complete assembly; junction maintained through multik stages
+S1-COV-150X	9999	EXPLICIT_GENOME_SIZE_PASS	0.8257	5	5	4	4	true	true	691	true	7	false	2	2	146618	YES (Break at 53497 bp)	k127 edge deficit at adjacent transition
+S1-COV-150X	12345	EXPLICIT_GENOME_SIZE_PASS	0.8257	5	5	5	5	true	true	708	true	8	true	1	1	199983	NO (Single Contig)	Complete assembly; junction maintained through multik stages
+S1-COV-150X	54321	EXPLICIT_GENOME_SIZE_PASS	0.8257	5	5	4	4	true	true	687	true	7	false	1	1	199982	NO (Single Contig)	Complete assembly; junction maintained through multik stages
+S1-COV-150X	987654321	EXPLICIT_GENOME_SIZE_PASS	0.8257	5	5	4	4	true	true	688	true	8	true	1	1	199983	NO (Single Contig)	Complete assembly; junction maintained through multik stages
+S1-COV-003	0	PRODUCTION_UPGRADE_MULTIK	0.4147	16	16	7	8	true	true	708	true	13	false	13	13	48521	YES (Branching/Gap)	Graph fragmented across unresolved regions
+S1-COV-003	1	PRODUCTION_UPGRADE_MULTIK	0.4147	16	16	5	5	true	true	671	true	2	false	2	2	199992	YES (Branching/Gap)	Graph fragmented across unresolved regions
+S1-COV-003	42	PRODUCTION_UPGRADE_MULTIK	0.4147	16	16	6	6	true	true	666	true	6	false	6	6	199981	YES (Branching/Gap)	Graph fragmented across unresolved regions
+S1-COV-003	100	PRODUCTION_UPGRADE_MULTIK	0.4147	16	16	7	7	true	true	608	true	10	true	1	1	199992	NO (Single Contig)	Complete assembly; junction maintained through multik stages
+S1-COV-003	2026	PRODUCTION_UPGRADE_MULTIK	0.4147	16	16	4	4	true	true	652	true	8	false	8	8	104750	YES (Branching/Gap)	Graph fragmented across unresolved regions
+S1-COV-003	777	PRODUCTION_UPGRADE_MULTIK	0.4147	16	16	5	7	true	true	671	true	13	false	13	13	129608	YES (Branching/Gap)	Graph fragmented across unresolved regions
+S1-COV-003	9999	PRODUCTION_UPGRADE_MULTIK	0.4147	16	16	6	6	true	true	677	true	2	false	2	2	199989	YES (Branching/Gap)	Graph fragmented across unresolved regions
+S1-COV-003	12345	PRODUCTION_UPGRADE_MULTIK	0.4147	16	16	6	7	true	true	651	true	5	false	5	5	199983	YES (Branching/Gap)	Graph fragmented across unresolved regions
+S1-COV-003	54321	PRODUCTION_UPGRADE_MULTIK	0.4147	16	16	6	6	true	true	634	true	7	false	7	7	199985	YES (Branching/Gap)	Graph fragmented across unresolved regions
+S1-COV-003	987654321	PRODUCTION_UPGRADE_MULTIK	0.4147	16	16	6	6	true	true	628	true	4	false	4	4	117583	YES (Branching/Gap)	Graph fragmented across unresolved regions

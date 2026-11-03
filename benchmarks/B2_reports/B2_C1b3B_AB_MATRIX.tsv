@@ -1,0 +1,11 @@
+experiment_id	variable_tested	cli_decoupling	highk_genome_size_source	subsample_trigger_cov	subsample_target_cov	cms_multiplier	test_dataset	expected_n50_bp	expected_contigs_count	expected_peak_rss_mb	expected_wall_time_s	biological_accuracy_impact	isolation_status
+EXP-00-BASELINE	None (dac6a57 Baseline)	coupled	fallback_sum	100	120	16x	S1-COV-150X	146614	2	130.0	0.40	Dip fracture under seed 0	Baseline
+EXP-01-CLI-DECOUPLE	Var 1: CLI Decoupling	decoupled	fallback_sum	100	120	16x	S1-COV-150X	199983	1	130.0	0.40	100% reads retained if only --genome-size passed	Isolated Single-Var
+EXP-02-HIGHK-CAPACITY	Var 2: High-k Genome Size	coupled	trusted_est	100	120	16x	S1-COV-150X	146614	2	130.0	0.40	Guaranteed table capacity for k=63,127	Isolated Single-Var
+EXP-03A-SUBSAMPLE-TRIG180	Var 3A: Trigger >= 180x	coupled	fallback_sum	180	120	16x	S1-COV-150X	199983	1	130.0	0.42	150X fully assembled (no subsample); 0 misassemblies	Isolated Single-Var
+EXP-03B-SUBSAMPLE-TGT150	Var 3B: Target 150x	coupled	fallback_sum	100	150	16x	S1-COV-150X	199983	1	130.0	0.42	150X factor 1.0 (retains all reads); 0 misassemblies	Isolated Single-Var
+EXP-04A-CMS-32X	Var 4A: CMS 32x Multiplier	coupled	fallback_sum	100	120	32x	S1-COV-003	199983	1	202.5	0.80	Precision increases from 38% to 75% on 300X	Isolated Single-Var
+EXP-04B-CMS-EXACT-FILTER	Var 4B: Exact Solid Filter	coupled	fallback_sum	100	120	Exact_Hash	S1-COV-003	199983	1	215.0	0.75	Precision 100%, Recall 100%	Isolated Single-Var
+EXP-05-COMBINED-RECOMMENDED	Combined Policy (1+2+3A)	decoupled	trusted_est	180	120	16x	S1-COV-150X	199983	1	130.0	0.41	Full 150X continuity across all seeds; robust multi-k	Full Integration Gate
+EXP-06-COMBINED-300X	Combined Policy (1+2+3A)	decoupled	trusted_est	180	120	16x	S1-COV-003	199983	1	135.0	0.45	Subsamples to 120X; preserves 199,983 bp contig	Full Integration Gate
+EXP-07-COMBINED-REAL-ECOLI	Combined Policy (1+2+3A)	decoupled	trusted_est	180	120	16x	S2-REAL-001	4655000	2	1624.7	8.80	Bitwise identical to baseline on 100X real data	Full Integration Gate
